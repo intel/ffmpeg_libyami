@@ -1321,7 +1321,7 @@ require_pkg_config(){
 
 cxx_extralibs_added="no"
 add_cxx_extralibs(){
-    if [ $cxx_extralibs_added = "no"]; then
+    if [ $cxx_extralibs_added = "no" ]; then
         add_extralibs "-lstdc++ -Wl,--no-as-needed -ldl"
         cxx_extralibs_added="yes"
     fi
@@ -5618,7 +5618,7 @@ enabled libsoxr           && require libsoxr soxr.h soxr_create -lsoxr && LIBSOX
 enabled libssh            && require_pkg_config libssh libssh/sftp.h sftp_init
 enabled libspeex          && require_pkg_config speex speex/speex.h speex_decoder_init -lspeex
 enabled libtesseract      && require_pkg_config tesseract tesseract/capi.h TessBaseAPICreate
-enabled libyami_h264      && require_pkg_config "libyami_decoder libyami_encoder libva" VideoDecoderHost.h createVideoDecoder && add_cxx_extralibs()
+enabled libyami_h264      && require_pkg_config "libyami_decoder libyami_encoder libva" VideoDecoderHost.h createVideoDecoder && add_cxx_extralibs
 enabled libtheora         && require libtheora theora/theoraenc.h th_info_init -ltheoraenc -ltheoradec -logg
 enabled libtwolame        && require libtwolame twolame.h twolame_init -ltwolame &&
                              { check_lib twolame.h twolame_encode_buffer_float32_interleaved -ltwolame ||
