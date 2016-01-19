@@ -39,6 +39,7 @@ using namespace YamiMediaCodec;
 #ifndef VA_FOURCC_I420
 #define VA_FOURCC_I420 VA_FOURCC('I','4','2','0')
 #endif
+
 #define PRINT_DECODE_THREAD(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "## decode thread ## line:%4d " format, __LINE__, ##__VA_ARGS__)
 
 typedef enum {
@@ -131,21 +132,8 @@ static av_cold int yami_dec_init(AVCodecContext *avctx)
         return -1;
     }
 
-    switch (avctx->coder_type) {
-    case 0:
-        s->output_type = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
-        break;
-    case 1:
-        s->output_type = VIDEO_DATA_MEMORY_TYPE_DRM_NAME;
-        break;
-    case 2:
-        s->output_type = VIDEO_DATA_MEMORY_TYPE_DMA_BUF;
-        break;
-    default:
-        av_log(avctx, AV_LOG_ERROR, "unknown output frame type: %d",
-               avctx->coder_type);
-        break;
-    }
+    /* XXX: now used this as default, maybe change this with private options */
+    s->output_type = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
 
     s->in_queue = new std::deque<VideoDecodeBuffer*>;
     pthread_mutex_init(&s->mutex_, NULL);
@@ -164,7 +152,7 @@ static av_cold int yami_dec_init(AVCodecContext *avctx)
     return 0;
 }
 
-static void* decodeThread(void *arg)
+static void *decodeThread(void *arg)
 {
     AVCodecContext *avctx = (AVCodecContext *)arg;
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
