@@ -166,8 +166,8 @@ static av_cold int yami_dec_init(AVCodecContext *avctx)
 
 static void* decodeThread(void *arg)
 {
-    AVCodecContext *avctx = (AVCodecContext*)arg;
-    YamiDecContext *s = (YamiDecContext*)avctx->priv_data;
+    AVCodecContext *avctx = (AVCodecContext *)arg;
+    YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
 
     while (1) {
         VideoDecodeBuffer *in_buffer = NULL;
@@ -209,7 +209,7 @@ static void* decodeThread(void *arg)
             avctx->height = s->format_info->height;
             avctx->pix_fmt = AV_PIX_FMT_YUV420P;
         }
-        if(status<0){
+        if (status < 0){
             av_log(avctx, AV_LOG_ERROR, "decode error %d\n",status);
         }
         s->decode_count_yami++;
@@ -224,14 +224,13 @@ static void* decodeThread(void *arg)
     return NULL;
 }
 
-
 static void yami_recycle_frame(void *opaque, uint8_t *data)
 {
-    AVCodecContext *avctx = (AVCodecContext *) opaque;
-    YamiDecContext *s = (YamiDecContext *) avctx->priv_data;
-    VideoRenderBuffer *frame = (VideoRenderBuffer *) data;
+    AVCodecContext *avctx = (AVCodecContext *)opaque;
+    YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
+    VideoRenderBuffer *frame = (VideoRenderBuffer *)data;
 
-    if (!s ||!s->decoder || !frame) // XXX, use shared pointer for s
+    if (!s || !s->decoder || !frame) // XXX, use shared pointer for s
         return;
     pthread_mutex_lock(&s->mutex_);
     s->decoder->renderDone(frame);
@@ -239,18 +238,15 @@ static void yami_recycle_frame(void *opaque, uint8_t *data)
     av_log(avctx, AV_LOG_DEBUG, "recycle previous frame: %p\n", frame);
 }
 
-
 static int yami_dec_frame(AVCodecContext *avctx, void *data,
                              int *got_frame, AVPacket *avpkt)
 {
-    YamiDecContext *s = (YamiDecContext *) avctx->priv_data;
+    YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     VideoDecodeBuffer *in_buffer = NULL;
     Decode_Status status = RENDER_NO_AVAILABLE_FRAME;
     //VideoFrameRawData *yami_frame = NULL;
     VideoRenderBuffer *yami_frame = NULL;
     AVFrame *frame = (AVFrame *) data;
-
-
 
     av_log(avctx, AV_LOG_VERBOSE, "yami_decode_frame\n");
 
@@ -259,7 +255,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     /*in_buffer->data = avpkt->data;*/
     /*avoid avpkt free and data is pointer*/
     in_buffer->data = (uint8_t *)av_mallocz(avpkt->size);
-    memcpy(in_buffer->data,avpkt->data,avpkt->size);
+    memcpy(in_buffer->data, avpkt->data, avpkt->size);
     in_buffer->size = avpkt->size;
     in_buffer->timeStamp = avpkt->pts;
 
@@ -268,13 +264,13 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
 
     while (s->decode_status < DECODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
         pthread_mutex_lock(&s->in_mutex);
-            if (s->in_queue->size()<QUEUE_MAX_SIZE) {
-                s->in_queue->push_back(in_buffer);
-                av_log(avctx, AV_LOG_VERBOSE, "wakeup decode thread ...\n");
-                pthread_cond_signal(&s->in_cond);
-                pthread_mutex_unlock(&s->in_mutex);
-                break;
-            }
+        if (s->in_queue->size()<QUEUE_MAX_SIZE) {
+            s->in_queue->push_back(in_buffer);
+            av_log(avctx, AV_LOG_VERBOSE, "wakeup decode thread ...\n");
+            pthread_cond_signal(&s->in_cond);
+            pthread_mutex_unlock(&s->in_mutex);
+            break;
+        }
         pthread_mutex_unlock(&s->in_mutex);
 
         av_log(avctx, AV_LOG_DEBUG, "s->in_queue->size()=%ld, s->decode_count=%d, s->decode_count_yami=%d, too many buffer are under decoding, wait ...\n",
@@ -298,8 +294,8 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
             s->decode_status = DECODE_THREAD_GOT_EOS; // call releaseLock for seek
         break;
     case DECODE_THREAD_GOT_EOS:
-    if(s->in_queue->empty())
-        s->decode_status = DECODE_THREAD_NOT_INIT;
+        if (s->in_queue->empty())
+            s->decode_status = DECODE_THREAD_NOT_INIT;
         break;
     default:
         break;
@@ -383,8 +379,8 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         vframe->format = AV_PIX_FMT_YUV420P; /* FIXME */
         vframe->extended_data = NULL;
 
-        *(AVFrame *) data = *vframe;
-        ((AVFrame *) data)->extended_data = ((AVFrame *) data)->data;
+        *(AVFrame *)data = *vframe;
+        ((AVFrame *)data)->extended_data = ((AVFrame *)data)->data;
     }
 
     *got_frame = 1;
@@ -426,8 +422,7 @@ static av_cold int yami_dec_close(AVCodecContext *avctx)
 
     pthread_mutex_destroy(&s->in_mutex);
     pthread_cond_destroy(&s->in_cond);
-    while(!s->in_queue->empty())
-    {
+    while (!s->in_queue->empty()) {
         VideoDecodeBuffer *in_buffer = s->in_queue->front();
         s->in_queue->pop_front();
         av_free(in_buffer->data);
@@ -489,7 +484,7 @@ struct YamiEncContext {
 
 static bool createOutputBuffer(VideoEncOutputBuffer *outputBuffer, int maxOutSize)
 {
-    outputBuffer->data = static_cast<uint8_t*>(malloc(maxOutSize));
+    outputBuffer->data = static_cast<uint8_t *>(malloc(maxOutSize));
     if (!outputBuffer->data)
         return false;
     outputBuffer->bufferSize = maxOutSize;
@@ -523,7 +518,7 @@ static av_cold int yami_enc_init(AVCodecContext *avctx)
 
     encVideoParams.resolution.width  = avctx->width;
     encVideoParams.resolution.height = avctx->height;
-    
+
     //frame rate parameters.
     // FIXME: used the default encodec params, need to get them from avctx
     encVideoParams.frameRate.frameRateDenom = 1;
@@ -560,9 +555,9 @@ static av_cold int yami_enc_init(AVCodecContext *avctx)
 }
 
 static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
-                             const AVFrame *frame, int *got_packet)
+                          const AVFrame *frame, int *got_packet)
 {
-    YamiEncContext *s = (YamiEncContext *) avctx->priv_data;
+    YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
     Decode_Status status;
     if (!frame)
     	return 0;
@@ -607,7 +602,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
 
 static av_cold int yami_enc_close(AVCodecContext *avctx)
 {
-    YamiEncContext *s = (YamiEncContext *) avctx->priv_data;
+    YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
 
     if (s->encoder) {
         s->encoder->stop();
