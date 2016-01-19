@@ -507,13 +507,12 @@ static av_cold int yami_enc_init(AVCodecContext *avctx)
     encVideoParams.resolution.width  = avctx->width;
     encVideoParams.resolution.height = avctx->height;
 
-    //frame rate parameters.
-    // FIXME: used the default encodec params, need to get them from avctx
-    encVideoParams.frameRate.frameRateDenom = 1;
-    encVideoParams.frameRate.frameRateNum = 30;
+    // frame rate parameters.
+    encVideoParams.frameRate.frameRateDenom = avctx->time_base.num;
+    encVideoParams.frameRate.frameRateNum = avctx->time_base.den;
 
-    //picture type and bitrate
-    encVideoParams.intraPeriod = 30;
+    // picture type and bitrate
+    encVideoParams.intraPeriod = avctx->gop_size;
     encVideoParams.ipPeriod = 1;
 //  encVideoParams.rcParams.bitRate = 6000000;
     encVideoParams.rcParams.initQP = 26;
