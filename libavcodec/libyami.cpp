@@ -520,7 +520,11 @@ static void *encodeThread(void *arg)
             yami_frame->crop.height = avctx->height;
             yami_frame->flags = 0;
         }
-        Decode_Status status = s->encoder->encode(yami_frame);
+        Decode_Status status;
+        do{
+             status  = s->encoder->encode(yami_frame);
+        }while(status==ENCODE_IS_BUSY);
+
         PRINT_DECODE_THREAD("encode() status=%d, decode_count_yami=%d\n",
                             status, s->encode_count_yami);
 
