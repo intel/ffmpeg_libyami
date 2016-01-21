@@ -42,9 +42,6 @@ using namespace YamiMediaCodec;
 
 #define PRINT_DECODE_THREAD(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "## decode thread ## line:%4d " format, __LINE__, ##__VA_ARGS__)
 
-#undef CLAMP
-#define CLAMP(x, low, high)  (((x) > (high)) ? (high) : (((x) < (low)) ? (low) : (x)))
-
 typedef enum {
     DECODE_THREAD_NOT_INIT = 0,
     DECODE_THREAD_RUNING,
@@ -244,8 +241,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
 
     // append avpkt to input buffer queue
     in_buffer = (VideoDecodeBuffer *)av_mallocz(sizeof(VideoDecodeBuffer));
-    /*in_buffer->data = avpkt->data;*/
-    /*avoid avpkt free and data is pointer*/
+    /* avoid avpkt free and data is pointer */
     in_buffer->data = (uint8_t *)av_mallocz(avpkt->size);
     memcpy(in_buffer->data, avpkt->data, avpkt->size);
     in_buffer->size = avpkt->size;
@@ -360,9 +356,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         frame = (AVFrame *)data;
         ((AVFrame *) data)->extended_data = ((AVFrame *) data)->data;
     } else {
-
         frame->pts = yami_frame->timeStamp;
-
 
         frame->width = avctx->width;
         frame->height = avctx->height;
@@ -464,7 +458,7 @@ struct YamiEncContext {
     VideoEncOutputBuffer outputBuffer;
 
     pthread_t encode_thread_id;
-    std::deque<AVFrame*> *in_queue;
+    std::deque<AVFrame *> *in_queue;
     pthread_mutex_t in_mutex; // mutex for in_queue
     pthread_cond_t in_cond;   // decode thread condition wait
     DecodeThreadStatus encode_status;
@@ -480,7 +474,7 @@ struct YamiEncContext {
     int render_count;
 };
 
-static void* encodeThread(void *arg) 
+static void *encodeThread(void *arg)
 {
     AVCodecContext *avctx = (AVCodecContext*)arg;
     YamiEncContext *s = (YamiEncContext*)avctx->priv_data;
@@ -496,8 +490,7 @@ static void* encodeThread(void *arg)
                 pthread_mutex_unlock(&s->in_mutex);
                 break;
             } else {
-                PRINT_DECODE_THREAD(
-                                    "encode thread wait because s->in_queue is empty\n");
+                PRINT_DECODE_THREAD("encode thread wait because s->in_queue is empty\n");
                 pthread_cond_wait(&s->in_cond, &s->in_mutex); // wait if no todo frame is available
             }
         }
@@ -531,16 +524,6 @@ static void* encodeThread(void *arg)
         PRINT_DECODE_THREAD("encode() status=%d, decode_count_yami=%d\n",
                             status, s->encode_count_yami);
 
-        /*if (DECODE_FORMAT_CHANGE == status) {
-          s->format_info = s->encoder->getFormatInfo();
-          PRINT_DECODE_THREAD("encode format change %dx%d\n",s->format_info->width,s->format_info->height);
-        // resend the buffer
-        status = s->encoder->encode(yami_frame);
-        PRINT_DECODE_THREAD("encode() status=%d\n",status);
-        avctx->width = s->format_info->width;
-        avctx->height = s->format_info->height;
-        avctx->pix_fmt = AV_PIX_FMT_YUV420P;
-        }*/
         if (status < 0) {
             av_log(avctx, AV_LOG_ERROR,
                    "encode error %d yami_frame->surface %d frame %d\n", status,
@@ -548,20 +531,20 @@ static void* encodeThread(void *arg)
         }
         s->encode_count_yami++;
         av_frame_free(&frame);
-        //av_free(in_buffer->data);
-        //av_free(in_buffer);
     }
 
     PRINT_DECODE_THREAD("encode thread exit\n");
     pthread_mutex_lock(&s->mutex_);
     s->encode_status = DECODE_THREAD_EXIT;
     pthread_mutex_unlock(&s->mutex_);
+
     return NULL;
 }
 
 static bool
-createOutputBuffer(VideoEncOutputBuffer *outputBuffer, int maxOutSize) {
-    outputBuffer->data = static_cast<uint8_t*>(malloc(maxOutSize));
+createOutputBuffer(VideoEncOutputBuffer *outputBuffer, int maxOutSize)
+{
+    outputBuffer->data = static_cast<uint8_t *>(malloc(maxOutSize));
     if (!outputBuffer->data)
         return false;
     outputBuffer->bufferSize = maxOutSize;
@@ -570,7 +553,7 @@ createOutputBuffer(VideoEncOutputBuffer *outputBuffer, int maxOutSize) {
     return true;
 }
 
-static bool destroyOutputBuffer(VideoEncOutputBuffer *outputBuffer) 
+static bool destroyOutputBuffer(VideoEncOutputBuffer *outputBuffer)
 {
     if (outputBuffer->data)
         free(outputBuffer->data);
@@ -578,7 +561,8 @@ static bool destroyOutputBuffer(VideoEncOutputBuffer *outputBuffer)
     return true;
 }
 
-static av_cold int yami_enc_init(AVCodecContext *avctx) {
+static av_cold int yami_enc_init(AVCodecContext *avctx)
+{
     YamiEncContext *s = (YamiEncContext *) avctx->priv_data;
     Decode_Status status;
 
@@ -603,8 +587,7 @@ static av_cold int yami_enc_init(AVCodecContext *avctx) {
     encVideoParams.resolution.width  = avctx->width;
     encVideoParams.resolution.height = avctx->height;
 
-    //frame rate parameters.
-    // FIXME: used the default encodec params, need to get them from avctx
+    // frame rate parameters.
     if (avctx->framerate.den > 0 && avctx->framerate.num > 0) {
         encVideoParams.frameRate.frameRateDenom = avctx->framerate.den;
         encVideoParams.frameRate.frameRateNum = avctx->framerate.num;
@@ -614,8 +597,8 @@ static av_cold int yami_enc_init(AVCodecContext *avctx) {
         encVideoParams.frameRate.frameRateDenom = avctx->time_base.num;
     }
 
-    //picture type and bitrate
-    encVideoParams.intraPeriod = CLAMP(avctx->gop_size, 1, 250);
+    // picture type and bitrate
+    encVideoParams.intraPeriod = av_clip(avctx->gop_size, 1, 250);
     encVideoParams.ipPeriod = !avctx->max_b_frames ? 1 : 3;
     //  encVideoParams.rcParams.bitRate = avctx->bit_rate;
     encVideoParams.rcParams.initQP = 26;
@@ -661,23 +644,23 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     YamiEncContext *s = (YamiEncContext *) avctx->priv_data;
     Decode_Status status;
     int ret;
-    /*alloc a av_frame */
+
     if (frame) {
         AVFrame *qframe = av_frame_alloc();
         if (!qframe) {
             return AVERROR(ENOMEM);
         }
-        /*av_frame_ref the src frame and av_frame_unref in encode thread*/
+
+        /* av_frame_ref the src frame and av_frame_unref in encode thread */
         ret = av_frame_ref(qframe, frame);
         if (ret < 0)
             return ret;
 
-        /**/
         while (s->encode_status < DECODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
             pthread_mutex_lock(&s->in_mutex);
             if (s->in_queue->size() < QUEUE_MIN_SIZE) {
                 s->in_queue->push_back(qframe);
-                av_log(avctx, AV_LOG_VERBOSE, "wakeup decode thread ...\n");
+                av_log(avctx, AV_LOG_VERBOSE, "wakeup encode thread ...\n");
                 pthread_cond_signal(&s->in_cond);
                 pthread_mutex_unlock(&s->in_mutex);
                 break;
@@ -696,33 +679,28 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     // decode thread status update
     pthread_mutex_lock(&s->mutex_);
     switch (s->encode_status) {
-        case DECODE_THREAD_NOT_INIT:
-        case DECODE_THREAD_EXIT:
-            if (frame) {
-                s->encode_status = DECODE_THREAD_RUNING;
-                pthread_create(&s->encode_thread_id, NULL, &encodeThread, avctx);
-            }
-            break;
-        case DECODE_THREAD_RUNING:
-            if (!frame) {
-                s->encode_status = DECODE_THREAD_GOT_EOS; // call releaseLock for seek
-
-            }
-            break;
-        case DECODE_THREAD_GOT_EOS:
-            if (s->in_queue->empty())
-                s->encode_status = DECODE_THREAD_NOT_INIT;
-            break;
-        default:
-            break;
+    case DECODE_THREAD_NOT_INIT:
+    case DECODE_THREAD_EXIT:
+        if (frame) {
+            s->encode_status = DECODE_THREAD_RUNING;
+            pthread_create(&s->encode_thread_id, NULL, &encodeThread, avctx);
+        }
+        break;
+    case DECODE_THREAD_RUNING:
+        if (!frame) {
+            s->encode_status = DECODE_THREAD_GOT_EOS; // call releaseLock for seek
+        }
+        break;
+    case DECODE_THREAD_GOT_EOS:
+        if (s->in_queue->empty())
+            s->encode_status = DECODE_THREAD_NOT_INIT;
+        break;
+    default:
+        break;
     }
     pthread_mutex_unlock(&s->mutex_);
 
-
-    //I hope to output frame has data flush encoder.
     do {
-        /*if(!frame)
-          s->encoder->flush();				//flush encoder buffer*/
         status = s->encoder->getOutput(&s->outputBuffer, true);
     } while (!frame && status != ENCODE_SUCCESS && s->in_queue->size() > 0);
     if (status != ENCODE_SUCCESS)
@@ -746,7 +724,7 @@ static av_cold int yami_enc_close(AVCodecContext *avctx)
     destroyOutputBuffer(&s->outputBuffer);
     pthread_mutex_lock(&s->mutex_);
     while (s->encode_status != DECODE_THREAD_EXIT) {
-        // potential race condition on s->decode_status
+        // potential race condition on s->encode_status
         s->encode_status = DECODE_THREAD_GOT_EOS;
         pthread_mutex_unlock(&s->mutex_);
         pthread_cond_signal(&s->in_cond);
@@ -765,7 +743,6 @@ static av_cold int yami_enc_close(AVCodecContext *avctx)
     while (!s->in_queue->empty()) {
         AVFrame *in_buffer = s->in_queue->front();
         s->in_queue->pop_front();
-        //av_free(in_buffer->data);
         av_frame_free(&in_buffer);
     }
     delete s->in_queue;
