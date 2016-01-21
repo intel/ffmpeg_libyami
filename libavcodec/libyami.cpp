@@ -360,18 +360,17 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         frame = (AVFrame *)data;
         ((AVFrame *) data)->extended_data = ((AVFrame *) data)->data;
     } else {
-        AVFrame *vframe = av_frame_alloc();
 
-        vframe->pts = yami_frame->timeStamp;
+        frame->pts = yami_frame->timeStamp;
 
 
-        vframe->width = avctx->width;
-        vframe->height = avctx->height;
+        frame->width = avctx->width;
+        frame->height = avctx->height;
 
-        vframe->format = AV_PIX_FMT_YUV420P; /* FIXME */
-        vframe->extended_data = NULL;
+        frame->format = AV_PIX_FMT_YUV420P; /* FIXME */
+        frame->extended_data = NULL;
 
-        *(AVFrame *)data = *vframe;
+        *(AVFrame *)data = *frame;
         ((AVFrame *)data)->extended_data = ((AVFrame *)data)->data;
     }
 
@@ -548,7 +547,7 @@ static void* encodeThread(void *arg)
                    yami_frame->surface, s->encode_count_yami);
         }
         s->encode_count_yami++;
-        av_frame_unref(frame);
+        av_frame_free(&frame);
         //av_free(in_buffer->data);
         //av_free(in_buffer);
     }
@@ -767,7 +766,7 @@ static av_cold int yami_enc_close(AVCodecContext *avctx)
         AVFrame *in_buffer = s->in_queue->front();
         s->in_queue->pop_front();
         //av_free(in_buffer->data);
-        av_frame_unref(in_buffer);
+        av_frame_free(&in_buffer);
     }
     delete s->in_queue;
 
