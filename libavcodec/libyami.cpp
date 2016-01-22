@@ -186,7 +186,7 @@ static void *decodeThread(void *arg)
         // decode one input buffer
         PRINT_DECODE_THREAD("try to process one input buffer, in_buffer->data=%p, in_buffer->size=%d\n", in_buffer->data, in_buffer->size);
         Decode_Status status = s->decoder->decode(in_buffer);
-        PRINT_DECODE_THREAD("decode() status=%d, decode_count_yami=%d\n", status, s->decode_count_yami);
+        PRINT_DECODE_THREAD("decode() status=%d, decode_count_yami=%d render_count %d\n", status, s->decode_count_yami, s->render_count);
 
         if (DECODE_FORMAT_CHANGE == status) {
             s->format_info = s->decoder->getFormatInfo();
@@ -502,7 +502,7 @@ static void *encodeThread(void *arg)
 
         PRINT_DECODE_THREAD("s->in_queue->size()=%ld\n", s->in_queue->size());
         frame = s->in_queue->front();
-        s->in_queue->pop_front();
+        //s->in_queue->pop_front();
         pthread_mutex_unlock(&s->in_mutex);
 
         // encode one input in_buffer
@@ -520,10 +520,12 @@ static void *encodeThread(void *arg)
             yami_frame->crop.height = avctx->height;
             yami_frame->flags = 0;
         }
+        
+        /* handle decoder busy case */
         Decode_Status status;
-        do{
-             status  = s->encoder->encode(yami_frame);
-        }while(status==ENCODE_IS_BUSY);
+        do {
+             status = s->encoder->encode(yami_frame);
+        } while (status == ENCODE_IS_BUSY);
 
         PRINT_DECODE_THREAD("encode() status=%d, decode_count_yami=%d\n",
                             status, s->encode_count_yami);
@@ -534,6 +536,7 @@ static void *encodeThread(void *arg)
                    yami_frame->surface, s->encode_count_yami);
         }
         s->encode_count_yami++;
+        s->in_queue->pop_front();
         av_frame_free(&frame);
     }
 
