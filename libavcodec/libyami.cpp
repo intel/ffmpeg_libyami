@@ -217,12 +217,14 @@ static void yami_recycle_frame(void *opaque, uint8_t *data)
 {
     AVCodecContext *avctx = (AVCodecContext *) opaque;
     YamiDecContext *s = (YamiDecContext *) avctx->priv_data;
-    VideoRenderBuffer *frame = (VideoRenderBuffer *) data;
+    VideoFrameRawData *frame = (VideoFrameRawData *) data;
 
     if (!s || !s->decoder || !frame) // XXX, use shared pointer for s
         return;
     pthread_mutex_lock(&s->mutex_);
     s->decoder->renderDone(frame);
+    /*should I delete frame buffer??*/
+    av_free(frame);
     pthread_mutex_unlock(&s->mutex_);
     av_log(avctx, AV_LOG_DEBUG, "recycle previous frame: %p\n", frame);
 }
@@ -234,7 +236,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     VideoDecodeBuffer *in_buffer = NULL;
     Decode_Status status = RENDER_NO_AVAILABLE_FRAME;
     //VideoFrameRawData *yami_frame = NULL;
-    VideoRenderBuffer *yami_frame = NULL;
+    VideoFrameRawData *yami_frame = NULL;
     AVFrame *frame = (AVFrame *) data;
 
     av_log(avctx, AV_LOG_VERBOSE, "yami_decode_frame\n");
@@ -291,16 +293,17 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     pthread_mutex_unlock(&s->mutex_);
 
     // get an output buffer from yami
+    yami_frame = (VideoFrameRawData *)av_mallocz(sizeof(VideoFrameRawData));
+    yami_frame->memoryType = VIDEO_DATA_MEMORY_TYPE_SURFACE_ID;
     do {
         if (!s->format_info) {
             usleep(10000);
             continue;
         }
 
-        yami_frame = (VideoRenderBuffer *)s->decoder->getOutput(false);
+        status = s->decoder->getOutput(yami_frame , false);
         av_log(avctx, AV_LOG_DEBUG, "getoutput() status=%d\n", status);
-        if (yami_frame) {
-            status = RENDER_SUCCESS;
+        if (status == RENDER_SUCCESS) {
             break;
         }
 
@@ -373,7 +376,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     /* XXX: put the surface id to data[3] */
     frame->data[3] = reinterpret_cast<uint8_t *>(yami_frame);
     frame->buf[0] = av_buffer_create((uint8_t *) frame->data[3],
-                                     sizeof(VideoRenderBuffer),
+                                     sizeof(VideoFrameRawData),
                                      yami_recycle_frame, avctx, 0);
     s->render_count++;
     assert(data->buf[0] || !*got_frame);
@@ -481,7 +484,7 @@ static void *encodeThread(void *arg)
 
     while (1) {
         AVFrame *frame;
-        VideoRenderBuffer *in_buffer = NULL;
+        VideoFrameRawData *in_buffer = NULL;
         // deque one input buffer
         PRINT_DECODE_THREAD("encode thread runs one cycle start ... \n");
         pthread_mutex_lock(&s->in_mutex);
@@ -508,11 +511,11 @@ static void *encodeThread(void *arg)
         // encode one input in_buffer
         //PRINT_DECODE_THREAD("try to process one input buffer, in_buffer->data=%p, in_buffer->size=%d\n", in_buffer->data, in_buffer->size);
         SharedPtr < VideoFrame > yami_frame;
-        in_buffer = (VideoRenderBuffer *)frame->data[3];
+        in_buffer = (VideoFrameRawData *)frame->data[3];
 
         if (frame) {
             yami_frame.reset(new VideoFrame);
-            yami_frame->surface = (intptr_t)in_buffer->surface; /* XXX: get decoded surface */
+            yami_frame->surface = (intptr_t)in_buffer->internalID; /* XXX: get decoded surface */
             yami_frame->timeStamp = in_buffer->timeStamp;
             yami_frame->crop.x = 0;
             yami_frame->crop.y = 0;
