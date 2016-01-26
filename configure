@@ -253,6 +253,7 @@ External library support:
   --enable-libssh          enable SFTP protocol via libssh [no]
   --enable-libtesseract    enable Tesseract, needed for ocr filter [no]
   --enable-libyami-h264    enable H.264 decoding via libyami [no]
+  --enable-libyami-vpp     enable VPP filter via libyami [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
   --enable-libtwolame      enable MP2 encoding via libtwolame [no]
   --enable-libutvideo      enable Ut Video encoding and decoding via libutvideo [no]
@@ -1514,6 +1515,7 @@ EXTERNAL_LIBRARY_LIST="
     libssh
     libtesseract
     libyami_h264
+    libyami_vpp
     libtheora
     libtwolame
     libutvideo
@@ -3026,6 +3028,7 @@ zoompan_filter_deps="swscale"
 zscale_filter_deps="libzimg"
 scale_npp_filter_deps="cuda libnpp"
 scale_vaapi_filter_deps="vaapi VAProcPipelineParameterBuffer"
+yamivpp_filter_deps="libyami_vpp"
 
 # examples
 avcodec_example_deps="avcodec avutil"
@@ -5619,6 +5622,7 @@ enabled libssh            && require_pkg_config libssh libssh/sftp.h sftp_init
 enabled libspeex          && require_pkg_config speex speex/speex.h speex_decoder_init -lspeex
 enabled libtesseract      && require_pkg_config tesseract tesseract/capi.h TessBaseAPICreate
 enabled libyami_h264      && require_pkg_config "libyami_decoder libyami_encoder libva" VideoDecoderHost.h createVideoDecoder && add_cxx_extralibs
+enabled libyami_vpp       && require_pkg_config "libyami_vpp libyami_decoder libva" VideoPostProcessHost.h createVideoPostProcess && add_cxx_extralibs
 enabled libtheora         && require libtheora theora/theoraenc.h th_info_init -ltheoraenc -ltheoradec -logg
 enabled libtwolame        && require libtwolame twolame.h twolame_init -ltwolame &&
                              { check_lib twolame.h twolame_encode_buffer_float32_interleaved -ltwolame ||
@@ -6243,6 +6247,9 @@ enabled smartblur_filter    && prepend avfilter_deps "swscale"
 enabled spectrumsynth_filter && prepend avfilter_deps "avcodec"
 enabled subtitles_filter    && prepend avfilter_deps "avformat avcodec"
 enabled uspp_filter         && prepend avfilter_deps "avcodec"
+enabled yamivpp_filter      && require_pkg_config "libyami_vpp libva" VideoPostProcessHost.h createVideoPostProcess && add_cxx_extralibs
+#enabled yamivpp_filter      && require_pkg_config "libyami_vpp"
+
 
 enabled lavfi_indev         && prepend avdevice_deps "avfilter"
 
