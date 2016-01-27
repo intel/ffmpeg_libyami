@@ -40,6 +40,10 @@ using namespace YamiMediaCodec;
 #define VA_FOURCC_I420 VA_FOURCC('I','4','2','0')
 #endif
 
+#ifndef VA_FOURCC_NV12
+#define VA_FOURCC_NV12 VA_FOURCC('N','V','1','2')
+#endif
+
 #define DECODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "## decode thread ## line:%4d " format, __LINE__, ##__VA_ARGS__)
 
 #define ENCODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "## decode thread ## line:%4d " format, __LINE__, ##__VA_ARGS__)
@@ -116,6 +120,20 @@ static av_cold int yami_dec_init(AVCodecContext *avctx)
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     Decode_Status status;
 
+    enum AVPixelFormat pix_fmts[4] =
+                {
+                        AV_PIX_FMT_YAMI,
+                        AV_PIX_FMT_NV12,
+                        AV_PIX_FMT_YUV420P,
+                        AV_PIX_FMT_NONE
+                };
+    if(avctx->pix_fmt == AV_PIX_FMT_NONE){
+        int ret = ff_get_format(avctx, pix_fmts);
+        if (ret < 0)
+            return ret;
+
+        avctx->pix_fmt      = (AVPixelFormat)ret;
+    }
     av_log(avctx, AV_LOG_VERBOSE, "yami_dec_init\n");
     s->decoder = createVideoDecoder(YAMI_MIME_H264);
     if (!s->decoder) {
@@ -189,7 +207,7 @@ static void *decodeThread(void *arg)
 
         DECODE_TRACE("s->in_queue->size()=%ld\n", s->in_queue->size());
         in_buffer = s->in_queue->front();
-        s->in_queue->pop_front();
+
         pthread_mutex_unlock(&s->in_mutex);
 
         // decode one input buffer
@@ -205,12 +223,13 @@ static void *decodeThread(void *arg)
             DECODE_TRACE("decode() status=%d\n",status);
             avctx->width = s->format_info->width;
             avctx->height = s->format_info->height;
-            avctx->pix_fmt = AV_PIX_FMT_YUV420P;
+
         }
         if (status < 0){
             av_log(avctx, AV_LOG_ERROR, "decode error %d\n",status);
         }
         s->decode_count_yami++;
+        s->in_queue->pop_front();
         av_free(in_buffer->data);
         av_free(in_buffer);
     }
@@ -226,16 +245,16 @@ static void yami_recycle_frame(void *opaque, uint8_t *data)
 {
     AVCodecContext *avctx = (AVCodecContext *)opaque;
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
-    VideoFrameRawData *frame = (VideoFrameRawData *)data;
+    VideoFrameRawData *yami_frame = (VideoFrameRawData *)data;
 
-    if (!s || !s->decoder || !frame) // XXX, use shared pointer for s
+    if (!s || !s->decoder || !yami_frame) // XXX, use shared pointer for s
         return;
     pthread_mutex_lock(&s->mutex_);
-    s->decoder->renderDone(frame);
+    s->decoder->renderDone(yami_frame);
     /*should I delete frame buffer??*/
-    av_free(frame);
+    av_free(yami_frame);
     pthread_mutex_unlock(&s->mutex_);
-    av_log(avctx, AV_LOG_DEBUG, "recycle previous frame: %p\n", frame);
+    av_log(avctx, AV_LOG_DEBUG, "recycle previous frame: %p\n", yami_frame);
 }
 
 static int yami_dec_frame(AVCodecContext *avctx, void *data,
@@ -251,8 +270,12 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
 
     // append avpkt to input buffer queue
     in_buffer = (VideoDecodeBuffer *)av_mallocz(sizeof(VideoDecodeBuffer));
-    // avoid avpkt free and data is pointer
+    if(!in_buffer)
+        return AVERROR(ENOMEM);
+    /* avoid avpkt free and data is pointer */
     in_buffer->data = (uint8_t *)av_mallocz(avpkt->size);
+    if(!in_buffer->data)
+        return AVERROR(ENOMEM);
     memcpy(in_buffer->data, avpkt->data, avpkt->size);
     in_buffer->size = avpkt->size;
     in_buffer->timeStamp = avpkt->pts;
@@ -302,7 +325,18 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
 
     // get an output buffer from yami
     yami_frame = (VideoFrameRawData *)av_mallocz(sizeof(VideoFrameRawData));
-    yami_frame->memoryType = VIDEO_DATA_MEMORY_TYPE_SURFACE_ID;
+    if(!yami_frame)
+        return AVERROR(ENOMEM);
+    if(avctx->pix_fmt == AV_PIX_FMT_YAMI)
+        yami_frame->memoryType = VIDEO_DATA_MEMORY_TYPE_SURFACE_ID;
+    else
+        yami_frame->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
+    /*FIXME*/
+    if(avctx->pix_fmt == AV_PIX_FMT_NV12)
+        yami_frame->fourcc = VA_FOURCC_NV12;
+    else
+        yami_frame->fourcc = VA_FOURCC_I420;
+
     do {
         if (!s->format_info) {
             usleep(10000);
@@ -316,6 +350,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         }
 
         *got_frame = 0;
+        av_free(yami_frame);
         return avpkt->size;
     } while (s->decode_status == DECODE_THREAD_RUNING);
 
@@ -362,30 +397,59 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
 #endif
 
     // process the output frame
-    if (s->output_type == VIDEO_DATA_MEMORY_TYPE_DRM_NAME
-        || s->output_type == VIDEO_DATA_MEMORY_TYPE_DMA_BUF) {
-        frame = (AVFrame *)data;
-        ((AVFrame *) data)->extended_data = ((AVFrame *) data)->data;
-    } else {
+    if (avctx->pix_fmt == AV_PIX_FMT_YAMI) {
         frame->pts = yami_frame->timeStamp;
 
         frame->width = avctx->width;
         frame->height = avctx->height;
 
-        frame->format = AV_PIX_FMT_YUV420P; /* FIXME */
+        frame->format = AV_PIX_FMT_YAMI; /* FIXME */
         frame->extended_data = NULL;
 
         *(AVFrame *)data = *frame;
         ((AVFrame *)data)->extended_data = ((AVFrame *)data)->data;
+        /* XXX: put the surface id to data[3] */
+        frame->data[3] = reinterpret_cast<uint8_t *>(yami_frame);
+
+        frame->buf[0] = av_buffer_create((uint8_t *) frame->data[3],
+                                                     sizeof(VideoFrameRawData),
+                                                     yami_recycle_frame, avctx, 0);
+
+    } else {
+        int src_linesize[4];
+        const uint8_t *src_data[4];
+        int ret = ff_get_buffer(avctx,frame,0);
+        if(ret < 0)
+            return -1;
+
+        src_linesize[0] = yami_frame->pitch[0];
+        src_linesize[1] = yami_frame->pitch[1];
+        src_linesize[2] = yami_frame->pitch[2];
+        uint8_t* yami_data = reinterpret_cast<uint8_t*>(yami_frame->handle);
+        src_data[0] = yami_data + yami_frame->offset[0];
+        src_data[1] = yami_data + yami_frame->offset[1];
+        src_data[2] = yami_data + yami_frame->offset[2];
+        frame->pkt_pts = AV_NOPTS_VALUE;//yami_frame->timeStamp-1001;
+        frame->pkt_dts = yami_frame->timeStamp;
+        frame->pts = AV_NOPTS_VALUE;
+//        frame->pts = yami_frame->timeStamp;
+
+        frame->width = avctx->width;
+        frame->height = avctx->height;
+
+        frame->format = avctx->pix_fmt; /* FIXME */
+        frame->extended_data = NULL;
+
+        av_image_copy(frame->data,frame->linesize,src_data,src_linesize,avctx->pix_fmt,avctx->width,avctx->height);
+//        *(AVFrame *)data = *vframe;
+        frame->extended_data = frame->data;
+//        ((AVFrame *)data)->extended_data = ((AVFrame *)data)->data;
+        yami_recycle_frame((void*)avctx,(uint8_t*)yami_frame);
+
     }
 
     *got_frame = 1;
 
-    /* XXX: put the surface id to data[3] */
-    frame->data[3] = reinterpret_cast<uint8_t *>(yami_frame);
-    frame->buf[0] = av_buffer_create((uint8_t *) frame->data[3],
-                                     sizeof(VideoFrameRawData),
-                                     yami_recycle_frame, avctx, 0);
     s->render_count++;
     assert(data->buf[0] || !*got_frame);
     av_log(avctx, AV_LOG_VERBOSE,
@@ -437,7 +501,7 @@ AVCodec ff_libyami_h264_decoder = {
     .id                    = AV_CODEC_ID_H264,
     .capabilities          = CODEC_CAP_DELAY, // it is not necessary to support multi-threads
     .supported_framerates  = NULL,
-    .pix_fmts              = NULL,
+    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI ,AV_PIX_FMT_NV12 , AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE},
     .supported_samplerates = NULL,
     .sample_fmts           = NULL,
     .channel_layouts       = NULL,
@@ -582,6 +646,21 @@ static av_cold int yami_enc_init(AVCodecContext *avctx)
 {
     YamiEncContext *s = (YamiEncContext *) avctx->priv_data;
     Decode_Status status;
+
+    enum AVPixelFormat pix_fmts[4] =
+                {
+                        AV_PIX_FMT_YAMI,
+                        AV_PIX_FMT_NV12,
+                        AV_PIX_FMT_YUV420P,
+                        AV_PIX_FMT_NONE
+                };
+    if(avctx->pix_fmt == AV_PIX_FMT_NONE){
+        int ret = ff_get_format(avctx, pix_fmts);
+        if (ret < 0)
+            return ret;
+
+        avctx->pix_fmt      = (AVPixelFormat)ret;
+    }
 
     av_log(avctx, AV_LOG_VERBOSE, "yami_init h264 encoder\n");
     s->encoder = createVideoEncoder(YAMI_MIME_H264);
@@ -739,7 +818,7 @@ static av_cold int yami_enc_close(AVCodecContext *avctx)
 
     destroyOutputBuffer(&s->outputBuffer);
     pthread_mutex_lock(&s->mutex_);
-    while (s->encode_status != ENCODE_THREAD_EXIT) {
+    while (s->encode_status == ENCODE_THREAD_RUNING) {
         // potential race condition on s->encode_status
         s->encode_status = ENCODE_THREAD_GOT_EOS;
         pthread_mutex_unlock(&s->mutex_);
@@ -775,7 +854,7 @@ AVCodec ff_libyami_h264_encoder = {
     .id                    = AV_CODEC_ID_H264,
     .capabilities          = CODEC_CAP_DELAY, // it is not necessary to support multi-threads
     .supported_framerates  = NULL,
-    .pix_fmts              = NULL,
+    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI , AV_PIX_FMT_NV12 , AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE},
     .supported_samplerates = NULL,
     .sample_fmts           = NULL,
     .channel_layouts       = NULL,
