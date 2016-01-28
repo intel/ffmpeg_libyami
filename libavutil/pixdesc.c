@@ -1975,9 +1975,9 @@ static const AVPixFmtDescriptor av_pix_fmt_descriptors[AV_PIX_FMT_NB] = {
         .flags = AV_PIX_FMT_FLAG_HWACCEL,
     },
     [AV_PIX_FMT_YAMI] = {
-            .name = "yami",
-            .flags = AV_PIX_FMT_FLAG_HWACCEL,
-        },
+        .name = "yami",
+        .flags = AV_PIX_FMT_FLAG_HWACCEL,
+    },
     [AV_PIX_FMT_MMAL] = {
         .name = "mmal",
         .flags = AV_PIX_FMT_FLAG_HWACCEL,

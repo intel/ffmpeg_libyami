@@ -127,7 +127,7 @@ static av_cold int yami_dec_init(AVCodecContext *avctx)
                         AV_PIX_FMT_YUV420P,
                         AV_PIX_FMT_NONE
                 };
-    if(avctx->pix_fmt == AV_PIX_FMT_NONE){
+    if (avctx->pix_fmt == AV_PIX_FMT_NONE){
         int ret = ff_get_format(avctx, pix_fmts);
         if (ret < 0)
             return ret;
@@ -173,10 +173,6 @@ static av_cold int yami_dec_init(AVCodecContext *avctx)
     s->decode_count_yami = 0;
     s->render_count = 0;
 
-#if DEBUG_LIBYAMI
-    FILE *fp1 = fopen("./test.yuv", "wb");
-    fclose(fp1);
-#endif
     return 0;
 }
 
@@ -270,11 +266,11 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
 
     // append avpkt to input buffer queue
     in_buffer = (VideoDecodeBuffer *)av_mallocz(sizeof(VideoDecodeBuffer));
-    if(!in_buffer)
+    if (!in_buffer)
         return AVERROR(ENOMEM);
     /* avoid avpkt free and data is pointer */
     in_buffer->data = (uint8_t *)av_mallocz(avpkt->size);
-    if(!in_buffer->data)
+    if (!in_buffer->data)
         return AVERROR(ENOMEM);
     memcpy(in_buffer->data, avpkt->data, avpkt->size);
     in_buffer->size = avpkt->size;
@@ -325,14 +321,14 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
 
     // get an output buffer from yami
     yami_frame = (VideoFrameRawData *)av_mallocz(sizeof(VideoFrameRawData));
-    if(!yami_frame)
+    if (!yami_frame)
         return AVERROR(ENOMEM);
-    if(avctx->pix_fmt == AV_PIX_FMT_YAMI)
+    if (avctx->pix_fmt == AV_PIX_FMT_YAMI)
         yami_frame->memoryType = VIDEO_DATA_MEMORY_TYPE_SURFACE_ID;
     else
         yami_frame->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
     /*FIXME*/
-    if(avctx->pix_fmt == AV_PIX_FMT_NV12)
+    if (avctx->pix_fmt == AV_PIX_FMT_NV12)
         yami_frame->fourcc = VA_FOURCC_NV12;
     else
         yami_frame->fourcc = VA_FOURCC_I420;
@@ -358,43 +354,6 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         av_log(avctx, AV_LOG_VERBOSE, "after processed EOS, return\n");
         return avpkt->size;
     }
-
-#if  DEBUG_LIBYAMI
-    VAImage vaImage;
-    unsigned char *surface_p = NULL;
-    vaDeriveImage(yami_frame->display, yami_frame->surface, &vaImage);
-    vaMapBuffer(yami_frame->display, vaImage.buf, (void **) &surface_p);
-    unsigned char *swap_buf_ = (unsigned char*) malloc(
-        avctx->height * avctx->width * 3 / 2);
-
-    unsigned char *sY = surface_p + vaImage.offsets[0];
-    unsigned char *sUV = surface_p + vaImage.offsets[1];
-    unsigned char *dY = swap_buf_;
-    unsigned char *dU = dY + avctx->height * avctx->width;
-    unsigned char *dV = dU + avctx->height * avctx->width / 4;
-
-    for (unsigned int j = 0; j<avctx->height >> 1; j++) {
-        memcpy(dY, sY, avctx->width);
-        dY += avctx->width;
-        sY += vaImage.pitches[0];
-        memcpy(dY, sY, avctx->width);
-        dY += avctx->width;
-        sY += vaImage.pitches[0];
-
-        for (unsigned int i = 0; i < avctx->width >> 1; i++) {
-            *dU++ = *sUV++;
-            *dV++ = *sUV++;
-        }
-
-        sUV += vaImage.pitches[0] - avctx->width;
-    }
-    FILE *fp1 = fopen("./test.yuv", "ab+");
-    fwrite(swap_buf_, 1, avctx->height * avctx->width * 3 / 2, fp1);
-    fclose(fp1);
-    free(swap_buf_);
-    vaUnmapBuffer(yami_frame->display, vaImage.buf);
-    vaDestroyImage(yami_frame->display, vaImage.image_id);
-#endif
 
     // process the output frame
     if (avctx->pix_fmt == AV_PIX_FMT_YAMI) {
@@ -429,22 +388,20 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         src_data[0] = yami_data + yami_frame->offset[0];
         src_data[1] = yami_data + yami_frame->offset[1];
         src_data[2] = yami_data + yami_frame->offset[2];
-        frame->pkt_pts = AV_NOPTS_VALUE;//yami_frame->timeStamp-1001;
+        frame->pkt_pts = AV_NOPTS_VALUE;
         frame->pkt_dts = yami_frame->timeStamp;
         frame->pts = AV_NOPTS_VALUE;
-//        frame->pts = yami_frame->timeStamp;
 
         frame->width = avctx->width;
         frame->height = avctx->height;
 
-        frame->format = avctx->pix_fmt; /* FIXME */
+        frame->format = avctx->pix_fmt;
         frame->extended_data = NULL;
 
-        av_image_copy(frame->data,frame->linesize,src_data,src_linesize,avctx->pix_fmt,avctx->width,avctx->height);
-//        *(AVFrame *)data = *vframe;
+        av_image_copy(frame->data, frame->linesize, src_data, src_linesize,
+              avctx->pix_fmt, avctx->width, avctx->height);
         frame->extended_data = frame->data;
-//        ((AVFrame *)data)->extended_data = ((AVFrame *)data)->data;
-        yami_recycle_frame((void*)avctx,(uint8_t*)yami_frame);
+        yami_recycle_frame((void *)avctx, (uint8_t *)yami_frame);
 
     }
 
@@ -501,7 +458,10 @@ AVCodec ff_libyami_h264_decoder = {
     .id                    = AV_CODEC_ID_H264,
     .capabilities          = CODEC_CAP_DELAY, // it is not necessary to support multi-threads
     .supported_framerates  = NULL,
-    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI ,AV_PIX_FMT_NV12 , AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE},
+    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI ,
+                                                            AV_PIX_FMT_NV12 , 
+                                                            AV_PIX_FMT_YUV420P, 
+                                                            AV_PIX_FMT_NONE},
     .supported_samplerates = NULL,
     .sample_fmts           = NULL,
     .channel_layouts       = NULL,
@@ -549,6 +509,77 @@ struct YamiEncContext {
     int render_count;
 };
 
+static bool getPlaneResolution(uint32_t fourcc, uint32_t pixelWidth, uint32_t pixelHeight, uint32_t byteWidth[3], uint32_t byteHeight[3],  uint32_t& planes)
+{
+        int w = pixelWidth;
+        int h = pixelHeight;
+        uint32_t* width = byteWidth;
+        uint32_t* height = byteHeight;
+        switch (fourcc) {
+            case VA_FOURCC_NV12:
+            case VA_FOURCC_I420:
+            case VA_FOURCC_YV12:{
+                width[0] = w;
+                height[0] = h;
+                if (fourcc == VA_FOURCC_NV12) {
+                    width[1]  = w + (w & 1);
+                    height[1] = (h + 1) >> 1;
+                    planes = 2;
+                } else {
+                    width[1] = width[2] = (w + 1) >> 1;
+                    height[1] = height[2] = (h + 1) >> 1;
+                    planes = 3;
+                }
+                break;
+            }
+            case VA_FOURCC_YUY2:
+            case VA_FOURCC_UYVY: {
+                width[0] = w * 2;
+                height[0] = h;
+                planes = 1;
+                break;
+            }
+            case VA_FOURCC_RGBX:
+            case VA_FOURCC_RGBA:
+            case VA_FOURCC_BGRX:
+            case VA_FOURCC_BGRA: {
+                width[0] = w * 4;
+                height[0] = h;
+                planes = 1;
+                break;
+            }
+            default: {
+                assert(0 && "do not support this format");
+                planes = 0;
+                return false;
+            }
+        }
+        return true;
+}
+
+
+static bool fillFrameRawData(VideoFrameRawData* frame, uint32_t fourcc, uint32_t width, uint32_t height, uint8_t* data)
+{
+    memset(frame, 0, sizeof(*frame));
+    uint32_t planes;
+    uint32_t w[3], h[3];
+    if (!getPlaneResolution(fourcc, width, height, w, h, planes))
+        return false;
+    frame->fourcc = fourcc;
+    frame->width = width;
+    frame->height = height;
+    frame->handle = reinterpret_cast<intptr_t>(data);
+
+    frame->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
+    uint32_t offset = 0;
+    for (int i = 0; i < planes; i++) {
+        frame->pitch[i] = w[i];
+        frame->offset[i] = offset;//reinterpret_cast<intptr_t>(data->data[i]);
+        offset += w[i] * h[i];
+    }
+    return true;
+}
+
 static void *encodeThread(void *arg)
 {
     AVCodecContext *avctx = (AVCodecContext *)arg;
@@ -577,42 +608,82 @@ static void *encodeThread(void *arg)
 
         ENCODE_TRACE("s->in_queue->size()=%ld\n", s->in_queue->size());
         frame = s->in_queue->front();
-        //s->in_queue->pop_front();
         pthread_mutex_unlock(&s->in_mutex);
 
         // encode one input in_buffer
-        //ENCODE_TRACE("try to process one input buffer, in_buffer->data=%p, in_buffer->size=%d\n", in_buffer->data, in_buffer->size);
-        SharedPtr < VideoFrame > yami_frame;
-        in_buffer = (VideoFrameRawData *)frame->data[3];
-
-        if (frame) {
-            yami_frame.reset(new VideoFrame);
-            yami_frame->surface = (intptr_t)in_buffer->internalID; /* XXX: get decoded surface */
-            yami_frame->timeStamp = in_buffer->timeStamp;
-            yami_frame->crop.x = 0;
-            yami_frame->crop.y = 0;
-            yami_frame->crop.width = avctx->width;
-            yami_frame->crop.height = avctx->height;
-            yami_frame->flags = 0;
-        }
-
-        /* handle decoder busy case */
+        /*zero-copy mode*/
         Decode_Status status;
-        do {
-             status = s->encoder->encode(yami_frame);
-        } while (status == ENCODE_IS_BUSY);
+        if (frame->format != AV_PIX_FMT_YAMI) {
+            uint32_t src_linesize[4];
+            const uint8_t *src_data[4];
 
-        ENCODE_TRACE("encode() status=%d, decode_count_yami=%d\n", status, s->encode_count_yami);
+            uint8_t *dst_data[4];
 
+            in_buffer = (VideoFrameRawData *)av_malloc(sizeof(VideoFrameRawData));
+
+            src_linesize[0] = in_buffer->pitch[0] = avctx->width;
+            src_linesize[1] = in_buffer->pitch[1] = avctx->width / 2;
+            src_linesize[2] = in_buffer->pitch[2] = avctx->width / 2;
+            uint8_t* yamidata = reinterpret_cast<uint8_t*>(s->m_buffer);
+
+            dst_data[0] = yamidata;
+            dst_data[1] = yamidata + avctx->width * avctx->height;
+            dst_data[2] = dst_data[1] + avctx->width * avctx->height / 4;
+
+            src_data[0] = frame->data[0];
+            src_data[1] = frame->data[1];
+            src_data[2] = frame->data[2];
+
+            av_image_copy(dst_data, (int*) in_buffer->pitch, src_data,
+                    (int*) src_linesize, avctx->pix_fmt, avctx->width,
+                    avctx->height);
+
+            if (avctx->pix_fmt == AV_PIX_FMT_YUV420P)
+                fillFrameRawData(in_buffer, VA_FOURCC_I420, avctx->width,
+                        avctx->height, s->m_buffer);
+            else if (avctx->pix_fmt == AV_PIX_FMT_NV12)
+                fillFrameRawData(in_buffer, VA_FOURCC_NV12, avctx->width,
+                        avctx->height, s->m_buffer);
+            /* handle decoder busy case */
+            do {
+                 status = s->encoder->encode(in_buffer);
+            } while (status == ENCODE_IS_BUSY);
+
+            ENCODE_TRACE("encode() status=%d, decode_count_yami=%d\n", status, s->encode_count_yami);
+            av_free(in_buffer);
+
+        } else {
+            SharedPtr < VideoFrame > yami_frame;
+            in_buffer = (VideoFrameRawData *)frame->data[3];
+
+            if (frame) {
+                yami_frame.reset(new VideoFrame);
+                yami_frame->surface = (intptr_t)in_buffer->internalID; /* XXX: get decoded surface */
+                yami_frame->timeStamp = in_buffer->timeStamp;
+                yami_frame->crop.x = 0;
+                yami_frame->crop.y = 0;
+                yami_frame->crop.width = avctx->width;
+                yami_frame->crop.height = avctx->height;
+                yami_frame->flags = 0;
+            }
+
+            /* handle decoder busy case */
+
+            do {
+                 status = s->encoder->encode(yami_frame);
+            } while (status == ENCODE_IS_BUSY);
+
+            ENCODE_TRACE("encode() status=%d, decode_count_yami=%d\n", status, s->encode_count_yami);
+        }
         if (status < 0) {
             av_log(avctx, AV_LOG_ERROR,
-                   "encode error %d yami_frame->surface %d frame %d\n", status,
-                   yami_frame->surface, s->encode_count_yami);
+                   "encode error %d frame %d\n", status , s->encode_count_yami);
         }
         s->encode_count_yami++;
-        s->in_queue->pop_front();
-        av_frame_free(&frame);
+       s->in_queue->pop_front();
+       av_frame_free(&frame);
     }
+
 
     ENCODE_TRACE("encode thread exit\n");
     pthread_mutex_lock(&s->mutex_);
@@ -654,7 +725,7 @@ static av_cold int yami_enc_init(AVCodecContext *avctx)
                         AV_PIX_FMT_YUV420P,
                         AV_PIX_FMT_NONE
                 };
-    if(avctx->pix_fmt == AV_PIX_FMT_NONE){
+    if (avctx->pix_fmt == AV_PIX_FMT_NONE){
         int ret = ff_get_format(avctx, pix_fmts);
         if (ret < 0)
             return ret;
@@ -719,6 +790,8 @@ static av_cold int yami_enc_init(AVCodecContext *avctx)
         fprintf(stderr, "fail to create output\n");
         return -1;
     }
+    s->m_frameSize = avctx->width * avctx->height * 3 / 2;
+    s->m_buffer = static_cast<uint8_t*>(av_mallocz(s->m_frameSize));
 
     s->in_queue = new std::deque<AVFrame*>;
     pthread_mutex_init(&s->mutex_, NULL);
@@ -842,6 +915,9 @@ static av_cold int yami_enc_close(AVCodecContext *avctx)
     }
     delete s->in_queue;
 
+    av_free(s->m_buffer);
+    s->m_frameSize = 0;
+
     av_log(avctx, AV_LOG_VERBOSE, "yami_close\n");
 
     return 0;
@@ -854,7 +930,10 @@ AVCodec ff_libyami_h264_encoder = {
     .id                    = AV_CODEC_ID_H264,
     .capabilities          = CODEC_CAP_DELAY, // it is not necessary to support multi-threads
     .supported_framerates  = NULL,
-    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI , AV_PIX_FMT_NV12 , AV_PIX_FMT_YUV420P, AV_PIX_FMT_NONE},
+    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI , 
+                                                            AV_PIX_FMT_NV12 ,
+                                                            AV_PIX_FMT_YUV420P, 
+                                                            AV_PIX_FMT_NONE},
     .supported_samplerates = NULL,
     .sample_fmts           = NULL,
     .channel_layouts       = NULL,

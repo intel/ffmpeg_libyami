@@ -3118,7 +3118,8 @@ static int transcode_init(void)
 #endif
 
 #if CONFIG_LIBYAMI_H264
-            if(0 == strcmp(ost->enc_ctx->codec->name, "libyami_h264")){
+            if (0 == strcmp(ost->enc_ctx->codec->name, "libyami_h264") &&
+                    0 == strcmp(ist->dec_ctx->codec->name, "libyami_h264")){
                 if (yami_transcode_init(ost))
                     exit_program(1);
             }
