@@ -96,7 +96,7 @@ static VADisplay createVADisplay(void)
 
     int fd = open("/dev/dri/card0", O_RDWR);
     if (fd < 0) {
-        printf("open card0 failed");
+        av_log(NULL, AV_LOG_ERROR, "open card0 failed");
         return NULL;
     }
 
@@ -105,7 +105,7 @@ static VADisplay createVADisplay(void)
         int majorVersion, minorVersion;
         VAStatus vaStatus = vaInitialize(vadisplay, &majorVersion, &minorVersion);
         if (vaStatus != VA_STATUS_SUCCESS) {
-            printf("va init failed, status =  %d", vaStatus);
+            av_log(NULL, AV_LOG_ERROR, "va init failed, status =  %d", vaStatus);
             close(fd);
             return NULL;
         }
@@ -121,13 +121,13 @@ static av_cold int yami_dec_init(AVCodecContext *avctx)
     Decode_Status status;
 
     enum AVPixelFormat pix_fmts[4] =
-                {
-                        AV_PIX_FMT_YAMI,
-                        AV_PIX_FMT_NV12,
-                        AV_PIX_FMT_YUV420P,
-                        AV_PIX_FMT_NONE
-                };
-    if (avctx->pix_fmt == AV_PIX_FMT_NONE){
+        {
+            AV_PIX_FMT_YAMI,
+            AV_PIX_FMT_NV12,
+            AV_PIX_FMT_YUV420P,
+            AV_PIX_FMT_NONE
+        };
+    if (avctx->pix_fmt == AV_PIX_FMT_NONE) {
         int ret = ff_get_format(avctx, pix_fmts);
         if (ret < 0)
             return ret;
@@ -213,7 +213,7 @@ static void *decodeThread(void *arg)
 
         if (DECODE_FORMAT_CHANGE == status) {
             s->format_info = s->decoder->getFormatInfo();
-            DECODE_TRACE("decode format change %dx%d\n",s->format_info->width,s->format_info->height);
+            DECODE_TRACE("decode format change %dx%d\n", s->format_info->width,s->format_info->height);
             // resend the buffer to decoder
             status = s->decoder->decode(in_buffer);
             DECODE_TRACE("decode() status=%d\n",status);
@@ -222,7 +222,7 @@ static void *decodeThread(void *arg)
 
         }
         if (status < 0){
-            av_log(avctx, AV_LOG_ERROR, "decode error %d\n",status);
+            av_log(avctx, AV_LOG_ERROR, "decode error %d\n", status);
         }
         s->decode_count_yami++;
         s->in_queue->pop_front();
@@ -247,7 +247,7 @@ static void yami_recycle_frame(void *opaque, uint8_t *data)
         return;
     pthread_mutex_lock(&s->mutex_);
     s->decoder->renderDone(yami_frame);
-    /*should I delete frame buffer??*/
+    /* XXX: should I delete frame buffer?? */
     av_free(yami_frame);
     pthread_mutex_unlock(&s->mutex_);
     av_log(avctx, AV_LOG_DEBUG, "recycle previous frame: %p\n", yami_frame);
@@ -327,7 +327,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         yami_frame->memoryType = VIDEO_DATA_MEMORY_TYPE_SURFACE_ID;
     else
         yami_frame->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
-    /*FIXME*/
+    /* FIXME */
     if (avctx->pix_fmt == AV_PIX_FMT_NV12)
         yami_frame->fourcc = VA_FOURCC_NV12;
     else
@@ -370,10 +370,9 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         /* XXX: put the surface id to data[3] */
         frame->data[3] = reinterpret_cast<uint8_t *>(yami_frame);
 
-        frame->buf[0] = av_buffer_create((uint8_t *) frame->data[3],
-                                                     sizeof(VideoFrameRawData),
-                                                     yami_recycle_frame, avctx, 0);
-
+        frame->buf[0] = av_buffer_create((uint8_t *)frame->data[3],
+                                         sizeof(VideoFrameRawData),
+                                         yami_recycle_frame, avctx, 0);
     } else {
         int src_linesize[4];
         const uint8_t *src_data[4];
@@ -399,10 +398,9 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         frame->extended_data = NULL;
 
         av_image_copy(frame->data, frame->linesize, src_data, src_linesize,
-              avctx->pix_fmt, avctx->width, avctx->height);
+                      avctx->pix_fmt, avctx->width, avctx->height);
         frame->extended_data = frame->data;
         yami_recycle_frame((void *)avctx, (uint8_t *)yami_frame);
-
     }
 
     *got_frame = 1;
@@ -453,14 +451,14 @@ static av_cold int yami_dec_close(AVCodecContext *avctx)
 
 AVCodec ff_libyami_h264_decoder = {
     .name                  = "libyami_h264",
-    .long_name             = NULL_IF_CONFIG_SMALL("libyami H.264"),
+    .long_name             = NULL_IF_CONFIG_SMALL("libyami H.264 decoder"),
     .type                  = AVMEDIA_TYPE_VIDEO,
     .id                    = AV_CODEC_ID_H264,
     .capabilities          = CODEC_CAP_DELAY, // it is not necessary to support multi-threads
     .supported_framerates  = NULL,
     .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI ,
-                                                            AV_PIX_FMT_NV12 , 
-                                                            AV_PIX_FMT_YUV420P, 
+                                                            AV_PIX_FMT_NV12 ,
+                                                            AV_PIX_FMT_YUV420P,
                                                             AV_PIX_FMT_NONE},
     .supported_samplerates = NULL,
     .sample_fmts           = NULL,
@@ -509,60 +507,59 @@ struct YamiEncContext {
     int render_count;
 };
 
-static bool getPlaneResolution(uint32_t fourcc, uint32_t pixelWidth, uint32_t pixelHeight, uint32_t byteWidth[3], uint32_t byteHeight[3],  uint32_t& planes)
+static bool
+getPlaneResolution(uint32_t fourcc, uint32_t pixelWidth, uint32_t pixelHeight, uint32_t byteWidth[3], uint32_t byteHeight[3],  uint32_t& planes)
 {
-        int w = pixelWidth;
-        int h = pixelHeight;
-        uint32_t* width = byteWidth;
-        uint32_t* height = byteHeight;
-        switch (fourcc) {
-            case VA_FOURCC_NV12:
-            case VA_FOURCC_I420:
-            case VA_FOURCC_YV12:{
-                width[0] = w;
-                height[0] = h;
-                if (fourcc == VA_FOURCC_NV12) {
-                    width[1]  = w + (w & 1);
-                    height[1] = (h + 1) >> 1;
-                    planes = 2;
-                } else {
-                    width[1] = width[2] = (w + 1) >> 1;
-                    height[1] = height[2] = (h + 1) >> 1;
-                    planes = 3;
-                }
-                break;
-            }
-            case VA_FOURCC_YUY2:
-            case VA_FOURCC_UYVY: {
-                width[0] = w * 2;
-                height[0] = h;
-                planes = 1;
-                break;
-            }
-            case VA_FOURCC_RGBX:
-            case VA_FOURCC_RGBA:
-            case VA_FOURCC_BGRX:
-            case VA_FOURCC_BGRA: {
-                width[0] = w * 4;
-                height[0] = h;
-                planes = 1;
-                break;
-            }
-            default: {
-                assert(0 && "do not support this format");
-                planes = 0;
-                return false;
-            }
+    int w = pixelWidth;
+    int h = pixelHeight;
+    uint32_t *width = byteWidth;
+    uint32_t *height = byteHeight;
+
+    switch (fourcc) {
+    case VA_FOURCC_NV12:
+    case VA_FOURCC_I420:
+    case VA_FOURCC_YV12:
+        width[0] = w;
+        height[0] = h;
+        if (fourcc == VA_FOURCC_NV12) {
+            width[1]  = w + (w & 1);
+            height[1] = (h + 1) >> 1;
+            planes = 2;
+        } else {
+            width[1] = width[2] = (w + 1) >> 1;
+            height[1] = height[2] = (h + 1) >> 1;
+            planes = 3;
         }
-        return true;
+        break;
+    case VA_FOURCC_YUY2:
+    case VA_FOURCC_UYVY:
+        width[0] = w * 2;
+        height[0] = h;
+        planes = 1;
+        break;
+    case VA_FOURCC_RGBX:
+    case VA_FOURCC_RGBA:
+    case VA_FOURCC_BGRX:
+    case VA_FOURCC_BGRA:
+        width[0] = w * 4;
+        height[0] = h;
+        planes = 1;
+        break;
+    default:
+        assert(0 && "do not support this format");
+        planes = 0;
+        return false;
+    }
+    return true;
 }
 
-
-static bool fillFrameRawData(VideoFrameRawData* frame, uint32_t fourcc, uint32_t width, uint32_t height, uint8_t* data)
+static bool
+fillFrameRawData(VideoFrameRawData* frame, uint32_t fourcc, uint32_t width, uint32_t height, uint8_t* data)
 {
     memset(frame, 0, sizeof(*frame));
     uint32_t planes;
     uint32_t w[3], h[3];
+
     if (!getPlaneResolution(fourcc, width, height, w, h, planes))
         return false;
     frame->fourcc = fourcc;
@@ -572,7 +569,7 @@ static bool fillFrameRawData(VideoFrameRawData* frame, uint32_t fourcc, uint32_t
 
     frame->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
     uint32_t offset = 0;
-    for (int i = 0; i < planes; i++) {
+    for (uint32_t i = 0; i < planes; i++) {
         frame->pitch[i] = w[i];
         frame->offset[i] = offset;//reinterpret_cast<intptr_t>(data->data[i]);
         offset += w[i] * h[i];
@@ -611,7 +608,7 @@ static void *encodeThread(void *arg)
         pthread_mutex_unlock(&s->in_mutex);
 
         // encode one input in_buffer
-        /*zero-copy mode*/
+        /* zero-copy mode */
         Decode_Status status;
         if (frame->format != AV_PIX_FMT_YAMI) {
             uint32_t src_linesize[4];
@@ -635,15 +632,15 @@ static void *encodeThread(void *arg)
             src_data[2] = frame->data[2];
 
             av_image_copy(dst_data, (int*) in_buffer->pitch, src_data,
-                    (int*) src_linesize, avctx->pix_fmt, avctx->width,
-                    avctx->height);
+                          (int*) src_linesize, avctx->pix_fmt, avctx->width,
+                          avctx->height);
 
             if (avctx->pix_fmt == AV_PIX_FMT_YUV420P)
                 fillFrameRawData(in_buffer, VA_FOURCC_I420, avctx->width,
-                        avctx->height, s->m_buffer);
+                                 avctx->height, s->m_buffer);
             else if (avctx->pix_fmt == AV_PIX_FMT_NV12)
                 fillFrameRawData(in_buffer, VA_FOURCC_NV12, avctx->width,
-                        avctx->height, s->m_buffer);
+                                 avctx->height, s->m_buffer);
             /* handle decoder busy case */
             do {
                  status = s->encoder->encode(in_buffer);
@@ -651,7 +648,6 @@ static void *encodeThread(void *arg)
 
             ENCODE_TRACE("encode() status=%d, decode_count_yami=%d\n", status, s->encode_count_yami);
             av_free(in_buffer);
-
         } else {
             SharedPtr < VideoFrame > yami_frame;
             in_buffer = (VideoFrameRawData *)frame->data[3];
@@ -668,22 +664,21 @@ static void *encodeThread(void *arg)
             }
 
             /* handle decoder busy case */
-
             do {
                  status = s->encoder->encode(yami_frame);
             } while (status == ENCODE_IS_BUSY);
 
             ENCODE_TRACE("encode() status=%d, decode_count_yami=%d\n", status, s->encode_count_yami);
         }
+
         if (status < 0) {
             av_log(avctx, AV_LOG_ERROR,
                    "encode error %d frame %d\n", status , s->encode_count_yami);
         }
         s->encode_count_yami++;
-       s->in_queue->pop_front();
+        s->in_queue->pop_front();
        av_frame_free(&frame);
     }
-
 
     ENCODE_TRACE("encode thread exit\n");
     pthread_mutex_lock(&s->mutex_);
@@ -719,13 +714,14 @@ static av_cold int yami_enc_init(AVCodecContext *avctx)
     Decode_Status status;
 
     enum AVPixelFormat pix_fmts[4] =
-                {
-                        AV_PIX_FMT_YAMI,
-                        AV_PIX_FMT_NV12,
-                        AV_PIX_FMT_YUV420P,
-                        AV_PIX_FMT_NONE
-                };
-    if (avctx->pix_fmt == AV_PIX_FMT_NONE){
+        {
+            AV_PIX_FMT_YAMI,
+            AV_PIX_FMT_NV12,
+            AV_PIX_FMT_YUV420P,
+            AV_PIX_FMT_NONE
+        };
+
+    if (avctx->pix_fmt == AV_PIX_FMT_NONE) {
         int ret = ff_get_format(avctx, pix_fmts);
         if (ret < 0)
             return ret;
@@ -787,13 +783,13 @@ static av_cold int yami_enc_init(AVCodecContext *avctx)
     s->encoder->getMaxOutSize(&(s->maxOutSize));
 
     if (!createOutputBuffer(&s->outputBuffer, s->maxOutSize)) {
-        fprintf(stderr, "fail to create output\n");
+        av_log(avctx, AV_LOG_ERROR,  "fail to create output\n");
         return -1;
     }
     s->m_frameSize = avctx->width * avctx->height * 3 / 2;
-    s->m_buffer = static_cast<uint8_t*>(av_mallocz(s->m_frameSize));
+    s->m_buffer = static_cast<uint8_t *>(av_mallocz(s->m_frameSize));
 
-    s->in_queue = new std::deque<AVFrame*>;
+    s->in_queue = new std::deque<AVFrame *>;
     pthread_mutex_init(&s->mutex_, NULL);
     pthread_mutex_init(&s->in_mutex, NULL);
     pthread_cond_init(&s->in_cond, NULL);
@@ -810,7 +806,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
                           const AVFrame *frame, int *got_packet)
 {
     YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
-    Decode_Status status;
+    Encode_Status status;
     int ret;
 
     if (frame) {
@@ -835,8 +831,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
             }
             pthread_mutex_unlock(&s->in_mutex);
 
-            av_log(avctx,
-                   AV_LOG_DEBUG,
+            av_log(avctx, AV_LOG_DEBUG,
                    "s->in_queue->size()=%ld, s->decode_count=%d, s->decode_count_yami=%d, too many buffer are under decoding, wait ...\n",
                    s->in_queue->size(), s->encode_count, s->encode_count_yami);
             usleep(1000);
@@ -925,14 +920,14 @@ static av_cold int yami_enc_close(AVCodecContext *avctx)
 
 AVCodec ff_libyami_h264_encoder = {
     .name                  = "libyami_h264",
-    .long_name             = NULL_IF_CONFIG_SMALL("libyami H.264"),
+    .long_name             = NULL_IF_CONFIG_SMALL("libyami H.264 encoder"),
     .type                  = AVMEDIA_TYPE_VIDEO,
     .id                    = AV_CODEC_ID_H264,
     .capabilities          = CODEC_CAP_DELAY, // it is not necessary to support multi-threads
     .supported_framerates  = NULL,
-    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI , 
-                                                            AV_PIX_FMT_NV12 ,
-                                                            AV_PIX_FMT_YUV420P, 
+    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI,
+                                                            AV_PIX_FMT_NV12,
+                                                            AV_PIX_FMT_YUV420P,
                                                             AV_PIX_FMT_NONE},
     .supported_samplerates = NULL,
     .sample_fmts           = NULL,
