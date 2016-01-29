@@ -377,13 +377,13 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         int src_linesize[4];
         const uint8_t *src_data[4];
         int ret = ff_get_buffer(avctx,frame,0);
-        if(ret < 0)
+        if (ret < 0)
             return -1;
 
         src_linesize[0] = yami_frame->pitch[0];
         src_linesize[1] = yami_frame->pitch[1];
         src_linesize[2] = yami_frame->pitch[2];
-        uint8_t* yami_data = reinterpret_cast<uint8_t*>(yami_frame->handle);
+        uint8_t *yami_data = reinterpret_cast<uint8_t *>(yami_frame->handle);
         src_data[0] = yami_data + yami_frame->offset[0];
         src_data[1] = yami_data + yami_frame->offset[1];
         src_data[2] = yami_data + yami_frame->offset[2];
@@ -554,7 +554,7 @@ getPlaneResolution(uint32_t fourcc, uint32_t pixelWidth, uint32_t pixelHeight, u
 }
 
 static bool
-fillFrameRawData(VideoFrameRawData* frame, uint32_t fourcc, uint32_t width, uint32_t height, uint8_t* data)
+fillFrameRawData(VideoFrameRawData *frame, uint32_t fourcc, uint32_t width, uint32_t height, uint8_t *data)
 {
     memset(frame, 0, sizeof(*frame));
     uint32_t planes;
@@ -563,7 +563,7 @@ fillFrameRawData(VideoFrameRawData* frame, uint32_t fourcc, uint32_t width, uint
     if (!getPlaneResolution(fourcc, width, height, w, h, planes))
         return false;
     frame->fourcc = fourcc;
-    frame->width = width;
+    frame->width  = width;
     frame->height = height;
     frame->handle = reinterpret_cast<intptr_t>(data);
 
@@ -608,9 +608,8 @@ static void *encodeThread(void *arg)
         pthread_mutex_unlock(&s->in_mutex);
 
         // encode one input in_buffer
-        /* zero-copy mode */
         Decode_Status status;
-        if (frame->format != AV_PIX_FMT_YAMI) {
+        if (frame->format != AV_PIX_FMT_YAMI) { /* non zero-copy mode */
             uint32_t src_linesize[4];
             const uint8_t *src_data[4];
 
@@ -621,7 +620,7 @@ static void *encodeThread(void *arg)
             src_linesize[0] = in_buffer->pitch[0] = avctx->width;
             src_linesize[1] = in_buffer->pitch[1] = avctx->width / 2;
             src_linesize[2] = in_buffer->pitch[2] = avctx->width / 2;
-            uint8_t* yamidata = reinterpret_cast<uint8_t*>(s->m_buffer);
+            uint8_t *yamidata = reinterpret_cast<uint8_t *>(s->m_buffer);
 
             dst_data[0] = yamidata;
             dst_data[1] = yamidata + avctx->width * avctx->height;
@@ -631,8 +630,8 @@ static void *encodeThread(void *arg)
             src_data[1] = frame->data[1];
             src_data[2] = frame->data[2];
 
-            av_image_copy(dst_data, (int*) in_buffer->pitch, src_data,
-                          (int*) src_linesize, avctx->pix_fmt, avctx->width,
+            av_image_copy(dst_data, (int *)in_buffer->pitch, src_data,
+                          (int *)src_linesize, avctx->pix_fmt, avctx->width,
                           avctx->height);
 
             if (avctx->pix_fmt == AV_PIX_FMT_YUV420P)
@@ -648,7 +647,7 @@ static void *encodeThread(void *arg)
 
             ENCODE_TRACE("encode() status=%d, decode_count_yami=%d\n", status, s->encode_count_yami);
             av_free(in_buffer);
-        } else {
+        } else { /* zero-copy mode */
             SharedPtr < VideoFrame > yami_frame;
             in_buffer = (VideoFrameRawData *)frame->data[3];
 
@@ -677,7 +676,7 @@ static void *encodeThread(void *arg)
         }
         s->encode_count_yami++;
         s->in_queue->pop_front();
-       av_frame_free(&frame);
+        av_frame_free(&frame);
     }
 
     ENCODE_TRACE("encode thread exit\n");
@@ -882,7 +881,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
 
 static av_cold int yami_enc_close(AVCodecContext *avctx)
 {
-    YamiEncContext *s = (YamiEncContext *) avctx->priv_data;
+    YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
 
     destroyOutputBuffer(&s->outputBuffer);
     pthread_mutex_lock(&s->mutex_);
