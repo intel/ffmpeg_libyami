@@ -2834,7 +2834,7 @@ static int yami_transcode_init(OutputStream *ost)
     if (strcmp(ost->avfilter, "null") || ost->source_index < 0)
         return 0;
 
-    /* check if the decoder supports QSV and the output only goes to this stream */
+    /* check if the decoder supports libyami and the output only goes to this stream */
     ist = input_streams[ost->source_index];
     if (ist->nb_filters ||
         !ist->dec || !ist->dec->pix_fmts)
@@ -2850,7 +2850,7 @@ static int yami_transcode_init(OutputStream *ost)
             output_streams[i]->source_index == ost->source_index)
             return 0;
 
-    av_log(NULL, AV_LOG_VERBOSE, "Setting up QSV transcoding\n");
+    av_log(NULL, AV_LOG_VERBOSE, "Setting up libyami transcoding\n");
 
     e = av_dict_get(ost->encoder_opts, "flags", NULL, 0);
     opt = av_opt_find(ost->enc_ctx, "flags", NULL, 0, 0);
@@ -3119,12 +3119,11 @@ static int transcode_init(void)
 
 #if CONFIG_LIBYAMI_H264
             if (0 == strcmp(ost->enc_ctx->codec->name, "libyami_h264") &&
-                    0 == strcmp(ist->dec_ctx->codec->name, "libyami_h264")){
+                0 == strcmp(ist->dec_ctx->codec->name, "libyami_h264")) {
                 if (yami_transcode_init(ost))
                     exit_program(1);
             }
 #endif
-
             if (!ost->filter &&
                 (enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO ||
                  enc_ctx->codec_type == AVMEDIA_TYPE_AUDIO)) {
