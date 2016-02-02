@@ -34,6 +34,7 @@
 
 extern "C" {
 #include "libavutil/avassert.h"
+#include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
 #include "avfilter.h"
 #include "formats.h"
@@ -85,13 +86,13 @@ static VADisplay createVADisplay(void)
 {
     static VADisplay vadisplay = NULL;
 
-    int fd = open("/dev/dri/card0", O_RDWR);
-    if (fd < 0) {
-        av_log(NULL, AV_LOG_ERROR, "open card0 failed");
-        return NULL;
-    }
-
     if (!vadisplay) {
+        int fd = open("/dev/dri/card0", O_RDWR);
+        if (fd < 0) {
+            av_log(NULL, AV_LOG_ERROR, "open card0 failed");
+            return NULL;
+        }
+
         vadisplay = vaGetDisplayDRM(fd);
         int majorVersion, minorVersion;
         VAStatus vaStatus = vaInitialize(vadisplay, &majorVersion, &minorVersion);
@@ -183,10 +184,11 @@ static int config_props(AVFilterLink *inlink)
     YamivppContext *yamivpp = (YamivppContext *)ctx->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
 
+    /*
     yamivpp->out_width  = FFALIGN(yamivpp->out_width, 16);
     yamivpp->out_height = (yamivpp->dpic == 2) ?
                           FFALIGN(yamivpp->out_height, 16):
-                          FFALIGN(yamivpp->out_height, 32); // force 32 if unkown
+                          FFALIGN(yamivpp->out_height, 32); */// force 32 if unkown
 
     /* if out_width or out_heigh are zero, used input w/h */
     outlink->w = (yamivpp->out_width > 0) ? yamivpp->out_width : inlink->w;
@@ -235,59 +237,124 @@ SharedPtr<VideoFrame> createSurface(uint32_t rtFormat, int pixelFormat, uint32_t
     return frame;
 }
 
-bool loadSurfaceImage(SharedPtr<VideoFrame>& frame)
+bool loadSurfaceImage(SharedPtr<VideoFrame>& frame , AVFrame *in)
 {
     VASurfaceID surface = (VASurfaceID)frame->surface;
     VAImage image;
+
+    uint32_t src_linesize[4];
+    uint32_t dest_linesize[4];
+    const uint8_t *src_data[4];
+    uint8_t *dst_data[4];
+    int row, col;
 
     VADisplay m_vaDisplay = createVADisplay();
 
     VAStatus status = vaDeriveImage(m_vaDisplay, surface, &image);
     if (!checkVaapiStatus(status, "vaDeriveImage"))
         return false;
-    assert(image.num_planes == 1);
-    char *buf = NULL;
+
+    uint8_t *buf = NULL;
     status = vaMapBuffer(m_vaDisplay, image.buf, (void**)&buf);
     if (!checkVaapiStatus(status, "vaMapBuffer")) {
         vaDestroyImage(m_vaDisplay, image.image_id);
         return false;
     }
 
-#if 0
-    uint8_t  r = rand() % 256;
-    uint8_t  g = rand() % 256;
-    uint8_t  b = rand() % 256;
-    uint8_t  a = rand() % 256;
+    src_data[0] = in->data[0];
+    src_data[1] = in->data[1];
+    src_data[2] = in->data[2];
 
-    uint32_t pixel = (r << 24) | (g << 16) | (b << 8) | a;
-    char* ptr = buf + image.offsets[0];
-    for (int i = 0; i < image.height; i++) {
-        uint32_t* dest = (uint32_t*)(ptr + image.pitches[0] * i);
-        for (int j = 0; j < image.width; j++) {
-            *dest = pixel;
-            dest++;
-        }
+    dst_data[0] = buf + image.offsets[0];
+    dst_data[1] = buf + image.offsets[1]; /* UV offset for NV12 */
+    dst_data[2] = buf + image.offsets[2];
+
+    /* XXX */
+    if (in->format == AV_PIX_FMT_YUV420P) {
+        src_linesize[0] = in->width;
+        src_linesize[1] = in->width / 2;
+        src_linesize[2] = in->width / 2;
+    } else if (in->format == AV_PIX_FMT_NV12) {
+        src_linesize[0] = in->width;
+        src_linesize[1] = in->width;
+        src_linesize[2] = 0;
     }
-#endif
+
+    /* XXX */
+    av_image_copy(dst_data, (int *)dest_linesize, src_data,
+                  (int *)in->linesize, (AVPixelFormat)in->format,
+                  in->width, in->height);
+    /*for (uint32_t i = 0; i < planes; i++) {
+        char* ptr = buf + image.offsets[i];
+        int w = byteWidth[i];
+        for (uint32_t j = 0; j < byteHeight[i]; j++) {
+            ret = m_io(ptr, w, fp);
+            if (!ret)
+                goto out;
+            ptr += image.pitches[i];
+        }
+        }*/
 
     checkVaapiStatus(vaUnmapBuffer(m_vaDisplay, image.buf), "vaUnmapBuffer");
     checkVaapiStatus(vaDestroyImage(m_vaDisplay, image.image_id), "vaDestroyImage");
     return true;
 }
 
-static SharedPtr<VideoFrame> createSrcSurfaces(uint32_t targetWidth, uint32_t targetHeight)
+static SharedPtr<VideoFrame> createSrcSurface(int fmt, uint32_t targetWidth, uint32_t targetHeight)
 {
     SharedPtr<VideoFrame> src;
-    src = createSurface(VA_RT_FORMAT_YUV420, VA_FOURCC_NV12, targetWidth, targetHeight);
-    src->fourcc = YAMI_FOURCC_NV12;
+    int fourcc = VA_FOURCC_I420;
+    switch (fmt) {
+    case AV_PIX_FMT_YUV420P:
+        fourcc =  VA_FOURCC_I420;
+        break;
+
+    case AV_PIX_FMT_NV12:
+        fourcc =  VA_FOURCC_NV12;
+        break;
+
+    case AV_PIX_FMT_YUYV422:
+    case AV_PIX_FMT_RGB32:
+    case AV_PIX_FMT_NONE:
+        av_log(NULL, AV_LOG_WARNING, "don't support this format now.\n");
+        break;
+
+    default:
+        av_log(NULL, AV_LOG_WARNING, "don't support the format %d\n", fmt);
+        break;
+    };
+
+    src = createSurface(VA_RT_FORMAT_YUV420, fourcc, targetWidth, targetHeight);
+    src->fourcc = fourcc;
     return src;
 }
 
-static SharedPtr<VideoFrame> createDestSurface(uint32_t targetWidth, uint32_t targetHeight)
+static SharedPtr<VideoFrame> createDestSurface(int fmt, uint32_t targetWidth, uint32_t targetHeight)
 {
     SharedPtr<VideoFrame> dest;
-    dest = createSurface(VA_RT_FORMAT_YUV420, VA_FOURCC_NV12, targetWidth, targetHeight);
-    dest->fourcc = YAMI_FOURCC_NV12;
+    int fourcc = VA_FOURCC_I420;
+    switch (fmt) {
+    case AV_PIX_FMT_YUV420P:
+        fourcc =  VA_FOURCC_I420;
+        break;
+
+    case AV_PIX_FMT_NV12:
+        fourcc =  VA_FOURCC_NV12;
+        break;
+
+    case AV_PIX_FMT_YUYV422:
+    case AV_PIX_FMT_RGB32:
+    case AV_PIX_FMT_NONE:
+        av_log(NULL, AV_LOG_WARNING, "don't support this format now.\n");
+        break;
+
+    default:
+        av_log(NULL, AV_LOG_WARNING, "don't support the format %d\n", fmt);
+        break;
+    };
+
+    dest = createSurface(VA_RT_FORMAT_YUV420, fourcc, targetWidth, targetHeight);
+    dest->fourcc = fourcc;
     return dest;
 }
 
@@ -313,32 +380,23 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    // input data
-    if (inlink->format == AV_PIX_FMT_YUV420P)
-        fourcc = VA_FOURCC_YV12;
-    else if (inlink->format == AV_PIX_FMT_YUYV422)
-        fourcc = VA_FOURCC_YUY2;
-    else if (inlink->format == AV_PIX_FMT_NV12)
-        fourcc = VA_FOURCC_NV12;
-    else
-        fourcc = VA_FOURCC_NV12;
-
-#if 0
     SharedPtr < VideoFrame > src;
-    VideoFrameRawData *in_buffer = NULL;
-    in_buffer = (VideoFrameRawData *)in->data[3];
+    SharedPtr < VideoFrame > dest;
+    YamiStatus  status;
 
-    if (in) {
-        src.reset(new VideoFrame);
-        src->surface = (intptr_t)in_buffer->internalID; /* XXX: get decoded surface */
-        src->timeStamp = in_buffer->timeStamp;
-        src->crop.x = 0;
-        src->crop.y = 0;
-        src->crop.width = inlink->w;
-        src->crop.height = inlink->h;
-        src->flags = 0;
+    /* create source surface and load Frame to the surface */
+    src = createSrcSurface(in->format, in->width, in->height);
+    loadSurfaceImage(src, in);
+    dest = createDestSurface(in->format, outlink->w, outlink->h);
+
+    status = yamivpp->scaler->process(src, dest);
+    if (status != YAMI_SUCCESS) {
+        av_log(ctx, AV_LOG_ERROR, "vpp process failed, status = %d", status);
     }
-#endif
+
+    /* get output frame from dest surface */
+    
+    yamivpp->frame_number++;
 
     if (!direct)
         av_frame_free(&in);
