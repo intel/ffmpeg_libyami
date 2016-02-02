@@ -94,13 +94,13 @@ static VADisplay createVADisplay(void)
 {
     static VADisplay vadisplay = NULL;
 
-    int fd = open("/dev/dri/card0", O_RDWR);
-    if (fd < 0) {
-        av_log(NULL, AV_LOG_ERROR, "open card0 failed");
-        return NULL;
-    }
 
     if (!vadisplay) {
+        int fd = open("/dev/dri/card0", O_RDWR);
+        if (fd < 0) {
+            av_log(NULL, AV_LOG_ERROR, "open card0 failed");
+            return NULL;
+        }
         vadisplay = vaGetDisplayDRM(fd);
         int majorVersion, minorVersion;
         VAStatus vaStatus = vaInitialize(vadisplay, &majorVersion, &minorVersion);
@@ -123,8 +123,8 @@ static av_cold int yami_dec_init(AVCodecContext *avctx)
     enum AVPixelFormat pix_fmts[4] =
         {
             AV_PIX_FMT_YAMI,
-            AV_PIX_FMT_YUV420P,
             AV_PIX_FMT_NV12,
+            AV_PIX_FMT_YUV420P,
             AV_PIX_FMT_NONE
         };
     if (avctx->pix_fmt == AV_PIX_FMT_NONE) {
