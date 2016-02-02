@@ -123,8 +123,8 @@ static av_cold int yami_dec_init(AVCodecContext *avctx)
     enum AVPixelFormat pix_fmts[4] =
         {
             AV_PIX_FMT_YAMI,
-            AV_PIX_FMT_NV12,
             AV_PIX_FMT_YUV420P,
+            AV_PIX_FMT_NV12,
             AV_PIX_FMT_NONE
         };
     if (avctx->pix_fmt == AV_PIX_FMT_NONE) {
@@ -144,6 +144,8 @@ static av_cold int yami_dec_init(AVCodecContext *avctx)
     NativeDisplay native_display;
     native_display.type = NATIVE_DISPLAY_VA;
     VADisplay m_display = createVADisplay();
+    if(!m_display)
+        return -1;
     native_display.handle = (intptr_t)m_display;
     s->decoder->setNativeDisplay(&native_display);
 
@@ -375,18 +377,36 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
                                          yami_recycle_frame, avctx, 0);
     } else {
         int src_linesize[4];
-        const uint8_t *src_data[4];
-        int ret = ff_get_buffer(avctx,frame,0);
-        if (ret < 0)
-            return -1;
+        uint8_t *src_data[4];
+        if(avctx->pix_fmt == AV_PIX_FMT_YUV420P) {
+            src_linesize[0] = yami_frame->pitch[0];
+            src_linesize[1] = yami_frame->pitch[1];
+            src_linesize[2] = yami_frame->pitch[2];
+            uint8_t* yami_data = reinterpret_cast<uint8_t*>(yami_frame->handle);
+            src_data[0] = yami_data + yami_frame->offset[0];
+            src_data[1] = yami_data + yami_frame->offset[1];
+            src_data[2] = yami_data + yami_frame->offset[2];
 
-        src_linesize[0] = yami_frame->pitch[0];
-        src_linesize[1] = yami_frame->pitch[1];
-        src_linesize[2] = yami_frame->pitch[2];
-        uint8_t *yami_data = reinterpret_cast<uint8_t *>(yami_frame->handle);
-        src_data[0] = yami_data + yami_frame->offset[0];
-        src_data[1] = yami_data + yami_frame->offset[1];
-        src_data[2] = yami_data + yami_frame->offset[2];
+            frame->data[0] = reinterpret_cast<uint8_t*>(src_data[0]);
+            frame->data[1] = reinterpret_cast<uint8_t*>(src_data[1]);
+            frame->data[2] = reinterpret_cast<uint8_t*>(src_data[2]);
+            frame->linesize[0] = src_linesize[0];
+            frame->linesize[1] = src_linesize[1];
+            frame->linesize[2] = src_linesize[2];
+        } else {
+            src_linesize[0] = yami_frame->pitch[0];
+            src_linesize[1] = yami_frame->pitch[1];
+            src_linesize[2] = yami_frame->pitch[2];
+            uint8_t* yami_data = reinterpret_cast<uint8_t*>(yami_frame->handle);
+            src_data[0] = yami_data + yami_frame->offset[0];
+            src_data[1] = yami_data + yami_frame->offset[1];
+
+            frame->data[0] = reinterpret_cast<uint8_t*>(src_data[0]);
+            frame->data[1] = reinterpret_cast<uint8_t*>(src_data[1]);
+            frame->linesize[0] = src_linesize[0];
+            frame->linesize[1] = src_linesize[1];
+        }
+
         frame->pkt_pts = AV_NOPTS_VALUE;
         frame->pkt_dts = yami_frame->timeStamp;
         frame->pts = AV_NOPTS_VALUE;
@@ -397,10 +417,13 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         frame->format = avctx->pix_fmt;
         frame->extended_data = NULL;
 
-        av_image_copy(frame->data, frame->linesize, src_data, src_linesize,
-                      avctx->pix_fmt, avctx->width, avctx->height);
         frame->extended_data = frame->data;
-        yami_recycle_frame((void *)avctx, (uint8_t *)yami_frame);
+
+
+        frame->buf[0] = av_buffer_create((uint8_t *) yami_frame,
+                                                     sizeof(VideoFrameRawData),
+                                                     yami_recycle_frame, avctx, 0);
+
     }
 
     *got_frame = 1;
