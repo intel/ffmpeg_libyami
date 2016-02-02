@@ -5621,8 +5621,8 @@ enabled libsoxr           && require libsoxr soxr.h soxr_create -lsoxr && LIBSOX
 enabled libssh            && require_pkg_config libssh libssh/sftp.h sftp_init
 enabled libspeex          && require_pkg_config speex speex/speex.h speex_decoder_init -lspeex
 enabled libtesseract      && require_pkg_config tesseract tesseract/capi.h TessBaseAPICreate
-enabled libyami_h264      && require_pkg_config "libyami_decoder libyami_encoder libva" VideoDecoderHost.h createVideoDecoder && add_cxx_extralibs
-enabled libyami_vpp       && require_pkg_config "libyami_vpp libyami_decoder libva" VideoPostProcessHost.h createVideoPostProcess && add_cxx_extralibs
+enabled libyami_h264      && require_pkg_config "libyami libva" VideoDecoderHost.h createVideoDecoder && add_cxx_extralibs
+enabled libyami_vpp       && require_pkg_config "libyami libva" VideoPostProcessHost.h createVideoPostProcess && add_cxx_extralibs
 enabled libtheora         && require libtheora theora/theoraenc.h th_info_init -ltheoraenc -ltheoradec -logg
 enabled libtwolame        && require libtwolame twolame.h twolame_init -ltwolame &&
                              { check_lib twolame.h twolame_encode_buffer_float32_interleaved -ltwolame ||
@@ -6247,7 +6247,7 @@ enabled smartblur_filter    && prepend avfilter_deps "swscale"
 enabled spectrumsynth_filter && prepend avfilter_deps "avcodec"
 enabled subtitles_filter    && prepend avfilter_deps "avformat avcodec"
 enabled uspp_filter         && prepend avfilter_deps "avcodec"
-enabled yamivpp_filter      && require_pkg_config "libyami_vpp libva" VideoPostProcessHost.h createVideoPostProcess && add_cxx_extralibs
+enabled yamivpp_filter      && require_pkg_config "libyami libva" VideoPostProcessHost.h createVideoPostProcess && add_cxx_extralibs
 #enabled yamivpp_filter      && require_pkg_config "libyami_vpp"
 
 
