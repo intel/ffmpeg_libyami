@@ -56,6 +56,8 @@ typedef struct {
     const AVClass *cls;
 
     IVideoPostProcess *scaler;
+    SharedPtr < VideoFrame > src;
+    SharedPtr < VideoFrame > dest;
 
     int out_width;
     int out_height;
@@ -245,8 +247,7 @@ bool loadSurfaceImage(SharedPtr<VideoFrame>& frame , AVFrame *in)
     uint32_t src_linesize[4];
     uint32_t dest_linesize[4];
     const uint8_t *src_data[4];
-    uint8_t *dst_data[4];
-    int row, col;
+    uint8_t *dest_data[4];
 
     VADisplay m_vaDisplay = createVADisplay();
 
@@ -265,35 +266,73 @@ bool loadSurfaceImage(SharedPtr<VideoFrame>& frame , AVFrame *in)
     src_data[1] = in->data[1];
     src_data[2] = in->data[2];
 
-    dst_data[0] = buf + image.offsets[0];
-    dst_data[1] = buf + image.offsets[1]; /* UV offset for NV12 */
-    dst_data[2] = buf + image.offsets[2];
+    dest_data[0] = buf + image.offsets[0];
+    dest_data[1] = buf + image.offsets[1]; /* UV offset for NV12 */
+    dest_data[2] = buf + image.offsets[2];
 
-    /* XXX */
     if (in->format == AV_PIX_FMT_YUV420P) {
-        src_linesize[0] = in->width;
-        src_linesize[1] = in->width / 2;
-        src_linesize[2] = in->width / 2;
+        dest_linesize[0] = src_linesize[0] = in->width;
+        dest_linesize[1] = src_linesize[1] = in->width / 2;
+        dest_linesize[2] = src_linesize[2] = in->width / 2;
     } else if (in->format == AV_PIX_FMT_NV12) {
-        src_linesize[0] = in->width;
-        src_linesize[1] = in->width;
-        src_linesize[2] = 0;
+        dest_linesize[0] = src_linesize[0] = in->width;
+        dest_linesize[1] = src_linesize[1] = in->width;
+        dest_linesize[2] = src_linesize[2] = 0;
     }
 
-    /* XXX */
-    av_image_copy(dst_data, (int *)dest_linesize, src_data,
+    av_image_copy(dest_data, (int *)dest_linesize, src_data,
                   (int *)in->linesize, (AVPixelFormat)in->format,
                   in->width, in->height);
-    /*for (uint32_t i = 0; i < planes; i++) {
-        char* ptr = buf + image.offsets[i];
-        int w = byteWidth[i];
-        for (uint32_t j = 0; j < byteHeight[i]; j++) {
-            ret = m_io(ptr, w, fp);
-            if (!ret)
-                goto out;
-            ptr += image.pitches[i];
-        }
-        }*/
+
+    checkVaapiStatus(vaUnmapBuffer(m_vaDisplay, image.buf), "vaUnmapBuffer");
+    checkVaapiStatus(vaDestroyImage(m_vaDisplay, image.image_id), "vaDestroyImage");
+    return true;
+}
+
+bool getSurfaceImage(SharedPtr<VideoFrame>& frame , AVFrame *out)
+{
+    VASurfaceID surface = (VASurfaceID)frame->surface;
+    VAImage image;
+
+    uint32_t src_linesize[4];
+    uint32_t dest_linesize[4];
+    const uint8_t *src_data[4];
+    uint8_t *dest_data[4];
+
+    VADisplay m_vaDisplay = createVADisplay();
+
+    VAStatus status = vaDeriveImage(m_vaDisplay, surface, &image);
+    if (!checkVaapiStatus(status, "vaDeriveImage"))
+        return false;
+
+    uint8_t *buf = NULL;
+    status = vaMapBuffer(m_vaDisplay, image.buf, (void**)&buf);
+    if (!checkVaapiStatus(status, "vaMapBuffer")) {
+        vaDestroyImage(m_vaDisplay, image.image_id);
+        return false;
+    }
+
+    dest_data[0] = out->data[0];
+    dest_data[1] = out->data[1];
+    dest_data[2] = out->data[2];
+
+    src_data[0] = buf + image.offsets[0];
+    src_data[1] = buf + image.offsets[1]; /* UV offset for NV12 */
+    src_data[2] = buf + image.offsets[2];
+
+    if (out->format == AV_PIX_FMT_YUV420P) {
+        dest_linesize[0] = src_linesize[0] = out->width;
+        dest_linesize[1] = src_linesize[1] = out->width / 2;
+        dest_linesize[2] = src_linesize[2] = out->width / 2;
+    } else if (out->format == AV_PIX_FMT_NV12) {
+        dest_linesize[0] = src_linesize[0] = out->width;
+        dest_linesize[1] = src_linesize[1] = out->width;
+        dest_linesize[2] = src_linesize[2] = 0;
+    }
+
+    av_image_copy(dest_data, (int *)dest_linesize, src_data,
+                  (int *)out->linesize, (AVPixelFormat)out->format,
+                  out->width, out->height);
 
     checkVaapiStatus(vaUnmapBuffer(m_vaDisplay, image.buf), "vaUnmapBuffer");
     checkVaapiStatus(vaDestroyImage(m_vaDisplay, image.image_id), "vaDestroyImage");
@@ -380,22 +419,20 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         av_frame_copy_props(out, in);
     }
 
-    SharedPtr < VideoFrame > src;
-    SharedPtr < VideoFrame > dest;
     YamiStatus  status;
-
-    /* create source surface and load Frame to the surface */
-    src = createSrcSurface(in->format, in->width, in->height);
-    loadSurfaceImage(src, in);
-    dest = createDestSurface(in->format, outlink->w, outlink->h);
-
-    status = yamivpp->scaler->process(src, dest);
+    if (yamivpp->frame_number == 0) {
+        /* create source surface and load data to the surface */
+        yamivpp->src  = createSrcSurface(in->format, in->width, in->height);
+        yamivpp->dest = createDestSurface(in->format, outlink->w, outlink->h);
+    }
+    loadSurfaceImage(yamivpp->src, in);
+    status = yamivpp->scaler->process(yamivpp->src, yamivpp->dest);
     if (status != YAMI_SUCCESS) {
         av_log(ctx, AV_LOG_ERROR, "vpp process failed, status = %d", status);
     }
-
     /* get output frame from dest surface */
-    
+    getSurfaceImage(yamivpp->dest, out);
+
     yamivpp->frame_number++;
 
     if (!direct)
