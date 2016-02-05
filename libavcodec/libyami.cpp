@@ -29,6 +29,7 @@
 extern "C" {
 #include "avcodec.h"
 #include "libavutil/imgutils.h"
+#include "libavutil/opt.h"
 #include "internal.h"
 }
 #include "VideoDecoderHost.h"
@@ -65,7 +66,7 @@ typedef enum {
 #define DEBUG_LIBYAMI 0
 
 #define QUEUE_MAX_SIZE 8
-#define QUEUE_MIN_SIZE 4
+#define QUEUE_MIN_SIZE 8
 
 struct YamiDecContext {
     AVCodecContext *avctx;
@@ -107,6 +108,7 @@ static VADisplay createVADisplay(void)
         if (vaStatus != VA_STATUS_SUCCESS) {
             av_log(NULL, AV_LOG_ERROR, "va init failed, status =  %d", vaStatus);
             close(fd);
+            vadisplay = NULL;
             return NULL;
         }
         return vadisplay;
@@ -120,6 +122,7 @@ static av_cold int yami_dec_init(AVCodecContext *avctx)
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     Decode_Status status;
 
+    s->decoder = NULL;
     enum AVPixelFormat pix_fmts[4] =
         {
             AV_PIX_FMT_YAMI,
@@ -134,6 +137,11 @@ static av_cold int yami_dec_init(AVCodecContext *avctx)
 
         avctx->pix_fmt      = (AVPixelFormat)ret;
     }
+    VADisplay m_display = createVADisplay();
+    if (!m_display) {
+        av_log(avctx, AV_LOG_ERROR, "\nfail to create libyami h264 display\n");
+        return -1;
+    }
     av_log(avctx, AV_LOG_VERBOSE, "yami_dec_init\n");
     s->decoder = createVideoDecoder(YAMI_MIME_H264);
     if (!s->decoder) {
@@ -143,9 +151,7 @@ static av_cold int yami_dec_init(AVCodecContext *avctx)
 
     NativeDisplay native_display;
     native_display.type = NATIVE_DISPLAY_VA;
-    VADisplay m_display = createVADisplay();
-    if(!m_display)
-        return -1;
+
     native_display.handle = (intptr_t)m_display;
     s->decoder->setNativeDisplay(&native_display);
 
@@ -259,6 +265,8 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
                           int *got_frame, AVPacket *avpkt)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
+    if(!s||!s->decoder)
+        return -1;
     VideoDecodeBuffer *in_buffer = NULL;
     Decode_Status status = RENDER_NO_AVAILABLE_FRAME;
     VideoFrameRawData *yami_frame = NULL;
@@ -521,6 +529,14 @@ struct YamiEncContext {
 
     uint8_t *m_buffer;
     uint32_t m_frameSize;
+    /***video param*****/
+    uint32_t cqp;
+    uint32_t frame_rate;
+    char* rcmod;
+    uint32_t gop;
+    char *level;
+    char *profile;
+    /*******************/
 
     uint32_t maxOutSize;
 
@@ -530,75 +546,33 @@ struct YamiEncContext {
     int render_count;
 };
 
-static bool
-getPlaneResolution(uint32_t fourcc, uint32_t pixelWidth, uint32_t pixelHeight, uint32_t byteWidth[3], uint32_t byteHeight[3],  uint32_t& planes)
-{
-    int w = pixelWidth;
-    int h = pixelHeight;
-    uint32_t *width = byteWidth;
-    uint32_t *height = byteHeight;
+#define OFFSET(x) offsetof(YamiEncContext, x)
+#define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
+static const AVOption options[] = {
+    { "profile",       "Set profile restrictions ", OFFSET(profile),       AV_OPT_TYPE_STRING, { 0 }, 0, 0, VE},
+    {"level", "Specify level (as defined by Annex A)", OFFSET(level), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
+    {"rcmode", "rate control mode", OFFSET(rcmod), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
+    { "qp",            "Constant quantization parameter rate control method",OFFSET(cqp),        AV_OPT_TYPE_INT,    { .i64 = 26 }, 1, 52, VE },
+    { "cavlc",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "coder" },
+    { "cabac",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "coder" },
+    { NULL },
+};
 
-    switch (fourcc) {
-    case VA_FOURCC_NV12:
-    case VA_FOURCC_I420:
-    case VA_FOURCC_YV12:
-        width[0] = w;
-        height[0] = h;
-        if (fourcc == VA_FOURCC_NV12) {
-            width[1]  = w + (w & 1);
-            height[1] = (h + 1) >> 1;
-            planes = 2;
-        } else {
-            width[1] = width[2] = (w + 1) >> 1;
-            height[1] = height[2] = (h + 1) >> 1;
-            planes = 3;
-        }
-        break;
-    case VA_FOURCC_YUY2:
-    case VA_FOURCC_UYVY:
-        width[0] = w * 2;
-        height[0] = h;
-        planes = 1;
-        break;
-    case VA_FOURCC_RGBX:
-    case VA_FOURCC_RGBA:
-    case VA_FOURCC_BGRX:
-    case VA_FOURCC_BGRA:
-        width[0] = w * 4;
-        height[0] = h;
-        planes = 1;
-        break;
-    default:
-        assert(0 && "do not support this format");
-        planes = 0;
-        return false;
-    }
-    return true;
-}
+static const AVClass yami_enc_264_class = {
+    .class_name = "libyami_h264",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
+};
 
-static bool
-fillFrameRawData(VideoFrameRawData *frame, uint32_t fourcc, uint32_t width, uint32_t height, uint8_t *data)
-{
-    memset(frame, 0, sizeof(*frame));
-    uint32_t planes;
-    uint32_t w[3], h[3];
+static const AVCodecDefault yami_enc_264_defaults[] = {
+    { (uint8_t *)("b"),                (uint8_t *)("0") },
+    { (uint8_t *)("g"),                (uint8_t *)("250") },
+    { (uint8_t *)("qmin"),             (uint8_t *)("-1") },
+    { (uint8_t *)("qmax"),             (uint8_t *)("-1") },
+    { NULL },
+};
 
-    if (!getPlaneResolution(fourcc, width, height, w, h, planes))
-        return false;
-    frame->fourcc = fourcc;
-    frame->width  = width;
-    frame->height = height;
-    frame->handle = reinterpret_cast<intptr_t>(data);
-
-    frame->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
-    uint32_t offset = 0;
-    for (uint32_t i = 0; i < planes; i++) {
-        frame->pitch[i] = w[i];
-        frame->offset[i] = offset;//reinterpret_cast<intptr_t>(data->data[i]);
-        offset += w[i] * h[i];
-    }
-    return true;
-}
 
 static void *encodeThread(void *arg)
 {
@@ -642,13 +616,13 @@ static void *encodeThread(void *arg)
 
             in_buffer->width = avctx->width;
             in_buffer->height = avctx->height;
-            /*FIXME yami should be cal the right address*/
-            if(avctx->pix_fmt == AV_PIX_FMT_YUV420P){
-                src_linesize[0] = in_buffer->pitch[0] = frame->linesize[0];
-                src_linesize[1] = in_buffer->pitch[1] = frame->linesize[1];
-                src_linesize[2] = in_buffer->pitch[2] = frame->linesize[2];
+            /*FIXME there is risk here, i need another yami interface*/
+            if (avctx->pix_fmt == AV_PIX_FMT_YUV420P){
+                in_buffer->pitch[0] = frame->linesize[0];
+                in_buffer->pitch[1] = frame->linesize[1];
+                in_buffer->pitch[2] = frame->linesize[2];
 
-                in_buffer->handle = reinterpret_cast<intptr_t>(frame->data[0]) & ~(0xFFFFFF);
+                in_buffer->handle = reinterpret_cast<intptr_t>(frame->data[0]) & ~(0xFFFFFFF);
                 in_buffer->offset[0] = reinterpret_cast<intptr_t>(frame->data[0]) - in_buffer->handle;
                 in_buffer->offset[1] = reinterpret_cast<intptr_t>(frame->data[1]) - in_buffer->handle;
                 in_buffer->offset[2] = reinterpret_cast<intptr_t>(frame->data[2]) - in_buffer->handle;
@@ -656,7 +630,7 @@ static void *encodeThread(void *arg)
             } else {
                 src_linesize[0] = in_buffer->pitch[0] = frame->linesize[0];
                 src_linesize[1] = in_buffer->pitch[1] = frame->linesize[1];
-                in_buffer->handle = reinterpret_cast<intptr_t>(frame->data[0]) & ~(0xFFFFFF);
+                in_buffer->handle = reinterpret_cast<intptr_t>(frame->data[0]) & ~(0xFFFFFFF);
                 in_buffer->offset[0] = reinterpret_cast<intptr_t>(frame->data[0]) - in_buffer->handle;
                 in_buffer->offset[1] = reinterpret_cast<intptr_t>(frame->data[1]) - in_buffer->handle;
                 in_buffer->fourcc = VA_FOURCC_NV12;
@@ -783,11 +757,39 @@ static av_cold int yami_enc_init(AVCodecContext *avctx)
     // picture type and bitrate
     encVideoParams.intraPeriod = av_clip(avctx->gop_size, 1, 250);
     encVideoParams.ipPeriod = !avctx->max_b_frames ? 1 : 3;
-    //  encVideoParams.rcParams.bitRate = avctx->bit_rate;
-    encVideoParams.rcParams.initQP = 26;
-    encVideoParams.rcMode = RATE_CONTROL_CQP;
-    encVideoParams.level = 40;
+    if (s->rcmod){
+        if (!strcmp(s->rcmod,"CQP"))
+            encVideoParams.rcMode = RATE_CONTROL_CQP;
+        else if (!strcmp(s->rcmod,"VBR")){
+            encVideoParams.rcMode = RATE_CONTROL_VBR;
+            encVideoParams.rcParams.bitRate = avctx->bit_rate;
+        } else {
+            encVideoParams.rcMode = RATE_CONTROL_CBR;
+            encVideoParams.rcParams.bitRate = avctx->bit_rate;
+        }
+    } else {
+        encVideoParams.rcMode = RATE_CONTROL_CQP;
+    }
 
+    encVideoParams.rcParams.initQP = av_clip(s->cqp,1,52);
+
+    if (s->level){
+        encVideoParams.level = atoi(s->level);
+    } else {
+        encVideoParams.level = 40;
+    }
+    /*libyami only support h264 main now*/
+//    if (s->profile){
+//        if (!strcmp(s->profile , "high"))
+//            encVideoParams.profile = VAProfileH264High;
+//        else if(!strcmp(s->profile , "main")){
+//            encVideoParams.profile = VAProfileH264Main;
+//        } else {
+//            encVideoParams.profile = VAProfileH264Baseline;
+//        }
+//    } else {
+//        encVideoParams.profile = VAProfileH264High;
+//    }
     // s->encoder->setEncoderParameters(&encVideoParams);
     encVideoParams.size = sizeof(VideoParamsCommon);
     s->encoder->setParameters(VideoParamsTypeCommon, &encVideoParams);
@@ -830,6 +832,8 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     Encode_Status status;
     int ret;
 
+    if(!s->encoder)
+        return -1;
     if (frame) {
         AVFrame *qframe = av_frame_alloc();
         if (!qframe) {
@@ -956,13 +960,13 @@ AVCodec ff_libyami_h264_encoder = {
 #if FF_API_LOWRES
     .max_lowres            = 0,
 #endif
-    .priv_class            = NULL,
+    .priv_class            = &yami_enc_264_class,
     .profiles              = NULL,
     .priv_data_size        = sizeof(YamiEncContext),
     .next                  = NULL,
     .init_thread_copy      = NULL,
     .update_thread_context = NULL,
-    .defaults              = NULL,
+    .defaults              = yami_enc_264_defaults,
     .init_static_data      = NULL,
     .init                  = yami_enc_init,
     .encode_sub            = NULL,
