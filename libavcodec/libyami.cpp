@@ -265,7 +265,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
                           int *got_frame, AVPacket *avpkt)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
-    if(!s||!s->decoder)
+    if (!s || !s->decoder)
         return -1;
     VideoDecodeBuffer *in_buffer = NULL;
     Decode_Status status = RENDER_NO_AVAILABLE_FRAME;
@@ -386,7 +386,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     } else {
         int src_linesize[4];
         uint8_t *src_data[4];
-        if(avctx->pix_fmt == AV_PIX_FMT_YUV420P) {
+        if (avctx->pix_fmt == AV_PIX_FMT_YUV420P) {
             src_linesize[0] = yami_frame->pitch[0];
             src_linesize[1] = yami_frame->pitch[1];
             src_linesize[2] = yami_frame->pitch[2];
@@ -550,11 +550,11 @@ struct YamiEncContext {
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
     { "profile",       "Set profile restrictions ", OFFSET(profile),       AV_OPT_TYPE_STRING, { 0 }, 0, 0, VE},
-    {"level", "Specify level (as defined by Annex A)", OFFSET(level), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
-    {"rcmode", "rate control mode", OFFSET(rcmod), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
+    { "level",         "Specify level (as defined by Annex A)", OFFSET(level), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
+    { "rcmode",        "rate control mode", OFFSET(rcmod), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
     { "qp",            "Constant quantization parameter rate control method",OFFSET(cqp),        AV_OPT_TYPE_INT,    { .i64 = 26 }, 1, 52, VE },
-    { "cavlc",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "coder" },
-    { "cabac",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "coder" },
+//    { "cavlc",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "coder" },
+//    { "cabac",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "coder" },
     { NULL },
 };
 
@@ -568,8 +568,6 @@ static const AVClass yami_enc_264_class = {
 static const AVCodecDefault yami_enc_264_defaults[] = {
     { (uint8_t *)("b"),                (uint8_t *)("0") },
     { (uint8_t *)("g"),                (uint8_t *)("250") },
-    { (uint8_t *)("qmin"),             (uint8_t *)("-1") },
-    { (uint8_t *)("qmax"),             (uint8_t *)("-1") },
     { NULL },
 };
 
