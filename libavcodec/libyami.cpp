@@ -47,7 +47,7 @@ using namespace YamiMediaCodec;
 
 #define DECODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "## decode thread ## line:%4d " format, __LINE__, ##__VA_ARGS__)
 
-#define ENCODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "## decode thread ## line:%4d " format, __LINE__, ##__VA_ARGS__)
+#define ENCODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "## encode thread ## line:%4d " format, __LINE__, ##__VA_ARGS__)
 
 typedef enum {
     DECODE_THREAD_NOT_INIT = 0,
@@ -532,7 +532,7 @@ struct YamiEncContext {
     /***video param*****/
     uint32_t cqp;
     uint32_t frame_rate;
-    char* rcmod;
+    char *rcmod;
     uint32_t gop;
     char *level;
     char *profile;
@@ -614,7 +614,7 @@ static void *encodeThread(void *arg)
 
             in_buffer->width = avctx->width;
             in_buffer->height = avctx->height;
-            /*FIXME there is risk here, i need another yami interface*/
+            /* FIXME there is risk here, I need another yami interface */
             if (avctx->pix_fmt == AV_PIX_FMT_YUV420P){
                 in_buffer->pitch[0] = frame->linesize[0];
                 in_buffer->pitch[1] = frame->linesize[1];
@@ -639,7 +639,7 @@ static void *encodeThread(void *arg)
                  status = s->encoder->encode(in_buffer);
             } while (status == ENCODE_IS_BUSY);
 
-            ENCODE_TRACE("encode() status=%d, decode_count_yami=%d\n", status, s->encode_count_yami);
+            ENCODE_TRACE("encode() status=%d, encode_count_yami=%d\n", status, s->encode_count_yami);
             av_free(in_buffer);
         } else { /* zero-copy mode */
             SharedPtr < VideoFrame > yami_frame;
@@ -661,7 +661,7 @@ static void *encodeThread(void *arg)
                  status = s->encoder->encode(yami_frame);
             } while (status == ENCODE_IS_BUSY);
 
-            ENCODE_TRACE("encode() status=%d, decode_count_yami=%d\n", status, s->encode_count_yami);
+            ENCODE_TRACE("encode() status=%d, encode_count_yami=%d\n", status, s->encode_count_yami);
         }
 
         if (status < 0) {
@@ -756,9 +756,9 @@ static av_cold int yami_enc_init(AVCodecContext *avctx)
     encVideoParams.intraPeriod = av_clip(avctx->gop_size, 1, 250);
     encVideoParams.ipPeriod = !avctx->max_b_frames ? 1 : 3;
     if (s->rcmod){
-        if (!strcmp(s->rcmod,"CQP"))
+        if (!strcmp(s->rcmod, "CQP"))
             encVideoParams.rcMode = RATE_CONTROL_CQP;
-        else if (!strcmp(s->rcmod,"VBR")){
+        else if (!strcmp(s->rcmod, "VBR")){
             encVideoParams.rcMode = RATE_CONTROL_VBR;
             encVideoParams.rcParams.bitRate = avctx->bit_rate;
         } else {
@@ -855,7 +855,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
             pthread_mutex_unlock(&s->in_mutex);
 
             av_log(avctx, AV_LOG_DEBUG,
-                   "s->in_queue->size()=%ld, s->decode_count=%d, s->decode_count_yami=%d, too many buffer are under decoding, wait ...\n",
+                   "s->in_queue->size()=%ld, s->encode_count=%d, s->encode_count_yami=%d, too many buffer are under decoding, wait ...\n",
                    s->in_queue->size(), s->encode_count, s->encode_count_yami);
             usleep(1000);
         };
@@ -936,7 +936,7 @@ static av_cold int yami_enc_close(AVCodecContext *avctx)
     av_free(s->m_buffer);
     s->m_frameSize = 0;
 
-    av_log(avctx, AV_LOG_VERBOSE, "yami_close\n");
+    av_log(avctx, AV_LOG_VERBOSE, "yami_enc_close\n");
 
     return 0;
 }
