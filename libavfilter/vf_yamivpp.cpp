@@ -190,7 +190,7 @@ static int config_props(AVFilterLink *inlink)
     yamivpp->out_width  = FFALIGN(yamivpp->out_width, 16);
     yamivpp->out_height = (yamivpp->dpic == 2) ?
                           FFALIGN(yamivpp->out_height, 16):
-                          FFALIGN(yamivpp->out_height, 32); */// force 32 if unkown
+                          FFALIGN(yamivpp->out_height, 32); */ // force 32 if unkown
 
     /* if out_width or out_heigh are zero, used input w/h */
     outlink->w = (yamivpp->out_width > 0) ? yamivpp->out_width : inlink->w;
@@ -200,6 +200,10 @@ static int config_props(AVFilterLink *inlink)
     outlink->time_base  = av_inv_q(yamivpp->framerate);
 
     outlink->format = AV_PIX_FMT_NV12;
+
+    av_log(NULL, AV_LOG_VERBOSE, "out w:%d, h:%d, deinterlace:%d, denoise:%d, framerate:%d/%d\n",
+           yamivpp->out_width, yamivpp->out_height, yamivpp->deinterlace, yamivpp->denoise, yamivpp->framerate.num, yamivpp->framerate.den);
+
 
     return 0;
 }
@@ -244,8 +248,8 @@ bool loadSurfaceImage(SharedPtr<VideoFrame>& frame , AVFrame *in)
     VASurfaceID surface = (VASurfaceID)frame->surface;
     VAImage image;
 
-    uint32_t src_linesize[4];
-    uint32_t dest_linesize[4];
+    uint32_t src_linesize[4] = {0};
+    uint32_t dest_linesize[4] = {0};
     const uint8_t *src_data[4];
     uint8_t *dest_data[4];
 
@@ -267,7 +271,7 @@ bool loadSurfaceImage(SharedPtr<VideoFrame>& frame , AVFrame *in)
     src_data[2] = in->data[2];
 
     dest_data[0] = buf + image.offsets[0];
-    dest_data[1] = buf + image.offsets[1]; /* UV offset for NV12 */
+    dest_data[1] = buf + image.offsets[1];
     dest_data[2] = buf + image.offsets[2];
 
     if (in->format == AV_PIX_FMT_YUV420P) {
@@ -289,13 +293,13 @@ bool loadSurfaceImage(SharedPtr<VideoFrame>& frame , AVFrame *in)
     return true;
 }
 
-bool getSurfaceImage(SharedPtr<VideoFrame>& frame , AVFrame *out)
+bool getSurfaceImage(SharedPtr<VideoFrame>& frame, AVFrame *out)
 {
     VASurfaceID surface = (VASurfaceID)frame->surface;
     VAImage image;
 
-    uint32_t src_linesize[4];
-    uint32_t dest_linesize[4];
+    uint32_t src_linesize[4] = { 0 };
+    uint32_t dest_linesize[4] = { 0 };
     const uint8_t *src_data[4];
     uint8_t *dest_data[4];
 
@@ -317,21 +321,29 @@ bool getSurfaceImage(SharedPtr<VideoFrame>& frame , AVFrame *out)
     dest_data[2] = out->data[2];
 
     src_data[0] = buf + image.offsets[0];
-    src_data[1] = buf + image.offsets[1]; /* UV offset for NV12 */
+    src_data[1] = buf + image.offsets[1];
     src_data[2] = buf + image.offsets[2];
 
     if (out->format == AV_PIX_FMT_YUV420P) {
-        dest_linesize[0] = src_linesize[0] = out->width;
-        dest_linesize[1] = src_linesize[1] = out->width / 2;
-        dest_linesize[2] = src_linesize[2] = out->width / 2;
+        dest_linesize[0] = out->linesize[0];
+        dest_linesize[1] = out->linesize[1];
+        dest_linesize[2] = out->linesize[2];
+
+        src_linesize[0] = image.pitches[0];
+        src_linesize[1] = image.pitches[1];
+        src_linesize[2] = image.pitches[2];
     } else if (out->format == AV_PIX_FMT_NV12) {
-        dest_linesize[0] = src_linesize[0] = out->width;
-        dest_linesize[1] = src_linesize[1] = out->width;
-        dest_linesize[2] = src_linesize[2] = 0;
+        dest_linesize[0] = out->linesize[0];
+        dest_linesize[1] = out->linesize[1];
+        dest_linesize[2] = out->linesize[2];
+
+        src_linesize[0] = image.pitches[0];
+        src_linesize[1] = image.pitches[1];
+        src_linesize[2] = image.pitches[2];
     }
 
     av_image_copy(dest_data, (int *)dest_linesize, src_data,
-                  (int *)out->linesize, (AVPixelFormat)out->format,
+                  (int *)src_linesize, (AVPixelFormat)out->format,
                   out->width, out->height);
 
     checkVaapiStatus(vaUnmapBuffer(m_vaDisplay, image.buf), "vaUnmapBuffer");
@@ -428,7 +440,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     loadSurfaceImage(yamivpp->src, in);
     status = yamivpp->scaler->process(yamivpp->src, yamivpp->dest);
     if (status != YAMI_SUCCESS) {
-        av_log(ctx, AV_LOG_ERROR, "vpp process failed, status = %d", status);
+        av_log(ctx, AV_LOG_ERROR, "vpp process failed, status = %d\n", status);
     }
     /* get output frame from dest surface */
     getSurfaceImage(yamivpp->dest, out);
