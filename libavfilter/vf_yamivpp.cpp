@@ -430,7 +430,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     if (yamivpp->frame_number == 0) {
         /* create source surface and load data to the surface */
         yamivpp->src  = createSrcSurface(in->format, in->width, in->height);
-        yamivpp->dest = createDestSurface(in->format, outlink->w, outlink->h);
+        yamivpp->dest = createDestSurface(out->format, outlink->w, outlink->h);
     }
     loadSurfaceImage(yamivpp->src, in);
     status = yamivpp->scaler->process(yamivpp->src, yamivpp->dest);
