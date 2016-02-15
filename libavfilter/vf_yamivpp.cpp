@@ -418,18 +418,13 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out;
     uint32_t fourcc;
 
-    if (av_frame_is_writable(in)) {
-        direct = 1;
-        out = in;
-    } else {
-        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
-        if (!out) {
-            av_frame_free(&in);
-            return AVERROR(ENOMEM);
-        }
-
-        av_frame_copy_props(out, in);
+    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+    if (!out) {
+        av_frame_free(&in);
+        return AVERROR(ENOMEM);
     }
+
+    av_frame_copy_props(out, in);
 
     YamiStatus  status;
     if (yamivpp->frame_number == 0) {
