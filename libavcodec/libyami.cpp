@@ -566,8 +566,8 @@ static const AVClass yami_enc_264_class = {
 };
 
 static const AVCodecDefault yami_enc_264_defaults[] = {
-    { (uint8_t *)("b"),                (uint8_t *)("0") },
-    { (uint8_t *)("g"),                (uint8_t *)("250") },
+    { (uint8_t *)("b"),                (uint8_t *)("2M") },
+    { (uint8_t *)("g"),                (uint8_t *)("30") },
     { NULL },
 };
 
@@ -620,7 +620,7 @@ static void *encodeThread(void *arg)
                 in_buffer->pitch[1] = frame->linesize[1];
                 in_buffer->pitch[2] = frame->linesize[2];
 
-                in_buffer->handle = reinterpret_cast<intptr_t>(frame->data[0]) & ~(0xFFFFFFF);
+                in_buffer->handle = reinterpret_cast<intptr_t>(frame->data[0]);
                 in_buffer->offset[0] = reinterpret_cast<intptr_t>(frame->data[0]) - in_buffer->handle;
                 in_buffer->offset[1] = reinterpret_cast<intptr_t>(frame->data[1]) - in_buffer->handle;
                 in_buffer->offset[2] = reinterpret_cast<intptr_t>(frame->data[2]) - in_buffer->handle;
@@ -628,7 +628,7 @@ static void *encodeThread(void *arg)
             } else {
                 src_linesize[0] = in_buffer->pitch[0] = frame->linesize[0];
                 src_linesize[1] = in_buffer->pitch[1] = frame->linesize[1];
-                in_buffer->handle = reinterpret_cast<intptr_t>(frame->data[0]) & ~(0xFFFFFFF);
+                in_buffer->handle = reinterpret_cast<intptr_t>(frame->data[0]);
                 in_buffer->offset[0] = reinterpret_cast<intptr_t>(frame->data[0]) - in_buffer->handle;
                 in_buffer->offset[1] = reinterpret_cast<intptr_t>(frame->data[1]) - in_buffer->handle;
                 in_buffer->fourcc = VA_FOURCC_NV12;
