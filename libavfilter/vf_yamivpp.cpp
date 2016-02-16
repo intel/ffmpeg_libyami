@@ -51,7 +51,6 @@ using namespace YamiMediaCodec;
 
 #define YAMIVPP_TRACE(format, ...)  av_log(yamivpp, AV_LOG_VERBOSE, "## yami vpp ## line:%4d " format, __LINE__, ##__VA_ARGS__)
 
-
 typedef struct {
     const AVClass *cls;
 
@@ -76,9 +75,10 @@ typedef struct {
     int frame_number;
 
     int use_frc;         // use frame rate conversion
+
+    int pipeline;        // is vpp in HW pipeline?
     AVRational framerate;// target frame rate
 } YamivppContext;
-
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -119,6 +119,7 @@ static const AVOption yamivpp_options[] = {
     {"deinterlace", "deinterlace mode: 0=off, 1=bob, 2=advanced", OFFSET(deinterlace), AV_OPT_TYPE_INT, {.i64=0}, 0, 2, .flags = FLAGS},
     {"denoise",     "denoise level [0, 100]",                     OFFSET(denoise),     AV_OPT_TYPE_INT, {.i64=0}, 0, 100, .flags = FLAGS},
     {"framerate",   "output frame rate",                          OFFSET(framerate),   AV_OPT_TYPE_RATIONAL, {.dbl = 25.0},0, DBL_MAX, .flags = FLAGS},
+    {"pipeline",    "yamivpp in hw pipeline: 0=off, 1=on",        OFFSET(pipeline),    AV_OPT_TYPE_INT, {.i64=0}, 0, 1, .flags = FLAGS},
     { NULL }
 };
 
@@ -159,8 +160,9 @@ static av_cold int yamivpp_init(AVFilterContext *ctx)
     }
 
     yamivpp->frame_number = 0;
-    av_log(yamivpp, AV_LOG_VERBOSE, "w:%d, h:%d, deinterlace:%d, denoise:%d, framerate:%d/%d\n",
-           yamivpp->out_width, yamivpp->out_height, yamivpp->deinterlace, yamivpp->denoise, yamivpp->framerate.num, yamivpp->framerate.den);
+
+    av_log(yamivpp, AV_LOG_VERBOSE, "w:%d, h:%d, deinterlace:%d, denoise:%d, framerate:%d/%d, pipeline:%d\n",
+           yamivpp->out_width, yamivpp->out_height, yamivpp->deinterlace, yamivpp->denoise, yamivpp->framerate.num, yamivpp->framerate.den, yamivpp->pipeline);
 
     return 0;
 }
@@ -169,10 +171,11 @@ static int yamivpp_query_formats(AVFilterContext *ctx)
 {
     const YamivppContext *yamivpp = (YamivppContext *)ctx->priv;
     static const int pix_fmts[] = {
+        AV_PIX_FMT_YAMI,
         AV_PIX_FMT_YUV420P,
         AV_PIX_FMT_NV12,
         AV_PIX_FMT_YUYV422,
-        AV_PIX_FMT_RGB32 ,
+        AV_PIX_FMT_RGB32,
         AV_PIX_FMT_NONE
     };
 
@@ -199,10 +202,13 @@ static int config_props(AVFilterLink *inlink)
     outlink->frame_rate = yamivpp->framerate;
     outlink->time_base  = av_inv_q(yamivpp->framerate);
 
-    outlink->format = AV_PIX_FMT_NV12;
+    if (yamivpp->pipeline)
+        outlink->format = AV_PIX_FMT_YAMI;
+    else
+        outlink->format = AV_PIX_FMT_NV12;
 
-    av_log(NULL, AV_LOG_VERBOSE, "out w:%d, h:%d, deinterlace:%d, denoise:%d, framerate:%d/%d\n",
-           yamivpp->out_width, yamivpp->out_height, yamivpp->deinterlace, yamivpp->denoise, yamivpp->framerate.num, yamivpp->framerate.den);
+    av_log(yamivpp, AV_LOG_VERBOSE, "out w:%d, h:%d, deinterlace:%d, denoise:%d, framerate:%d/%d, pipeline:%d\n",
+           yamivpp->out_width, yamivpp->out_height, yamivpp->deinterlace, yamivpp->denoise, yamivpp->framerate.num, yamivpp->framerate.den, yamivpp->pipeline);
 
 
     return 0;
@@ -409,6 +415,79 @@ static SharedPtr<VideoFrame> createDestSurface(int fmt, uint32_t targetWidth, ui
     return dest;
 }
 
+static SharedPtr<VideoFrame> createPipelineSrcSurface(int fmt, uint32_t targetWidth, uint32_t targetHeight, AVFrame *frame)
+{
+    SharedPtr<VideoFrame> src;
+    int fourcc = VA_FOURCC_I420;
+    switch (fmt) {
+    case AV_PIX_FMT_YUV420P:
+        fourcc =  VA_FOURCC_I420;
+        break;
+
+    case AV_PIX_FMT_NV12:
+    case AV_PIX_FMT_YAMI:
+        fourcc =  VA_FOURCC_NV12;
+        break;
+
+    case AV_PIX_FMT_YUYV422:
+    case AV_PIX_FMT_RGB32:
+    case AV_PIX_FMT_NONE:
+        av_log(NULL, AV_LOG_WARNING, "don't support this format now.\n");
+        break;
+
+    default:
+        av_log(NULL, AV_LOG_WARNING, "don't support the format %d\n", fmt);
+        break;
+    };
+
+    VideoFrameRawData *in_buffer = NULL;
+    in_buffer = (VideoFrameRawData *)frame->data[3];
+
+    if (frame) {
+        src.reset(new VideoFrame);
+        src->surface = (intptr_t)in_buffer->internalID; /* XXX: get decoded surface */
+        src->timeStamp = in_buffer->timeStamp;
+        src->crop.x = 0;
+        src->crop.y = 0;
+        src->crop.width = targetWidth;
+        src->crop.height = targetHeight;
+        src->flags = 0;
+        src->fourcc = fourcc;
+    }
+
+    return src;
+}
+
+static SharedPtr<VideoFrame> createPipelineDestSurface(int fmt, uint32_t targetWidth, uint32_t targetHeight)
+{
+    SharedPtr<VideoFrame> dest;
+    int fourcc = VA_FOURCC_I420;
+    switch (fmt) {
+    case AV_PIX_FMT_YUV420P:
+        fourcc =  VA_FOURCC_I420;
+        break;
+
+    case AV_PIX_FMT_NV12:
+    case AV_PIX_FMT_YAMI:
+        fourcc =  VA_FOURCC_NV12;
+        break;
+
+    case AV_PIX_FMT_YUYV422:
+    case AV_PIX_FMT_RGB32:
+    case AV_PIX_FMT_NONE:
+        av_log(NULL, AV_LOG_WARNING, "don't support this format now.\n");
+        break;
+
+    default:
+        av_log(NULL, AV_LOG_WARNING, "don't support the format %d\n", fmt);
+        break;
+    };
+
+    dest = createSurface(VA_RT_FORMAT_YUV420, fourcc, targetWidth, targetHeight);
+    dest->fourcc = fourcc;
+    return dest;
+}
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = (AVFilterContext *)inlink->dst;
@@ -418,34 +497,62 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out;
     uint32_t fourcc;
 
-    out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
-    if (!out) {
-        av_frame_free(&in);
-        return AVERROR(ENOMEM);
+    if (in->format == AV_PIX_FMT_YAMI && yamivpp->pipeline == 0) {
+        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        if (!out) {
+            av_frame_free(&in);
+            return AVERROR(ENOMEM);
+        }
+
+        av_frame_copy_props(out, in);
+
+        YamiStatus  status;
+        if (yamivpp->frame_number == 0) {
+            /* create source surface and load data to the surface */
+            yamivpp->src  = createSrcSurface(in->format, in->width, in->height);
+            yamivpp->dest = createDestSurface(out->format, outlink->w, outlink->h);
+        }
+        loadSurfaceImage(yamivpp->src, in);
+        status = yamivpp->scaler->process(yamivpp->src, yamivpp->dest);
+        if (status != YAMI_SUCCESS) {
+            av_log(ctx, AV_LOG_ERROR, "vpp process failed, status = %d\n", status);
+        }
+        /* get output frame from dest surface */
+        getSurfaceImage(yamivpp->dest, out);
+
+        yamivpp->frame_number++;
+
+        if (!direct)
+            av_frame_free(&in);
+
+        return ff_filter_frame(outlink, out);
+    } else {
+        YamiStatus  status;
+        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
+        if (!out) {
+            av_frame_free(&in);
+            return AVERROR(ENOMEM);
+        }
+
+        av_frame_copy_props(out, in);
+        if (yamivpp->frame_number == 0) {
+            /* create source surface and dest surface in pipeline mode  */
+            yamivpp->src  = createPipelineSrcSurface(in->format, in->width, in->height, in);
+            yamivpp->dest = createPipelineDestSurface(out->format, outlink->w, outlink->h);
+        }
+
+        status = yamivpp->scaler->process(yamivpp->src, yamivpp->dest);
+        if (status != YAMI_SUCCESS) {
+            av_log(ctx, AV_LOG_ERROR, "vpp process failed, status = %d\n", status);
+        }
+
+        VideoFrameRawData *in_buffer = NULL;
+        in_buffer = (VideoFrameRawData *)in->data[3];
+        /* update the dest surface to avframe */
+        in_buffer->internalID = yamivpp->dest->surface;
+
+        return ff_filter_frame(outlink, in);
     }
-
-    av_frame_copy_props(out, in);
-
-    YamiStatus  status;
-    if (yamivpp->frame_number == 0) {
-        /* create source surface and load data to the surface */
-        yamivpp->src  = createSrcSurface(in->format, in->width, in->height);
-        yamivpp->dest = createDestSurface(out->format, outlink->w, outlink->h);
-    }
-    loadSurfaceImage(yamivpp->src, in);
-    status = yamivpp->scaler->process(yamivpp->src, yamivpp->dest);
-    if (status != YAMI_SUCCESS) {
-        av_log(ctx, AV_LOG_ERROR, "vpp process failed, status = %d\n", status);
-    }
-    /* get output frame from dest surface */
-    getSurfaceImage(yamivpp->dest, out);
-
-    yamivpp->frame_number++;
-
-    if (!direct)
-        av_frame_free(&in);
-
-    return ff_filter_frame(outlink, out);
 }
 
 static av_cold void yamivpp_uninit(AVFilterContext *ctx)
