@@ -572,6 +572,76 @@ static const AVCodecDefault yami_enc_264_defaults[] = {
 };
 
 
+static bool
+getPlaneResolution(uint32_t fourcc, uint32_t pixelWidth, uint32_t pixelHeight, uint32_t byteWidth[3], uint32_t byteHeight[3],  uint32_t& planes)
+{
+    int w = pixelWidth;
+    int h = pixelHeight;
+    uint32_t *width = byteWidth;
+    uint32_t *height = byteHeight;
+
+    switch (fourcc) {
+    case VA_FOURCC_NV12:
+    case VA_FOURCC_I420:
+    case VA_FOURCC_YV12:
+        width[0] = w;
+        height[0] = h;
+        if (fourcc == VA_FOURCC_NV12) {
+            width[1]  = w + (w & 1);
+            height[1] = (h + 1) >> 1;
+            planes = 2;
+        } else {
+            width[1] = width[2] = (w + 1) >> 1;
+            height[1] = height[2] = (h + 1) >> 1;
+            planes = 3;
+        }
+        break;
+    case VA_FOURCC_YUY2:
+    case VA_FOURCC_UYVY:
+        width[0] = w * 2;
+        height[0] = h;
+        planes = 1;
+        break;
+    case VA_FOURCC_RGBX:
+    case VA_FOURCC_RGBA:
+    case VA_FOURCC_BGRX:
+    case VA_FOURCC_BGRA:
+        width[0] = w * 4;
+        height[0] = h;
+        planes = 1;
+        break;
+    default:
+        assert(0 && "do not support this format");
+        planes = 0;
+        return false;
+    }
+    return true;
+}
+
+static bool
+fillFrameRawData(VideoFrameRawData *frame, uint32_t fourcc, uint32_t width, uint32_t height, uint8_t *data)
+{
+    memset(frame, 0, sizeof(*frame));
+    uint32_t planes;
+    uint32_t w[3], h[3];
+
+    if (!getPlaneResolution(fourcc, width, height, w, h, planes))
+        return false;
+    frame->fourcc = fourcc;
+    frame->width  = width;
+    frame->height = height;
+    frame->handle = reinterpret_cast<intptr_t>(data);
+
+    frame->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
+    uint32_t offset = 0;
+    for (uint32_t i = 0; i < planes; i++) {
+        frame->pitch[i] = w[i];
+        frame->offset[i] = offset;//reinterpret_cast<intptr_t>(data->data[i]);
+        offset += w[i] * h[i];
+    }
+    return true;
+}
+
 static void *encodeThread(void *arg)
 {
     AVCodecContext *avctx = (AVCodecContext *)arg;
@@ -614,13 +684,14 @@ static void *encodeThread(void *arg)
 
             in_buffer->width = avctx->width;
             in_buffer->height = avctx->height;
+#if 0
             /* FIXME there is risk here, I need another yami interface */
             if (avctx->pix_fmt == AV_PIX_FMT_YUV420P){
                 in_buffer->pitch[0] = frame->linesize[0];
                 in_buffer->pitch[1] = frame->linesize[1];
                 in_buffer->pitch[2] = frame->linesize[2];
 
-                in_buffer->handle = reinterpret_cast<intptr_t>(frame->data[0]);
+                in_buffer->handle = reinterpret_cast<intptr_t>(frame->data[2]);
                 in_buffer->offset[0] = reinterpret_cast<intptr_t>(frame->data[0]) - in_buffer->handle;
                 in_buffer->offset[1] = reinterpret_cast<intptr_t>(frame->data[1]) - in_buffer->handle;
                 in_buffer->offset[2] = reinterpret_cast<intptr_t>(frame->data[2]) - in_buffer->handle;
@@ -634,6 +705,31 @@ static void *encodeThread(void *arg)
                 in_buffer->fourcc = VA_FOURCC_NV12;
 
             }
+#else
+            src_linesize[0] = in_buffer->pitch[0] = frame->linesize[0];
+            src_linesize[1] = in_buffer->pitch[1] = frame->linesize[1];
+            src_linesize[2] = in_buffer->pitch[2] = frame->linesize[2];
+            uint8_t *yamidata = reinterpret_cast<uint8_t *>(s->m_buffer);
+
+            dst_data[0] = yamidata;
+            dst_data[1] = yamidata + avctx->width * avctx->height;
+            dst_data[2] = dst_data[1] + avctx->width * avctx->height / 4;
+
+            src_data[0] = frame->data[0];
+            src_data[1] = frame->data[1];
+            src_data[2] = frame->data[2];
+
+            av_image_copy(dst_data, (int *)in_buffer->pitch, src_data,
+                          (int *)src_linesize, avctx->pix_fmt, avctx->width,
+                          avctx->height);
+
+            if (avctx->pix_fmt == AV_PIX_FMT_YUV420P)
+                fillFrameRawData(in_buffer, VA_FOURCC_I420, avctx->width,
+                                 avctx->height, s->m_buffer);
+            else if (avctx->pix_fmt == AV_PIX_FMT_NV12)
+                fillFrameRawData(in_buffer, VA_FOURCC_NV12, avctx->width,
+                                 avctx->height, s->m_buffer);
+#endif
             /* handle decoder busy case */
             do {
                  status = s->encoder->encode(in_buffer);
