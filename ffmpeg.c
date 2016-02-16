@@ -2811,6 +2811,10 @@ static void set_encoder_id(OutputFile *of, OutputStream *ost)
 }
 
 #if CONFIG_LIBYAMI_H264
+#define AVFILTER_NONE     0
+#define AVFILTER_VPP_ONLY 1
+#define AVFILTER_MORE     2
+
 static int yami_transcode_init(OutputStream *ost)
 {
     InputStream *ist;
@@ -2831,7 +2835,7 @@ static int yami_transcode_init(OutputStream *ost)
     if (*pix_fmt == AV_PIX_FMT_NONE)
         return 0;
 
-    if (strcmp(ost->avfilter, "null") || ost->source_index < 0)
+    if (ost->source_index < 0)
         return 0;
 
     /* check if the decoder supports libyami and the output only goes to this stream */
@@ -3134,6 +3138,41 @@ static int transcode_init(void)
                         exit_program(1);
                     }
             }
+
+#if CONFIG_LIBYAMI_H264
+            if (0 == strcmp(ost->enc_ctx->codec->name, "libyami_h264") &&
+                0 == strcmp(ist->dec_ctx->codec->name, "libyami_h264")) {
+                //if (yami_transcode_init(ost))
+                //    exit_program(1);
+
+                int vpp_type = AVFILTER_NONE;
+
+                /* XXX: It will be 4 filters (NULL, format, input & output) default added in graph if no
+                 * filter added in command line. null will be replaced if specify filter in ffmpeg
+                 * options. so use the following logical to check whether only yamivpp inserted or not.
+                 * be changed with better check condition.
+                 */
+                if (filtergraphs[i]->graph->nb_filters > 4) vpp_type = AVFILTER_MORE;
+                if (filtergraphs[i]->graph->nb_filters == 4) {
+                    if (strcmp(ist->filters[0]->name, "yamivpp") == 0) {
+                        vpp_type = AVFILTER_VPP_ONLY;
+                    } else {
+                        vpp_type = AVFILTER_MORE;
+                    }
+                    if (strcmp(ist->filters[0]->name, "null") == 0)
+                        vpp_type = AVFILTER_NONE;
+                }
+                av_log(NULL, AV_LOG_INFO, "filters = %d type = %d filter_name = %s\n", filtergraphs[i]->graph->nb_filters, vpp_type,  ist->filters[0]->name);
+                for (int k = 0; k <  filtergraphs[i]->graph->nb_filters; k++) {
+                    av_log(NULL, AV_LOG_INFO, "filter name: %s \n",  filtergraphs[i]->graph->filters[k]->name );
+                }
+
+                if (AVFILTER_VPP_ONLY == vpp_type) {
+                    AVFilterContext *yamivpp_ctx = avfilter_graph_get_filter(filtergraphs[i]->graph, "Parsed_yamivpp_0");
+                    //ff_yami_insert_vpp(yamivpp_ctx);
+                }
+            }
+#endif
 
             if (enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO) {
                 if (!ost->frame_rate.num)
