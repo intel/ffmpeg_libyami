@@ -45,9 +45,9 @@ using namespace YamiMediaCodec;
 #define VA_FOURCC_NV12 VA_FOURCC('N','V','1','2')
 #endif
 
-#define DECODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "## decode thread ## line:%4d " format, __LINE__, ##__VA_ARGS__)
+#define DECODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "# decode # line:%4d " format, __LINE__, ##__VA_ARGS__)
 
-#define ENCODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "## encode thread ## line:%4d " format, __LINE__, ##__VA_ARGS__)
+#define ENCODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "< encode > line:%4d " format, __LINE__, ##__VA_ARGS__)
 
 typedef enum {
     DECODE_THREAD_NOT_INIT = 0,
@@ -272,7 +272,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     VideoFrameRawData *yami_frame = NULL;
     AVFrame *frame = (AVFrame *)data;
 
-    av_log(avctx, AV_LOG_VERBOSE, "yami_decode_frame\n");
+    av_log(avctx, AV_LOG_VERBOSE, "yami_dec_frame\n");
 
     // append avpkt to input buffer queue
     in_buffer = (VideoDecodeBuffer *)av_mallocz(sizeof(VideoDecodeBuffer));
@@ -291,7 +291,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
 
     while (s->decode_status < DECODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
         pthread_mutex_lock(&s->in_mutex);
-        if (s->in_queue->size()<QUEUE_MAX_SIZE) {
+        if (s->in_queue->size() < QUEUE_MAX_SIZE) {
             s->in_queue->push_back(in_buffer);
             av_log(avctx, AV_LOG_VERBOSE, "wakeup decode thread ...\n");
             pthread_cond_signal(&s->in_cond);
@@ -951,7 +951,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
             pthread_mutex_unlock(&s->in_mutex);
 
             av_log(avctx, AV_LOG_DEBUG,
-                   "s->in_queue->size()=%ld, s->encode_count=%d, s->encode_count_yami=%d, too many buffer are under decoding, wait ...\n",
+                   "s->in_queue->size()=%ld, s->encode_count=%d, s->encode_count_yami=%d, too many buffer are under encoding, wait ...\n",
                    s->in_queue->size(), s->encode_count, s->encode_count_yami);
             usleep(1000);
         };
