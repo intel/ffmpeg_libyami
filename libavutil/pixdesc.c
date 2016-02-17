@@ -1974,9 +1974,22 @@ static const AVPixFmtDescriptor av_pix_fmt_descriptors[AV_PIX_FMT_NB] = {
         .name = "qsv",
         .flags = AV_PIX_FMT_FLAG_HWACCEL,
     },
+    #if 0
     [AV_PIX_FMT_YAMI] = {
         .name = "yami",
         .flags = AV_PIX_FMT_FLAG_HWACCEL,
+    },
+    #endif
+    [AV_PIX_FMT_YAMI] = {
+        .name = "yami",
+        .nb_components = 3,
+        .log2_chroma_w = 0,
+        .log2_chroma_h = 0,
+        .comp = {
+            { 0, 1, 0, 0, 8, 0, 7, 1 },        /* Y */
+            { 1, 1, 0, 0, 8, 0, 7, 1 },        /* U */
+            { 2, 1, 0, 0, 8, 0, 7, 1 },        /* V */
+        },
     },
     [AV_PIX_FMT_MMAL] = {
         .name = "mmal",
