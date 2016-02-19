@@ -511,6 +511,17 @@ static SharedPtr<VideoFrame> createPipelineDestSurface(int fmt, uint32_t targetW
     return dest;
 }
 
+void av_recyle_free(void *opaque, uint8_t *data)
+{
+    av_log(NULL, AV_LOG_INFO, "free = %p\n", data);
+    VideoFrameRawData *yami_frame = (VideoFrameRawData *)data;
+    if (!yami_frame)
+        return;
+    VASurfaceID id = reinterpret_cast<VASurfaceID>(yami_frame->internalID);
+    vaDestroySurfaces((VADisplay)yami_frame->handle, &id, 1);
+    av_free(yami_frame);
+}
+
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 {
     AVFilterContext *ctx = (AVFilterContext *)inlink->dst;
@@ -558,21 +569,28 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     } else {
         YamiStatus  status;
 
+#if 0
         out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
         if (!out) {
             av_frame_free(&in);
             return AVERROR(ENOMEM);
         }
-
+#endif
+        out = av_frame_alloc();
+        if (!out) {
+            av_frame_free(&in);
+            return AVERROR(ENOMEM);
+        }
         av_frame_copy_props(out, in);
         VideoFrameRawData *out_buffer = NULL;
         out_buffer = (VideoFrameRawData *)av_malloc(sizeof(VideoFrameRawData));
-        out_buffer->width =  outlink->w;
-        out_buffer->height = outlink->h;
+        out->width = out_buffer->width =  outlink->w;
+        out->height = out_buffer->height = outlink->h;
+        out->format = AV_PIX_FMT_YAMI;
         out->data[3] = reinterpret_cast<uint8_t *>(out_buffer);
         out->buf[0] = av_buffer_create((uint8_t *)out->data[3],
                                          sizeof(VideoFrameRawData),
-                                         NULL, NULL, 0);
+                                         av_recyle_free, NULL, 0);
         VideoFrameRawData *in_buffer = NULL;
         in_buffer = (VideoFrameRawData *)in->data[3];
         if (yamivpp->frame_number == 0) {
@@ -582,12 +600,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             native_display.type = NATIVE_DISPLAY_VA;
             native_display.handle = (intptr_t)m_vaDisplay;
             yamivpp->scaler->setNativeDisplay(native_display);
-
-            /* create one dest surface in pipeline mode  */
-            yamivpp->dest = createPipelineDestSurface(in->format, outlink->w, outlink->h, in);
-
         }
         yamivpp->src  = createPipelineSrcSurface(in->format, in->width, in->height, in);
+        yamivpp->dest = createPipelineDestSurface(in->format, outlink->w, outlink->h, in);
 
         /* update the out surface to out avframe */
         out_buffer->handle = in_buffer->handle;
@@ -609,7 +624,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
 static av_cold void yamivpp_uninit(AVFilterContext *ctx)
 {
-    int p;
     YamivppContext *yamivpp = (YamivppContext *)ctx->priv;
 
     return;
