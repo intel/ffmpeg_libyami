@@ -532,7 +532,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out;
     uint32_t fourcc;
 
-    if (in->format == AV_PIX_FMT_YAMI && yamivpp->pipeline == 0) {
+    if (in->format != AV_PIX_FMT_YAMI && yamivpp->pipeline == 0) {
         out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
         if (!out) {
             av_frame_free(&in);
