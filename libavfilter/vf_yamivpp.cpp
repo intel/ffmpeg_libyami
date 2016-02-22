@@ -513,10 +513,11 @@ static SharedPtr<VideoFrame> createPipelineDestSurface(int fmt, uint32_t targetW
 
 void av_recyle_free(void *opaque, uint8_t *data)
 {
-    av_log(NULL, AV_LOG_INFO, "free = %p\n", data);
-    VideoFrameRawData *yami_frame = (VideoFrameRawData *)data;
-    if (!yami_frame)
+    if (!data)
         return;
+    VideoFrameRawData *yami_frame = (VideoFrameRawData *)data;
+    av_log(NULL, AV_LOG_DEBUG, "free %d in yamivpp\n", data);
+
     VASurfaceID id = reinterpret_cast<VASurfaceID>(yami_frame->internalID);
     vaDestroySurfaces((VADisplay)yami_frame->handle, &id, 1);
     av_free(yami_frame);
