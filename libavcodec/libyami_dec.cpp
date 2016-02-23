@@ -12,7 +12,7 @@
 #define DECODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "# decode # line:%4d " format, __LINE__, ##__VA_ARGS__)
 
 
-int yami_dec_init(AVCodecContext *avctx)
+int yami_dec_init(AVCodecContext *avctx, char *mime_type)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     Decode_Status status;
@@ -34,13 +34,13 @@ int yami_dec_init(AVCodecContext *avctx)
     }
     VADisplay m_display = createVADisplay();
     if (!m_display) {
-        av_log(avctx, AV_LOG_ERROR, "\nfail to create libyami h264 display\n");
+        av_log(avctx, AV_LOG_ERROR, "\nfail to create %s display\n", mime_type);
         return -1;
     }
     av_log(avctx, AV_LOG_VERBOSE, "yami_dec_init\n");
-    s->decoder = createVideoDecoder(YAMI_MIME_H264);
+    s->decoder = createVideoDecoder(mime_type);
     if (!s->decoder) {
-        av_log(avctx, AV_LOG_ERROR, "fail to create libyami h264 decoder\n");
+        av_log(avctx, AV_LOG_ERROR, "fail to create %s decoder\n", mime_type);
         return -1;
     }
 
@@ -180,9 +180,6 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
     memcpy(in_buffer->data, avpkt->data, avpkt->size);
     in_buffer->size = avpkt->size;
     in_buffer->timeStamp = avpkt->pts;
-
-    if (avctx->extradata && avctx->extradata_size && avctx->extradata[0] == 1)
-        in_buffer->flag |= IS_AVCC;
 
     while (s->decode_status < DECODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
         pthread_mutex_lock(&s->in_mutex);

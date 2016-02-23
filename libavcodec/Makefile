@@ -858,6 +858,7 @@ OBJS-$(CONFIG_LIBYAMI_H264_DECODER)       += libyami_dec.o      \
                                              libyami_enc.o      \
                                              libyami_dec_h264.o \
                                              libyami_enc_h264.o \
+                                             libyami_dec_hevc.o \
                                              libyami_utils.o
 OBJS-$(CONFIG_LIBTHEORA_ENCODER)          += libtheoraenc.o
 OBJS-$(CONFIG_LIBTWOLAME_ENCODER)         += libtwolame.o
