@@ -530,8 +530,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterLink *outlink = (AVFilterLink *)ctx->outputs[0];
     int p, direct = 0;
     AVFrame *out;
+    VADisplay m_display;
     uint32_t fourcc;
 
+    av_log(ctx, AV_LOG_INFO, "filter_frame started\n");
     if (in->format != AV_PIX_FMT_YAMI && yamivpp->pipeline == 0) {
         out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
         if (!out) {
@@ -545,7 +547,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         if (yamivpp->frame_number == 0) {
             NativeDisplay native_display;
             native_display.type = NATIVE_DISPLAY_VA;
-            VADisplay m_display = createVADisplay();
+            m_display = createVADisplay();
             native_display.handle = (intptr_t)m_display;
             yamivpp->scaler->setNativeDisplay(native_display);
 
@@ -595,11 +597,15 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         VideoFrameRawData *in_buffer = NULL;
         in_buffer = (VideoFrameRawData *)in->data[3];
         if (yamivpp->frame_number == 0) {
-            /* used the same display handle in pipeline */
-            VADisplay m_vaDisplay = (VADisplay)in_buffer->handle;
+            /* used the same display handle in pipeline if it's YAMI format */
+            if (in->format == AV_PIX_FMT_YAMI) {
+                m_display = (VADisplay)in_buffer->handle;
+            } else {
+                m_display = createVADisplay();
+            }
             NativeDisplay native_display;
             native_display.type = NATIVE_DISPLAY_VA;
-            native_display.handle = (intptr_t)m_vaDisplay;
+            native_display.handle = (intptr_t)m_display;
             yamivpp->scaler->setNativeDisplay(native_display);
         }
         yamivpp->src  = createPipelineSrcSurface(in->format, in->width, in->height, in);
