@@ -343,7 +343,7 @@ int yami_enc_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR,  "fail to create output\n");
         return -1;
     }
-    s->m_frameSize = avctx->width * avctx->height * 3 / 2;
+    s->m_frameSize = FFALIGN(avctx->width, 32) * FFALIGN(avctx->height, 32) * 3;
     s->m_buffer = static_cast<uint8_t *>(av_mallocz(s->m_frameSize));
 
     s->in_queue = new std::deque<AVFrame *>;
@@ -355,12 +355,12 @@ int yami_enc_init(AVCodecContext *avctx)
     s->encode_count = 0;
     s->encode_count_yami = 0;
     s->render_count = 0;
-
+    av_log(avctx, AV_LOG_INFO, "yami_enc_init\n");
     return 0;
 }
 
 int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
-                          const AVFrame *frame, int *got_packet)
+                   const AVFrame *frame, int *got_packet)
 {
     YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
     Encode_Status status;
@@ -472,7 +472,7 @@ int yami_enc_close(AVCodecContext *avctx)
     av_free(s->m_buffer);
     s->m_frameSize = 0;
 
-    av_log(avctx, AV_LOG_VERBOSE, "yami_enc_close\n");
+    av_log(avctx, AV_LOG_INFO, "yami_enc_close\n");
 
     return 0;
 }
