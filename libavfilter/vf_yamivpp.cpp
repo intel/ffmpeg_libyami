@@ -533,7 +533,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     VADisplay m_display;
     uint32_t fourcc;
 
-    av_log(ctx, AV_LOG_INFO, "filter_frame started\n");
     if (in->format != AV_PIX_FMT_YAMI && yamivpp->pipeline == 0) {
         out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
         if (!out) {
