@@ -605,7 +605,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             native_display.handle = (intptr_t)m_display;
             yamivpp->scaler->setNativeDisplay(native_display);
         }
-        yamivpp->src  = createPipelineSrcSurface(in->format, in->width, in->height, in);
+
+        if (in->format == AV_PIX_FMT_YAMI) {
+            yamivpp->src  = createPipelineSrcSurface(in->format, in->width, in->height, in);
+        } else {
+            yamivpp->src  = createSrcSurface(in->format, in->width, in->height);
+        }
         yamivpp->dest = createPipelineDestSurface(in->format, outlink->w, outlink->h, in);
 
         /* update the out surface to out avframe */
