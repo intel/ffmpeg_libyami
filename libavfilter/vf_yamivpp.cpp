@@ -171,7 +171,6 @@ static av_cold int yamivpp_init(AVFilterContext *ctx)
 
 static int yamivpp_query_formats(AVFilterContext *ctx)
 {
-    const YamivppContext *yamivpp = (YamivppContext *)ctx->priv;
     static const int pix_fmts[] = {
         AV_PIX_FMT_YAMI,
         AV_PIX_FMT_YUV420P,
@@ -516,7 +515,7 @@ void av_recyle_free(void *opaque, uint8_t *data)
     if (!data)
         return;
     VideoFrameRawData *yami_frame = (VideoFrameRawData *)data;
-    av_log(NULL, AV_LOG_DEBUG, "free %d in yamivpp\n", data);
+    av_log(NULL, AV_LOG_DEBUG, "free %p in yamivpp\n", data);
 
     VASurfaceID id = reinterpret_cast<VASurfaceID>(yami_frame->internalID);
     vaDestroySurfaces((VADisplay)yami_frame->handle, &id, 1);
@@ -528,10 +527,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFilterContext *ctx = (AVFilterContext *)inlink->dst;
     YamivppContext *yamivpp = (YamivppContext *)ctx->priv;
     AVFilterLink *outlink = (AVFilterLink *)ctx->outputs[0];
-    int p, direct = 0;
+    int direct = 0;
     AVFrame *out;
     VADisplay m_display;
-    uint32_t fourcc;
 
     if (in->format != AV_PIX_FMT_YAMI && yamivpp->pipeline == 0) {
         out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
@@ -607,7 +605,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             native_display.handle = (intptr_t)m_display;
             yamivpp->scaler->setNativeDisplay(native_display);
         }
-        yamivpp->src  = createPipelineSrcSurface(in->format, in->width, in->height, in);
+
+        if (in->format == AV_PIX_FMT_YAMI) {
+            yamivpp->src  = createPipelineSrcSurface(in->format, in->width, in->height, in);
+        } else {
+            yamivpp->src  = createSrcSurface(in->format, in->width, in->height);
+        }
         yamivpp->dest = createPipelineDestSurface(in->format, outlink->w, outlink->h, in);
 
         /* update the out surface to out avframe */
