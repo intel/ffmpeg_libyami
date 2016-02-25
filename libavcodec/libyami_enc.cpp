@@ -82,6 +82,8 @@ fillFrameRawData(VideoFrameRawData *frame, uint32_t fourcc, uint32_t width, uint
     return true;
 }
 
+#define ABS(x) ((x)<0?(-x):(x))
+
 static void *encodeThread(void *arg)
 {
     AVCodecContext *avctx = (AVCodecContext *)arg;
@@ -146,9 +148,15 @@ static void *encodeThread(void *arg)
 
             }
 #else
-            src_linesize[0] = in_buffer->pitch[0] = frame->linesize[0];
-            src_linesize[1] = in_buffer->pitch[1] = frame->linesize[1];
-            src_linesize[2] = in_buffer->pitch[2] = frame->linesize[2];
+            in_buffer->pitch[0] = ABS(frame->linesize[0]);
+            in_buffer->pitch[1] = ABS(frame->linesize[1]);
+            in_buffer->pitch[2] = ABS(frame->linesize[2]);
+            
+            src_linesize[0] = frame->linesize[0];
+            src_linesize[1] = frame->linesize[1];
+            src_linesize[2] = frame->linesize[2];
+
+            
             uint8_t *yamidata = reinterpret_cast<uint8_t *>(s->m_buffer);
 
             dst_data[0] = yamidata;
