@@ -175,8 +175,6 @@ static int yamivpp_query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_YAMI,
         AV_PIX_FMT_YUV420P,
         AV_PIX_FMT_NV12,
-        AV_PIX_FMT_YUYV422,
-        AV_PIX_FMT_RGB32,
         AV_PIX_FMT_NONE
     };
 
@@ -566,6 +564,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             av_frame_free(&in);
 
         return ff_filter_frame(outlink, out);
+    } else if (in->format != AV_PIX_FMT_YAMI && yamivpp->pipeline == 1) {
+        av_log(ctx, AV_LOG_WARNING, "Enable vpp pipeline in mix HW/SW decoder/encoder data path\n");
+        return 0;
     } else {
         YamiStatus  status;
 
@@ -589,8 +590,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         out->format = AV_PIX_FMT_YAMI;
         out->data[3] = reinterpret_cast<uint8_t *>(out_buffer);
         out->buf[0] = av_buffer_create((uint8_t *)out->data[3],
-                                         sizeof(VideoFrameRawData),
-                                         av_recyle_free, NULL, 0);
+                                       sizeof(VideoFrameRawData),
+                                       av_recyle_free, NULL, 0);
         VideoFrameRawData *in_buffer = NULL;
         in_buffer = (VideoFrameRawData *)in->data[3];
         if (yamivpp->frame_number == 0) {
@@ -633,8 +634,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
 static av_cold void yamivpp_uninit(AVFilterContext *ctx)
 {
-    YamivppContext *yamivpp = (YamivppContext *)ctx->priv;
-
     return;
 }
 
