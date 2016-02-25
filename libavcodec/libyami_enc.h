@@ -29,7 +29,9 @@ struct YamiEncContext {
 
     pthread_t encode_thread_id;
     std::deque<AVFrame *> *in_queue;
+    std::deque<AVFrame *> *out_queue;
     pthread_mutex_t in_mutex; // mutex for in_queue
+    pthread_mutex_t out_mutex; //mutex for out_queue
     pthread_cond_t in_cond;   // decode thread condition wait
     EncodeThreadStatus encode_status;
 
