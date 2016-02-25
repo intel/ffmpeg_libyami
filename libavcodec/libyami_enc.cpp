@@ -205,8 +205,10 @@ static void *encodeThread(void *arg)
                    "encode error %d frame %d\n", status , s->encode_count_yami);
         }
         s->encode_count_yami++;
+        pthread_mutex_lock(&s->out_mutex);
+        s->out_queue->push_back(frame);
+        pthread_mutex_unlock(&s->out_mutex);
         s->in_queue->pop_front();
-        av_frame_free(&frame);
     }
 
     ENCODE_TRACE("encode thread exit\n");
@@ -347,15 +349,17 @@ int yami_enc_init(AVCodecContext *avctx)
     s->m_buffer = static_cast<uint8_t *>(av_mallocz(s->m_frameSize));
 
     s->in_queue = new std::deque<AVFrame *>;
+    s->out_queue = new std::deque<AVFrame *>;
     pthread_mutex_init(&s->mutex_, NULL);
     pthread_mutex_init(&s->in_mutex, NULL);
+    pthread_mutex_init(&s->out_mutex, NULL);
     pthread_cond_init(&s->in_cond, NULL);
     s->encode_status = ENCODE_THREAD_NOT_INIT;
 
     s->encode_count = 0;
     s->encode_count_yami = 0;
     s->render_count = 0;
-    av_log(avctx, AV_LOG_INFO, "yami_enc_init\n");
+    av_log(avctx, AV_LOG_DEBUG, "yami_enc_init\n");
     return 0;
 }
 
@@ -427,7 +431,13 @@ int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     } while (!frame && status != ENCODE_SUCCESS && s->in_queue->size() > 0);
     if (status != ENCODE_SUCCESS)
         return 0;
-
+     
+    pthread_mutex_lock(&s->out_mutex);
+    AVFrame *qframe = s->out_queue->front();
+    if(qframe)
+        av_frame_free(&qframe);
+    s->out_queue->pop_front();
+    pthread_mutex_unlock(&s->out_mutex);
     s->render_count++;
 
     if ((ret = ff_alloc_packet2(avctx, pkt, s->outputBuffer.dataSize, 0)) < 0)
@@ -461,6 +471,7 @@ int yami_enc_close(AVCodecContext *avctx)
         s->encoder = NULL;
     }
     pthread_mutex_destroy(&s->in_mutex);
+    pthread_mutex_destroy(&s->out_mutex);
     pthread_cond_destroy(&s->in_cond);
     while (!s->in_queue->empty()) {
         AVFrame *in_buffer = s->in_queue->front();
@@ -468,11 +479,12 @@ int yami_enc_close(AVCodecContext *avctx)
         av_frame_free(&in_buffer);
     }
     delete s->in_queue;
+    delete s->out_queue;
 
     av_free(s->m_buffer);
     s->m_frameSize = 0;
 
-    av_log(avctx, AV_LOG_INFO, "yami_enc_close\n");
+    av_log(avctx, AV_LOG_DEBUG, "yami_enc_close\n");
 
     return 0;
 }
