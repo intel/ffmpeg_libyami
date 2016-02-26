@@ -1,0 +1,130 @@
+  ffmpeg-libyami
+  Libyami support to ffmpeg
+
+  Copyright (C) 2016 Intel Corporation
+
+
+License
+-------
+
+ffmpeg-libyami are available under the terms of the GNU Lesser General 
+Public License v2.1+
+
+
+Overview
+--------
+
+ffmpeg-libyami consists in a collection of libyami based decoder/encoder/yamivpp for
+ffmpeg.
+
+  * `libyami_h264' decoder is used to decode H.264 AVC video to VA surfaces, depending
+    on the underlying hardware capabilities. This decoder is also able
+    to download the decoded surface to raw YUV buffers(AVFrame) if don't used the pipeline mode.
+
+  * `libyami_h264' encoder is used to encode into H.264 AVC videos. By default, raw format bitstreams
+    are generated. In the pipeline mode, it's will used VA surfaces as input. 
+
+  * `yamivpp' is used to filter VA surfaces, for e.g. scaling, This filter is also used to upload raw
+    YUV pixels into VA surfaces.
+
+
+Features
+--------
+
+  * libyami support master (https://github.com/01org/libyami.git)
+  * libyami H.264 AVC decoder
+  * libyami H.264 AVC encoder
+  * Support for major HW video decoding solutions on Linux (AMD, Intel, NVIDIA)
+  * Support for HW video encoding on Intel HD Graphics hardware
+  * Support for VA Video Processing APIs (VA/VPP)
+    - Scaling
+
+
+Requirements
+------------
+
+Software requirements
+
+  * libva:
+      git clone git://anongit.freedesktop.org/vaapi/libva
+
+  * intel-driver:
+      git clone git://anongit.freedesktop.org/vaapi/intel-driver
+
+  * libyami:
+      git clone https://github.com/01org/libyami.git
+
+
+Hardware requirements
+
+  * AMD platforms with UVD2 (XvBA supported)
+  * Intel Eaglelake (G45)
+  * Intel Ironlake, Sandybridge, Ivybridge, Haswell and Broadwell (HD Graphics)
+  * Intel BayTrail, Braswell
+  * Intel Poulsbo (US15W)
+  * Intel Medfield or Cedar Trail
+  * NVIDIA platforms with PureVideo (VDPAU supported)
+
+
+Usage
+-----
+
+  * yamivpp filter add some options
+  $ ./ffmpeg -h filter=yamivpp                                        
+ffmpeg version N-77876-g7095799 Copyright (c) 2000-2016 the FFmpeg developers                                         
+  built with gcc 4.8 (Ubuntu 4.8.4-2ubuntu1~14.04)                                                                    
+  configuration: --prefix=/opt/ffmpeg --enable-libyami-h264 --enable-libyami-vpp --disable-doc --disable-stripping --enable-shared --enable-debug=3                                                                                         
+  libavutil      55. 13.100 / 55. 13.100                                                                              
+  libavcodec     57. 22.100 / 57. 22.100                                                                              
+  libavformat    57. 21.101 / 57. 21.101                                                                              
+  libavdevice    57.  0.100 / 57.  0.100                                                                              
+  libavfilter     6. 23.100 /  6. 23.100                                                                              
+  libswscale      4.  0.100 /  4.  0.100                                                                              
+  libswresample   2.  0.101 /  2.  0.101                                                                              
+Filter yamivpp                                                                                                        
+  libyami video post processing                                                                                       
+    Inputs:                                                                                                           
+       #0: default (video)                                                                                            
+    Outputs:                                                                                                          
+       #0: default (video)                                                                                            
+yamivpp AVOptions:                                                                                                    
+  w                 <int>        ..FV.... Output video width (from 0 to 4096) (default 0)                             
+  width             <int>        ..FV.... Output video width (from 0 to 4096) (default 0)                             
+  h                 <int>        ..FV.... Output video height (from 0 to 2304) (default 0)                            
+  height            <int>        ..FV.... Output video height (from 0 to 2304) (default 0)                            
+  deinterlace       <int>        ..FV.... deinterlace mode: 0=off, 1=bob, 2=advanced (from 0 to 2) (default 0)        
+  denoise           <int>        ..FV.... denoise level [0, 100] (from 0 to 100) (default 0)                          
+  framerate         <rational>   ..FV.... output frame rate (from 0 to DBL_MAX) (default 25/1)                        
+  pipeline          <int>        ..FV.... yamivpp in hw pipeline: 0=off, 1=on (from 0 to 1) (default 0) 
+
+  * Transcode H.264 video with scaling
+  $ ./ffmpeg -y -vcodec libyami_h264 -i skyfall2-trailer.mp4 -vf "yamivpp=w=1920:h=1080:pipeline=1" -vcodec libyami_h264 testvpp.ts
+
+  *  Transcode H.264 video without scaling
+  $ ./ffmpeg -y -vcodec libyami_h264 -i skyfall2-trailer.mp4 -vcodec libyami_h264 novpp.ts
+      
+
+Sources
+-------
+
+  ffmpeg-libyami is Open Source software, so updates to this
+  framework are really easy to get.
+
+  Git repository for work-in-progress changes is available at:
+  <ssh://username@git-ger-6.devtools.intel.com:29418/entry_storage-entry_storage-ffmpeg_yami>
+
+
+Reporting Bugs
+--------------
+
+  TODO
+
+
+Know issues
+-----------
+
+tag ffmpeg_libyami_V0.0.1
+
+  * lip sync issue when used yamivpp filter in transcode data path. (Audio/Video sync issues when used yamivpp).
+  * yamivpp not implement the options deinterlace/denoise/framerate. (Need to libyami support)
+  * ffplay playback h.264 stream slowly.
