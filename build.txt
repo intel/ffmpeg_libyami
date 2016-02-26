@@ -1,0 +1,32 @@
+build step
+
+Get the source code
+-------------------
+
+	* git clone git://anongit.freedesktop.org/vaapi/libva
+	* git clone git://anongit.freedesktop.org/vaapi/intel-driver
+	* git clone https://github.com/01org/libyami.git
+	* git clone ssh://zhaojun2@git-ger-6.devtools.intel.com:29418/entry_storage-entry_storage-ffmpeg_yami ffmpeg_yami
+
+Create the install dir
+----------------------
+
+	$ sudo mkdir -p /opt/ffmpeg && sudo chmod a+w /opt/ffmpeg
+	$ sudo mkdir -p /opt/yami && sudo chmod a+w /opt/yami
+
+Soure the env.txt
+----------------
+
+	env.txt as the attached file, and "source env.txt" before you do any build things
+
+Follow the env.sh, build the source code
+-----------------------------------------
+
+	And the link https://github.com/01org/libyami/wiki/Build  is the good reference for the build, but you need to use the new configure option for ffmpeg_yami build.
+
+Check the build
+---------------
+
+	After build finished, you can check the ffmpeg libyami h.264 transcode with the cmd:
+
+	$ ./ffmpeg -y -vcodec libyami_h264 -i  skyfall2-trailer.mp4 -vf "yamivpp=w=720:h=480:pipeline=1" -an -vcodec libyami_h264 testvpp.ts
