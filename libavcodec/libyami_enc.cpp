@@ -491,6 +491,11 @@ int yami_enc_close(AVCodecContext *avctx)
         s->in_queue->pop_front();
         av_frame_free(&in_buffer);
     }
+    while (!s->out_queue->empty()) {
+            AVFrame *out_buffer = s->out_queue->front();
+            s->out_queue->pop_front();
+            av_frame_free(&out_buffer);
+    }
     delete s->in_queue;
     delete s->out_queue;
 
