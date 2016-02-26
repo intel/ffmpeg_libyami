@@ -303,7 +303,7 @@ int yami_enc_init(AVCodecContext *avctx)
 
     // picture type and bitrate
     encVideoParams.intraPeriod = av_clip(avctx->gop_size, 1, 250);
-    encVideoParams.ipPeriod = !avctx->max_b_frames ? 1 : 3;
+    encVideoParams.ipPeriod = !avctx->has_b_frames ? 1 : 3;
     if (s->rcmod){
         if (!strcmp(s->rcmod, "CQP"))
             encVideoParams.rcMode = RATE_CONTROL_CQP;
@@ -444,10 +444,12 @@ int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
         return 0;
      
     pthread_mutex_lock(&s->out_mutex);
-    AVFrame *qframe = s->out_queue->front();
-    if(qframe)
-        av_frame_free(&qframe);
-    s->out_queue->pop_front();
+    if (!s->out_queue->empty()) {
+        AVFrame *qframe = s->out_queue->front();
+        if(qframe)
+            av_frame_free(&qframe);
+        s->out_queue->pop_front();
+    }
     pthread_mutex_unlock(&s->out_mutex);
     s->render_count++;
 
