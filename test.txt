@@ -1,0 +1,170 @@
+/**********************************************************************/
+/*           ffmpeg base on libyami codec 
+ssh://yunzhoux@git-ger-6.devtools.intel.com:29418/entry_storage-entry_storage-ffmpeg_yami                            */  
+/*           commit 4e95fb9a0864e1336c5cee36e6206f164575c893          */
+/*           Author: Yun Zhou <yunx.z.zhou@intel.com>                 */
+/*           Date:   Thu Feb 25 16:54:35 2016 +0800                   */ 
+/**********************************************************************/
+Test env
+--------
+
+1. HW
+
+   * CPU:Celeron N3050 
+   * RAM:1*2G
+   * Board:Crown-Ridge
+   
+2. SW and OS
+
+   * $ uname -a
+   Linux media-Crown-Ridge 4.0.0-040000rc7-generic #201504142105 SMP Tue Apr 14 21:06:32 UTC 2015 x86_64 x86_64 x86_64 GNU/Linux
+
+3. Test stream
+
+   * skyfall2-trailer.mp4 (1080p/h264)
+   * fast.mp4(4K/h264)
+   * Captain.mkv(720p/h264)
+
+/**********************************************************************/
+/*                         zero-copy mode                             */
+/**********************************************************************/
+1. *success*
+./ffmpeg -y -c:v libyami_h264 -i skyfall2-trailer.mp4 -c:v libyami_h264 test.ts
+./ffmpeg -y -ss 00:00:30 -t 00:01:00 -c:v libyami_h264 -i skyfall2-trailer.mp4 -c:v libyami_h264 test.ts
+./ffmpeg -y -c:v libyami_h264 -i skyfall2-trailer.mp4 -g 100 -b 3000k -rcmode CBR -qp 26 -level 41 -c:v libyami_h264 test.ts
+./ffmpeg -y -c:v libyami_h264 -i skyfall2-trailer.mp4 -s hd720 -c:v libyami_h264 test.ts
+
+2. *summary*
+in zero-copy mode the encoder support set gop ,qp ,rate control mode, level and bitrate and the flip rotation is also invalid but duration
+and time start stamp is work properly. if use the resize parameter (such as -s hd720) the pipeline mode will exit , use the flip parameter 
+(such as -vf vflip) is invalid.
+
+/**********************************************************************/
+/*                       non-zero-copy mode                           */
+/**********************************************************************/
+1. *success*
+./ffmpeg -y -c:v libyami_h264 -i skyfall2-trailer.mp4 -c:v mpeg2video test.ts
+./ffmpeg -y -c:v libyami_h264 -i skyfall2-trailer.mp4 -pix_fmt yuv422p test.yuv
+./ffmpeg -y -f rawvideo -pix_fmt yuv422p -s 1920x1080 -i test.yuv -c:v libyami_h264 test.ts
+./ffmpeg -y -c:v libyami_h264 -i skyfall2-trailer.mp4 -pix_fmt yuv420p test.yuv
+./ffmpeg -y -f rawvideo -pix_fmt yuv420p -s 1920x1080 -i skyfall2-trailer.mp4_1920x1080.I420 -c:v libyami_h264 test.ts
+./ffmpeg -y -c:v libyami_h264 -i skyfall2-trailer.mp4 -pix_fmt nv12 test_nv12.yuv
+./ffmpeg -y -c:v h264 -i skyfall2-trailer.mp4 -c:v libyami_h264 test.ts
+./ffmpeg -y -c:v h264 -i skyfall2-trailer.mp4 -c:v libyami_h264 -s hd720 test.ts
+./ffmpeg -y -ss 00:00:30 -t 00:01:00 -c:v libyami_h264 -i skyfall2-trailer.mp4 test.ts
+./ffmpeg -y -ss 00:00:30 -t 00:01:00 -c:v h264 -i skyfall2-trailer.mp4 -c:v libyami_h264 test.ts
+./ffmpeg -y -c:v h264 -i skyfall2-trailer.mp4 -c:v -b 3000k libyami_h264 test.ts
+./ffmpeg -y -f rawvideo -pix_fmt nv12 -s 1920x1080 -i test_nv12.yuv -c:v libyami_h264 test.ts
+./ffmpeg -y -c:v h264 -i skyfall2-trailer.mp4 -s hd720 -vf vflip -c:v libyami_h264 test.ts
+
+2. *fail*
+./ffmpeg -y -c:v rawvideo -pix_fmt yami test.yuv -i skyfall2-trailer.mp4 -c:v libyami_h264 yami test.yuv
+
+3. *summary*
+in non-zero-copy mode the encoder support gop ,bitrate ,qp , rcmode and level and the resize flip rotation duration can work properly
+
+
+4. Get *ES*
+./ffmpeg -y -i skyfall2-trailer.mp4 -c:v copy -f h264 test.h264
+
+5. Get *YUV*
+./ffmpeg -y -i skyfall2-trailer.mp4 -pt yuv420p test.yuv
+
+6. ffmpeg + libyami decoder
+
+./ffmpeg -i input.mp4 -f null /dev/null
+
+7. ffmpeg + libyami encoder
+
+TODO
+
+8. yamisample
+
+./yamidecode -i skyfall2-trailer.mp4 -o ./ -m 0
+./yamiencode -i skyfall2-trailer1920x1080.I420 -N 3614 -W 1920 -H 1080 -o skyfall.264 --rcmode CQP
+./yamitranscode -i skyfall2-trailer.mp4 -o 1920x1080.264
+
+/**********************************************************************/
+/*                       zero-copy with VPP                           */
+/**********************************************************************/
+
+1. *fail*
+./ffmpeg -y -c:v libyami_h264 -i skyfall2-trailer.mp4 -vf "yamivpp=w=1920:h=1080:pipeline=1" -c:v libyami_h264 test.ts
+
+2. *summary*
+AV not sync.
+
+
+/**********************************************************************/
+/*                       no-zero-copy with VPP                        */
+/**********************************************************************/
+
+1. *success*
+
+2. *fail*
+./ffmpeg -y -c:v libyami_h264 -i skyfall2-trailer.mp4 -vf "yamivpp=w=1280:h=720" -c:v libx264 test.ts
+./ffmpeg -y -c:v h264 -i skyfall2-trailer.mp4 -vf "yamivpp=w=1920:h=1080" -c:v libx264 test.ts
+./ffmpeg -y -c:v h264 -i skyfall2-trailer.mp4 -vf "yamivpp=w=704:h=576" -c:v libyami_h264 test.ts
+./ffmpeg -y -c:v libyami_h264 -i skyfall2-trailer.mp4 -vf "yamivpp=w=1280:h=720" -c:v libyami_h264 test.ts
+./ffmpeg -y -c:v h264 -t 00:00:30 -i skyfall2-trailer.mp4 -vf "yamivpp=w=704:h=576" -c:v libyami_h264 test.ts
+
+
+3. *summary*
+AV not sync.
+
+/**********************************************************************/
+/*                       non-zero-copy with ffplay                    */
+/**********************************************************************/
+1. *success*
+./ffplay test.ts
+
+2. *fail*
+
+3. *summary*
+display 1080P video very slow.
+
+/**********************************************************************/
+/*                      zero-copy without VPP performance            */
+/**********************************************************************/
+./ffmpeg -y -c:v libyami_h264 -i skyfall2-trailer.mp4 -c:v libyami_h264 test.ts
+cpu:35% 
+fps:71
+
+./ffmpeg -y -c:v libyami_h264 -i fast.mp4 -c:v libyami_h264 test.ts
+cpu:24%
+fps:17
+
+./ffmpeg -y -c:v libyami_h264 -i Captain.mkv -c:v libyami_h264 test.ts
+cpu:51%
+fps:125
+
+/**********************************************************************/
+/*                   non-zero-copy without VPP performance            */
+/**********************************************************************/
+./ffmpeg -y -c:v h264 -i skyfall2-trailer.mp4 -c:v libyami_h264 test.ts
+cpu:92%
+fps:30
+
+./ffmpeg -y -c:v h264 -i fast.mp4 -c:v libyami_h264 test.ts
+cpu:90%
+fps:7.7
+
+./ffmpeg -y -c:v h264 -i Captain.mkv -c:v libyami_h264 test.ts
+cpu:95%
+fps:47
+
+/**********************************************************************/
+/*                      zero-copy with VPP performance                */
+/**********************************************************************/
+./ffmpeg -y -c:v libyami_h264 -i skyfall2-trailer.mp4 -vf "yamivpp=w=1920:h=1080:pipeline=1" -c:v libyami_h264 test.ts
+cpu:36%
+fps:65
+
+./ffmpeg -y -c:v libyami_h264 -i fast.mp4 -vf "yamivpp=w=1920:h=1080:pipeline=1" -c:v libyami_h264 test.ts
+cpu:30%
+fps:43
+
+./ffmpeg -y -c:v libyami_h264 -i Captain.mkv -vf "yamivpp=w=1920:h=1080:pipeline=1" -c:v libyami_h264 test.ts
+cpu:39%
+fps:68
+
