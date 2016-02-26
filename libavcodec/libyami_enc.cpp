@@ -82,8 +82,6 @@ fillFrameRawData(VideoFrameRawData *frame, uint32_t fourcc, uint32_t width, uint
     return true;
 }
 
-#define ABS(x) ((x)<0?(-x):(x))
-
 static void *encodeThread(void *arg)
 {
     AVCodecContext *avctx = (AVCodecContext *)arg;
@@ -148,9 +146,14 @@ static void *encodeThread(void *arg)
 
             }
 #else
-            in_buffer->pitch[0] = ABS(frame->linesize[0]);
-            in_buffer->pitch[1] = ABS(frame->linesize[1]);
-            in_buffer->pitch[2] = ABS(frame->linesize[2]);
+            if (avctx->pix_fmt == AV_PIX_FMT_YUV420P){
+                in_buffer->pitch[0] = avctx->width;
+                in_buffer->pitch[1] = avctx->width/2;
+                in_buffer->pitch[2] = avctx->width/2;
+            } else {
+                in_buffer->pitch[0] = avctx->width;
+                in_buffer->pitch[1] = avctx->width;
+            }
             
             src_linesize[0] = frame->linesize[0];
             src_linesize[1] = frame->linesize[1];
