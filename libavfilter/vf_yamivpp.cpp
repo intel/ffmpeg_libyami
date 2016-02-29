@@ -198,8 +198,10 @@ static int config_props(AVFilterLink *inlink)
     outlink->w = (yamivpp->out_width > 0) ? yamivpp->out_width : inlink->w;
     outlink->h = (yamivpp->out_height > 0) ? yamivpp->out_height : inlink->h;
 
+/*
     outlink->frame_rate = yamivpp->framerate;
     outlink->time_base  = av_inv_q(yamivpp->framerate);
+*/
 
     if (yamivpp->pipeline)
         outlink->format = AV_PIX_FMT_YAMI;
