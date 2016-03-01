@@ -73,7 +73,7 @@ Usage
   $ ./ffmpeg -h filter=yamivpp                                        
 ffmpeg version N-77876-g7095799 Copyright (c) 2000-2016 the FFmpeg developers                                         
   built with gcc 4.8 (Ubuntu 4.8.4-2ubuntu1~14.04)                                                                    
-  configuration: --prefix=/opt/ffmpeg --enable-libyami-h264 --enable-libyami-vpp --disable-doc --disable-stripping --enable-shared --enable-debug=3                                                                                         
+  configuration: --prefix=/opt/ffmpeg --enable-libyami --enable-libyami-h264 --enable-libyami-vpp --disable-doc --disable-stripping --enable-shared --enable-debug=3                                                                                         
   libavutil      55. 13.100 / 55. 13.100                                                                              
   libavcodec     57. 22.100 / 57. 22.100                                                                              
   libavformat    57. 21.101 / 57. 21.101                                                                              
