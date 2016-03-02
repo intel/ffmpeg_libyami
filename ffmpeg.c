@@ -3122,8 +3122,8 @@ static int transcode_init(void)
 #endif
 
 #if CONFIG_LIBYAMI
-            if (0 == strncmp(ost->enc_ctx->codec->name, "libyami", 7) &&
-                0 == strncmp(ist->dec_ctx->codec->name, "libyami", 7)) {
+            if (0 == strncmp(ost->enc_ctx->codec->name, "libyami", strlen("libyami")) &&
+                0 == strncmp(ist->dec_ctx->codec->name, "libyami", strlen("libyami"))) {
                 if (yami_transcode_init(ost))
                     exit_program(1);
             }
@@ -3140,8 +3140,8 @@ static int transcode_init(void)
             }
 
 #if CONFIG_LIBYAMI
-            if (0 == strncmp(ost->enc_ctx->codec->name, "libyami", 7) &&
-                0 == strncmp(ist->dec_ctx->codec->name, "libyami", 7)) {
+            if (0 == strncmp(ost->enc_ctx->codec->name, "libyami", strlen("libyami")) &&
+                0 == strncmp(ist->dec_ctx->codec->name, "libyami", strlen("libyami"))) {
                 //if (yami_transcode_init(ost))
                 //    exit_program(1);
 
