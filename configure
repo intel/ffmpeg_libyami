@@ -252,7 +252,7 @@ External library support:
   --enable-libspeex        enable Speex de/encoding via libspeex [no]
   --enable-libssh          enable SFTP protocol via libssh [no]
   --enable-libtesseract    enable Tesseract, needed for ocr filter [no]
-  --enable-libyami         enable libyami function [no]
+  --enable-libyami         enable libyami public code [no]
   --enable-libyami-h264    enable h264 decoding encoding via libyami [no]
   --enable-libyami-hevc    enable hevc decoding encoding via libyami [no]
   --enable-libyami-vpp     enable VPP filter via libyami [no]
