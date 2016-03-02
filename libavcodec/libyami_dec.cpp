@@ -124,8 +124,9 @@ static void *decodeThread(void *arg)
             avctx->height = s->format_info->height;
 
         }
-        if (status < 0){
+        if (status <= 0 || !s->format_info) {//if format_info is null means current frame decode failed
             av_log(avctx, AV_LOG_ERROR, "decode error %d\n", status);
+            break;
         }
         s->decode_count_yami++;
         s->in_queue->pop_front();
@@ -154,6 +155,79 @@ static void yami_recycle_frame(void *opaque, uint8_t *data)
     av_free(yami_frame);
     pthread_mutex_unlock(&s->mutex_);
     av_log(avctx, AV_LOG_DEBUG, "recycle previous frame: %p\n", yami_frame);
+}
+
+static int convert_to_AVFrame(AVCodecContext *avctx, VideoFrameRawData *from, AVFrame *to)
+{
+    if(!avctx || !from || !to)
+        return -1;
+    if (avctx->pix_fmt == AV_PIX_FMT_YAMI) {
+        to->pts = from->timeStamp;
+
+        to->width = avctx->width;
+        to->height = avctx->height;
+
+        to->format = AV_PIX_FMT_YAMI; /* FIXME */
+        to->extended_data = NULL;
+
+        to->extended_data = to->data;
+        /* XXX: put the surface id to data[3] */
+        to->data[3] = reinterpret_cast<uint8_t *>(from);
+
+        to->buf[0] = av_buffer_create((uint8_t *)from,
+                                         sizeof(VideoFrameRawData),
+                                         yami_recycle_frame, avctx, 0);
+    } else {
+        int src_linesize[4] = {0};
+        uint8_t *src_data[4] = {0};
+        if (avctx->pix_fmt == AV_PIX_FMT_YUV420P) {
+            src_linesize[0] = from->pitch[0];
+            src_linesize[1] = from->pitch[1];
+            src_linesize[2] = from->pitch[2];
+            uint8_t* yami_data = reinterpret_cast<uint8_t*>(from->handle);
+            src_data[0] = yami_data + from->offset[0];
+            src_data[1] = yami_data + from->offset[1];
+            src_data[2] = yami_data + from->offset[2];
+
+            to->data[0] = reinterpret_cast<uint8_t*>(src_data[0]);
+            to->data[1] = reinterpret_cast<uint8_t*>(src_data[1]);
+            to->data[2] = reinterpret_cast<uint8_t*>(src_data[2]);
+            to->linesize[0] = src_linesize[0];
+            to->linesize[1] = src_linesize[1];
+            to->linesize[2] = src_linesize[2];
+        } else {
+            src_linesize[0] = from->pitch[0];
+            src_linesize[1] = from->pitch[1];
+            src_linesize[2] = from->pitch[2];
+            uint8_t* yami_data = reinterpret_cast<uint8_t*>(from->handle);
+            src_data[0] = yami_data + from->offset[0];
+            src_data[1] = yami_data + from->offset[1];
+
+            to->data[0] = reinterpret_cast<uint8_t*>(src_data[0]);
+            to->data[1] = reinterpret_cast<uint8_t*>(src_data[1]);
+            to->linesize[0] = src_linesize[0];
+            to->linesize[1] = src_linesize[1];
+        }
+
+        to->pkt_pts = AV_NOPTS_VALUE;
+        to->pkt_dts = from->timeStamp;
+        to->pts = AV_NOPTS_VALUE;
+
+        to->width = avctx->width;
+        to->height = avctx->height;
+
+        to->format = avctx->pix_fmt;
+        to->extended_data = NULL;
+
+        to->extended_data = to->data;
+
+
+        to->buf[0] = av_buffer_create((uint8_t *) from,
+                                                     sizeof(VideoFrameRawData),
+                                                     yami_recycle_frame, avctx, 0);
+
+    }
+    return 0;
 }
 
 int yami_dec_frame(AVCodecContext *avctx, void *data,
@@ -192,8 +266,9 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
         }
         pthread_mutex_unlock(&s->in_mutex);
 
-        av_log(avctx, AV_LOG_DEBUG, "s->in_queue->size()=%ld, s->decode_count=%d, s->decode_count_yami=%d, too many buffer are under decoding, wait ...\n",
-        s->in_queue->size(), s->decode_count, s->decode_count_yami);
+        av_log(avctx, AV_LOG_DEBUG, 
+               "s->in_queue->size()=%ld, s->decode_count=%d, s->decode_count_yami=%d, too many buffer are under decoding, wait ...\n",
+               s->in_queue->size(), s->decode_count, s->decode_count_yami);
         usleep(1000);
     };
     s->decode_count++;
@@ -260,73 +335,8 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
     }
 
     // process the output frame
-    if (avctx->pix_fmt == AV_PIX_FMT_YAMI) {
-        frame->pts = yami_frame->timeStamp;
-
-        frame->width = avctx->width;
-        frame->height = avctx->height;
-
-        frame->format = AV_PIX_FMT_YAMI; /* FIXME */
-        frame->extended_data = NULL;
-
-        *(AVFrame *)data = *frame;
-        ((AVFrame *)data)->extended_data = ((AVFrame *)data)->data;
-        /* XXX: put the surface id to data[3] */
-        frame->data[3] = reinterpret_cast<uint8_t *>(yami_frame);
-
-        frame->buf[0] = av_buffer_create((uint8_t *)frame->data[3],
-                                         sizeof(VideoFrameRawData),
-                                         yami_recycle_frame, avctx, 0);
-    } else {
-        int src_linesize[4];
-        uint8_t *src_data[4];
-        if (avctx->pix_fmt == AV_PIX_FMT_YUV420P) {
-            src_linesize[0] = yami_frame->pitch[0];
-            src_linesize[1] = yami_frame->pitch[1];
-            src_linesize[2] = yami_frame->pitch[2];
-            uint8_t* yami_data = reinterpret_cast<uint8_t*>(yami_frame->handle);
-            src_data[0] = yami_data + yami_frame->offset[0];
-            src_data[1] = yami_data + yami_frame->offset[1];
-            src_data[2] = yami_data + yami_frame->offset[2];
-
-            frame->data[0] = reinterpret_cast<uint8_t*>(src_data[0]);
-            frame->data[1] = reinterpret_cast<uint8_t*>(src_data[1]);
-            frame->data[2] = reinterpret_cast<uint8_t*>(src_data[2]);
-            frame->linesize[0] = src_linesize[0];
-            frame->linesize[1] = src_linesize[1];
-            frame->linesize[2] = src_linesize[2];
-        } else {
-            src_linesize[0] = yami_frame->pitch[0];
-            src_linesize[1] = yami_frame->pitch[1];
-            src_linesize[2] = yami_frame->pitch[2];
-            uint8_t* yami_data = reinterpret_cast<uint8_t*>(yami_frame->handle);
-            src_data[0] = yami_data + yami_frame->offset[0];
-            src_data[1] = yami_data + yami_frame->offset[1];
-
-            frame->data[0] = reinterpret_cast<uint8_t*>(src_data[0]);
-            frame->data[1] = reinterpret_cast<uint8_t*>(src_data[1]);
-            frame->linesize[0] = src_linesize[0];
-            frame->linesize[1] = src_linesize[1];
-        }
-
-        frame->pkt_pts = AV_NOPTS_VALUE;
-        frame->pkt_dts = yami_frame->timeStamp;
-        frame->pts = AV_NOPTS_VALUE;
-
-        frame->width = avctx->width;
-        frame->height = avctx->height;
-
-        frame->format = avctx->pix_fmt;
-        frame->extended_data = NULL;
-
-        frame->extended_data = frame->data;
-
-
-        frame->buf[0] = av_buffer_create((uint8_t *) yami_frame,
-                                                     sizeof(VideoFrameRawData),
-                                                     yami_recycle_frame, avctx, 0);
-
-    }
+    if (convert_to_AVFrame(avctx, yami_frame, frame) < 0)
+        av_log(avctx, AV_LOG_VERBOSE, "yami frame convert av_frame failed\n");;
 
     *got_frame = 1;
 
@@ -344,7 +354,8 @@ int yami_dec_close(AVCodecContext *avctx)
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
 
     pthread_mutex_lock(&s->mutex_);
-    while (s->decode_status != DECODE_THREAD_EXIT) {
+    while (s->decode_status != DECODE_THREAD_EXIT 
+           && s->decode_status != DECODE_THREAD_NOT_INIT) { //if decode thread do not create do not loop
         // potential race condition on s->decode_status
         s->decode_status = DECODE_THREAD_GOT_EOS;
         pthread_mutex_unlock(&s->mutex_);
