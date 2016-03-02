@@ -3121,9 +3121,9 @@ static int transcode_init(void)
                 exit_program(1);
 #endif
 
-#if CONFIG_LIBYAMI_H264
-            if (0 == strcmp(ost->enc_ctx->codec->name, "libyami_h264") &&
-                0 == strcmp(ist->dec_ctx->codec->name, "libyami_h264")) {
+#if CONFIG_LIBYAMI
+            if (0 == strncmp(ost->enc_ctx->codec->name, "libyami", 7) &&
+                0 == strncmp(ist->dec_ctx->codec->name, "libyami", 7)) {
                 if (yami_transcode_init(ost))
                     exit_program(1);
             }
@@ -3139,9 +3139,9 @@ static int transcode_init(void)
                     }
             }
 
-#if CONFIG_LIBYAMI_H264
-            if (0 == strcmp(ost->enc_ctx->codec->name, "libyami_h264") &&
-                0 == strcmp(ist->dec_ctx->codec->name, "libyami_h264")) {
+#if CONFIG_LIBYAMI
+            if (0 == strncmp(ost->enc_ctx->codec->name, "libyami", 7) &&
+                0 == strncmp(ist->dec_ctx->codec->name, "libyami", 7)) {
                 //if (yami_transcode_init(ost))
                 //    exit_program(1);
 
