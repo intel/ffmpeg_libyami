@@ -118,7 +118,7 @@ static const AVOption yamivpp_options[] = {
     {"height",      "Output video height",                        OFFSET(out_height),  AV_OPT_TYPE_INT, {.i64=0}, 0, 2304, .flags = FLAGS},
     {"deinterlace", "deinterlace mode: 0=off, 1=bob, 2=advanced", OFFSET(deinterlace), AV_OPT_TYPE_INT, {.i64=0}, 0, 2, .flags = FLAGS},
     {"denoise",     "denoise level [0, 100]",                     OFFSET(denoise),     AV_OPT_TYPE_INT, {.i64=0}, 0, 100, .flags = FLAGS},
-    {"framerate",   "output frame rate",                          OFFSET(framerate),   AV_OPT_TYPE_RATIONAL, {.dbl = 25.0},0, DBL_MAX, .flags = FLAGS},
+    {"framerate",   "output frame rate",                          OFFSET(framerate),   AV_OPT_TYPE_RATIONAL, {.dbl=0},0, DBL_MAX, .flags = FLAGS},
     {"pipeline",    "yamivpp in hw pipeline: 0=off, 1=on",        OFFSET(pipeline),    AV_OPT_TYPE_INT, {.i64=0}, 0, 1, .flags = FLAGS},
     { NULL }
 };
@@ -148,21 +148,6 @@ static av_cold int yamivpp_init(AVFilterContext *ctx)
         return -1;
     }
 
-    #if 0
-    NativeDisplay native_display;
-    native_display.type = NATIVE_DISPLAY_VA;
-    VADisplay m_display = createVADisplay();
-    native_display.handle = (intptr_t)m_display;
-    yamivpp->scaler->setNativeDisplay(native_display);
-    #endif
-
-#define CHECK_UNSET_OPT(opt)                                       \
-    if (s->opt == -1) {                                            \
-        av_log(s, AV_LOG_INFO, "Option %s was not set.\n", #opt);  \
-    }
-
-    yamivpp->frame_number = 0;
-
     av_log(yamivpp, AV_LOG_VERBOSE, "w:%d, h:%d, deinterlace:%d, denoise:%d, framerate:%d/%d, pipeline:%d\n",
            yamivpp->out_width, yamivpp->out_height, yamivpp->deinterlace, yamivpp->denoise, yamivpp->framerate.num, yamivpp->framerate.den, yamivpp->pipeline);
 
@@ -188,20 +173,9 @@ static int config_props(AVFilterLink *inlink)
     YamivppContext *yamivpp = (YamivppContext *)ctx->priv;
     AVFilterLink *outlink = inlink->dst->outputs[0];
 
-    /*
-    yamivpp->out_width  = FFALIGN(yamivpp->out_width, 16);
-    yamivpp->out_height = (yamivpp->dpic == 2) ?
-                          FFALIGN(yamivpp->out_height, 16):
-                          FFALIGN(yamivpp->out_height, 32); */ // force 32 if unkown
-
     /* if out_width or out_heigh are zero, used input w/h */
     outlink->w = (yamivpp->out_width > 0) ? yamivpp->out_width : inlink->w;
     outlink->h = (yamivpp->out_height > 0) ? yamivpp->out_height : inlink->h;
-
-/*
-    outlink->frame_rate = yamivpp->framerate;
-    outlink->time_base  = av_inv_q(yamivpp->framerate);
-*/
 
     if (yamivpp->pipeline)
         outlink->format = AV_PIX_FMT_YAMI;
@@ -510,7 +484,7 @@ static SharedPtr<VideoFrame> createPipelineDestSurface(int fmt, uint32_t targetW
     return dest;
 }
 
-void av_recyle_free(void *opaque, uint8_t *data)
+static void av_recycle_surface(void *opaque, uint8_t *data)
 {
     if (!data)
         return;
@@ -520,6 +494,8 @@ void av_recyle_free(void *opaque, uint8_t *data)
     VASurfaceID id = reinterpret_cast<VASurfaceID>(yami_frame->internalID);
     vaDestroySurfaces((VADisplay)yami_frame->handle, &id, 1);
     av_free(yami_frame);
+
+    return;
 }
 
 static int filter_frame(AVFilterLink *inlink, AVFrame *in)
@@ -593,7 +569,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         out->data[3] = reinterpret_cast<uint8_t *>(out_buffer);
         out->buf[0] = av_buffer_create((uint8_t *)out->data[3],
                                        sizeof(VideoFrameRawData),
-                                       av_recyle_free, NULL, 0);
+                                       av_recycle_surface, NULL, 0);
         VideoFrameRawData *in_buffer = NULL;
         in_buffer = (VideoFrameRawData *)in->data[3];
         if (yamivpp->frame_number == 0) {
