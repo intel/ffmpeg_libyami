@@ -458,19 +458,21 @@ int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     } while (!frame && status != ENCODE_SUCCESS && s->in_queue->size() > 0);
     if (status != ENCODE_SUCCESS)
         return 0;
-     
+    
+    if ((ret = ff_alloc_packet2(avctx, pkt, s->outputBuffer.dataSize, 0)) < 0)
+        return ret;
     pthread_mutex_lock(&s->out_mutex);
     if (!s->out_queue->empty()) {
         AVFrame *qframe = s->out_queue->front();
-        if(qframe)
+        if (qframe) {
+            pkt->pts = qframe->pts;
             av_frame_free(&qframe);
+        }
         s->out_queue->pop_front();
     }
     pthread_mutex_unlock(&s->out_mutex);
     s->render_count++;
 
-    if ((ret = ff_alloc_packet2(avctx, pkt, s->outputBuffer.dataSize, 0)) < 0)
-        return ret;
     void *p = pkt->data;
     memcpy(p, s->outputBuffer.data, s->outputBuffer.dataSize);
     *got_packet = 1;
