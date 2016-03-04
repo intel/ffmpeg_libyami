@@ -69,51 +69,40 @@ static void *encodeThread(void *arg)
 
             in_buffer->width = avctx->width;
             in_buffer->height = avctx->height;
-#if 0
-            /* FIXME there is risk here, I need another yami interface */
-            if (avctx->pix_fmt == AV_PIX_FMT_YUV420P){
-                in_buffer->pitch[0] = frame->linesize[0];
-                in_buffer->pitch[1] = frame->linesize[1];
-                in_buffer->pitch[2] = frame->linesize[2];
 
-                in_buffer->handle = reinterpret_cast<intptr_t>(frame->data[2]);
-                in_buffer->offset[0] = reinterpret_cast<intptr_t>(frame->data[0]) - in_buffer->handle;
-                in_buffer->offset[1] = reinterpret_cast<intptr_t>(frame->data[1]) - in_buffer->handle;
-                in_buffer->offset[2] = reinterpret_cast<intptr_t>(frame->data[2]) - in_buffer->handle;
-                in_buffer->fourcc = VA_FOURCC_I420;
-            } else {
-                src_linesize[0] = in_buffer->pitch[0] = frame->linesize[0];
-                src_linesize[1] = in_buffer->pitch[1] = frame->linesize[1];
-                in_buffer->handle = reinterpret_cast<intptr_t>(frame->data[0]);
-                in_buffer->offset[0] = reinterpret_cast<intptr_t>(frame->data[0]) - in_buffer->handle;
-                in_buffer->offset[1] = reinterpret_cast<intptr_t>(frame->data[1]) - in_buffer->handle;
-                in_buffer->fourcc = VA_FOURCC_NV12;
-
-            }
-#else
+            uint8_t *yamidata = reinterpret_cast<uint8_t *>(s->m_buffer);
+            
             if (avctx->pix_fmt == AV_PIX_FMT_YUV420P){
                 in_buffer->pitch[0] = avctx->width;
                 in_buffer->pitch[1] = (in_buffer->pitch[0] + 1) >> 1;
                 in_buffer->pitch[2] = (in_buffer->pitch[0] + 1) >> 1;
-            } else {
+                
+                src_linesize[0] = frame->linesize[0];
+                src_linesize[1] = frame->linesize[1];
+                src_linesize[2] = frame->linesize[2];
+                
+                dst_data[0] = yamidata;
+                dst_data[1] = yamidata + in_buffer->pitch[0] * avctx->height;
+                dst_data[2] = dst_data[1] + in_buffer->pitch[1] * ((avctx->height + 1) >> 1);
+                
+                src_data[0] = frame->data[0];
+                src_data[1] = frame->data[1];
+                src_data[2] = frame->data[2];
+            } else if (avctx->pix_fmt == AV_PIX_FMT_NV12){
                 in_buffer->pitch[0] = avctx->width;
                 in_buffer->pitch[1] = avctx->width;
+                
+                src_linesize[0] = frame->linesize[0];
+                src_linesize[1] = frame->linesize[1];
+                
+                dst_data[0] = yamidata;
+                dst_data[1] = yamidata + in_buffer->pitch[0] * avctx->height;
+                
+                src_data[0] = frame->data[0];
+                src_data[1] = frame->data[1];
+                src_data[2] = frame->data[2];
+
             }
-            
-            src_linesize[0] = frame->linesize[0];
-            src_linesize[1] = frame->linesize[1];
-            src_linesize[2] = frame->linesize[2];
-
-            
-            uint8_t *yamidata = reinterpret_cast<uint8_t *>(s->m_buffer);
-
-            dst_data[0] = yamidata;
-            dst_data[1] = yamidata + in_buffer->pitch[0] * avctx->height;
-            dst_data[2] = dst_data[1] + in_buffer->pitch[1] * ((avctx->height + 1) >> 1);
-
-            src_data[0] = frame->data[0];
-            src_data[1] = frame->data[1];
-            src_data[2] = frame->data[2];
 
             av_image_copy(dst_data, (int *)in_buffer->pitch, src_data,
                           (int *)src_linesize, avctx->pix_fmt, avctx->width,
@@ -126,7 +115,7 @@ static void *encodeThread(void *arg)
             in_buffer->offset[0] = 0;
             in_buffer->offset[1] = in_buffer->pitch[0] * avctx->height;
             in_buffer->offset[2] = in_buffer->offset[1] + in_buffer->pitch[1] * ((avctx->height + 1) >> 1);
-#endif
+
             /* handle decoder busy case */
             do {
                  status = s->encoder->encode(in_buffer);

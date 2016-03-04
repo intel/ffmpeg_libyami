@@ -26,6 +26,12 @@
 
 static av_cold int yami_enc_h264_init(AVCodecContext *avctx)
 {
+    if (avctx->width%2 != 0 || avctx->height%2 != 0) {
+        av_log(avctx, AV_LOG_ERROR,
+                      "width or height not divisible by 2 (%dx%d) .\n",
+                       avctx->width, avctx->height);
+        return AVERROR(EINVAL);
+    }
     return yami_enc_init(avctx);
 }
 
