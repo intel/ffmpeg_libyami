@@ -529,7 +529,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             native_display.handle = (intptr_t)m_display;
             yamivpp->scaler->setNativeDisplay(native_display);
 
-            /* create source surface and load data to the surface */
+            /* create src/dest surface, then load yuv to src surface and get 
+	       yuv from dest surfcace */
             yamivpp->src  = createSrcSurface(in->format, in->width, in->height);
             yamivpp->dest = createDestSurface(out->format, outlink->w, outlink->h);
         }
