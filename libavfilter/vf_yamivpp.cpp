@@ -256,13 +256,13 @@ bool loadSurfaceImage(SharedPtr<VideoFrame>& frame , AVFrame *in)
     dest_data[2] = buf + image.offsets[2];
 
     if (in->format == AV_PIX_FMT_YUV420P) {
-        dest_linesize[0] = src_linesize[0] = in->width;
-        dest_linesize[1] = src_linesize[1] = in->width / 2;
-        dest_linesize[2] = src_linesize[2] = in->width / 2;
+        dest_linesize[0] = image.pitches[0];
+        dest_linesize[1] = image.pitches[1];
+        dest_linesize[2] = image.pitches[2];
     } else if (in->format == AV_PIX_FMT_NV12) {
-        dest_linesize[0] = src_linesize[0] = in->width;
-        dest_linesize[1] = src_linesize[1] = in->width;
-        dest_linesize[2] = src_linesize[2] = 0;
+        dest_linesize[0] = image.pitches[0];
+        dest_linesize[1] = image.pitches[1];
+        dest_linesize[2] = image.pitches[2];
     }
 
     av_image_copy(dest_data, (int *)dest_linesize, src_data,
