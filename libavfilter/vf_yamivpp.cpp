@@ -49,8 +49,6 @@ using namespace YamiMediaCodec;
 #define VA_FOURCC_I420 VA_FOURCC('I','4','2','0')
 #endif
 
-#define YAMIVPP_TRACE(format, ...)  av_log(yamivpp, AV_LOG_VERBOSE, "## yami vpp ## line:%4d " format, __LINE__, ##__VA_ARGS__)
-
 typedef struct {
     const AVClass *cls;
 
@@ -116,10 +114,15 @@ static const AVOption yamivpp_options[] = {
     {"width",       "Output video width",                         OFFSET(out_width),   AV_OPT_TYPE_INT, {.i64=0}, 0, 4096, .flags = FLAGS},
     {"h",           "Output video height",                        OFFSET(out_height),  AV_OPT_TYPE_INT, {.i64=0}, 0, 2304, .flags = FLAGS},
     {"height",      "Output video height",                        OFFSET(out_height),  AV_OPT_TYPE_INT, {.i64=0}, 0, 2304, .flags = FLAGS},
-    {"deinterlace", "deinterlace mode: 0=off, 1=bob, 2=advanced", OFFSET(deinterlace), AV_OPT_TYPE_INT, {.i64=0}, 0, 2, .flags = FLAGS},
+    {"deinterlace", "setting deinterlace mode: 0=off, 1=bob, 2=advanced", OFFSET(deinterlace), AV_OPT_TYPE_INT, {.i64=0}, 0, 2, .flags = FLAGS, .unit = "deinterlace"},
+        { "off",    "no deinterlacing",                        0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, .flags=FLAGS, .unit="deinterlace"},
+        { "bob",    "bob deinterlacing(linear deinterlacing)", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, .flags=FLAGS, .unit="deinterlace"},
+        { "advanced","advanced deinterlacing",                 0, AV_OPT_TYPE_CONST, {.i64=2}, 0, 0, .flags=FLAGS, .unit="deinterlace"},
     {"denoise",     "denoise level [0, 100]",                     OFFSET(denoise),     AV_OPT_TYPE_INT, {.i64=0}, 0, 100, .flags = FLAGS},
-    {"framerate",   "output frame rate",                          OFFSET(framerate),   AV_OPT_TYPE_RATIONAL, {.dbl=0},0, DBL_MAX, .flags = FLAGS},
-    {"pipeline",    "yamivpp in hw pipeline: 0=off, 1=on",        OFFSET(pipeline),    AV_OPT_TYPE_INT, {.i64=0}, 0, 1, .flags = FLAGS},
+    {"framerate",   "output frame rate",                          OFFSET(framerate),   AV_OPT_TYPE_RATIONAL, {.dbl=0.0},0, DBL_MAX, .flags = FLAGS},
+    {"pipeline",    "yamivpp in hw pipeline: 0=off, 1=on",        OFFSET(pipeline),    AV_OPT_TYPE_INT, {.i64=0}, 0, 1, .flags = FLAGS, .unit = "pipeline"},
+        { "off",    "don't put yamivpp in hw pipeline",        0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, .flags=FLAGS, .unit="pipeline"},
+        { "on",     "put yamivpp in hw pipeline)",             0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, .flags=FLAGS, .unit="pipeline"},
     { NULL }
 };
 
@@ -163,8 +166,10 @@ static int yamivpp_query_formats(AVFilterContext *ctx)
         AV_PIX_FMT_NONE
     };
 
-    ff_set_common_formats(ctx, ff_make_format_list(pix_fmts));
-    return 0;
+    AVFilterFormats *fmts_list = ff_make_format_list(pix_fmts);
+    if (!fmts_list)
+        return AVERROR(ENOMEM);
+    return ff_set_common_formats(ctx, fmts_list);
 }
 
 static int config_props(AVFilterLink *inlink)
@@ -224,7 +229,7 @@ SharedPtr<VideoFrame> createSurface(uint32_t rtFormat, int pixelFormat, uint32_t
     return frame;
 }
 
-bool loadSurfaceImage(SharedPtr<VideoFrame>& frame , AVFrame *in)
+bool loadSurfaceImage(SharedPtr<VideoFrame>& frame, AVFrame *in)
 {
     VASurfaceID surface = (VASurfaceID)frame->surface;
     VAImage image;
@@ -548,13 +553,6 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     } else {
         YamiStatus  status;
 
-#if 0
-        out = ff_get_video_buffer(outlink, outlink->w, outlink->h);
-        if (!out) {
-            av_frame_free(&in);
-            return AVERROR(ENOMEM);
-        }
-#endif
         out = av_frame_alloc();
         if (!out) {
             av_frame_free(&in);
