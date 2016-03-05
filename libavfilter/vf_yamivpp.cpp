@@ -234,7 +234,6 @@ bool loadSurfaceImage(SharedPtr<VideoFrame>& frame, AVFrame *in)
     VASurfaceID surface = (VASurfaceID)frame->surface;
     VAImage image;
 
-    uint32_t src_linesize[4] = {0};
     uint32_t dest_linesize[4] = {0};
     const uint8_t *src_data[4];
     uint8_t *dest_data[4];

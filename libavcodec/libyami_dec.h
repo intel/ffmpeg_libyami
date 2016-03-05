@@ -26,8 +26,6 @@
 #define LIBAVCODEC_LIBYAMI_DEC_H_
 
 
-using namespace YamiMediaCodec;
-
 #define DECODE_QUEUE_SIZE 8
 
 typedef enum {
@@ -41,7 +39,7 @@ struct YamiDecContext {
     AVCodecContext *avctx;
     pthread_mutex_t mutex_; // mutex for decoder->getOutput() and YamiContext itself update (decode_status, etc)
 
-    IVideoDecoder *decoder;
+    YamiMediaCodec::IVideoDecoder *decoder;
     VideoDataMemoryType output_type;
     const VideoFormatInfo *format_info;
     pthread_t decode_thread_id;
@@ -55,7 +53,5 @@ struct YamiDecContext {
     int decode_count_yami;
     int render_count;
 };
-
-
 
 #endif /* LIBAVCODEC_LIBYAMI_DEC_H_ */

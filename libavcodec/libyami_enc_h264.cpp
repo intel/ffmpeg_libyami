@@ -36,7 +36,7 @@ static av_cold int yami_enc_h264_init(AVCodecContext *avctx)
 }
 
 static int yami_enc_h264_frame(AVCodecContext *avctx, AVPacket *pkt,
-                          const AVFrame *frame, int *got_packet)
+                               const AVFrame *frame, int *got_packet)
 {
     return yami_enc_frame(avctx, pkt, frame, got_packet);
 }
