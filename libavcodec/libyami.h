@@ -44,7 +44,6 @@ extern "C" {
 #include "libyami_enc.h"
 
 
-//using namespace YamiMediaCodec;
 #ifndef VA_FOURCC_I420
 #define VA_FOURCC_I420 VA_FOURCC('I','4','2','0')
 #endif
@@ -57,14 +56,14 @@ extern "C" {
 int yami_dec_init(AVCodecContext *avctx, char* mime_type);
 
 int yami_dec_frame(AVCodecContext *avctx, void *data,
-                          int *got_frame, AVPacket *avpkt);
+                   int *got_frame, AVPacket *avpkt);
 
 int yami_dec_close(AVCodecContext *avctx);
 
 int yami_enc_init(AVCodecContext *avctx);
 
 int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
-                          const AVFrame *frame, int *got_packet);
+                   const AVFrame *frame, int *got_packet);
 
 int yami_enc_close(AVCodecContext *avctx);
 

@@ -29,9 +29,8 @@ static av_cold int yami_dec_h264_init(AVCodecContext *avctx)
     return yami_dec_init(avctx, YAMI_MIME_H264);
 }
 
-
 static int yami_dec_h264_frame(AVCodecContext *avctx, void *data,
-        int *got_frame, AVPacket *avpkt)
+                               int *got_frame, AVPacket *avpkt)
 {
     return yami_dec_frame(avctx, data,got_frame, avpkt);
 }

@@ -27,6 +27,8 @@
 
 #define ENCODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "< encode > line:%4d " format, __LINE__, ##__VA_ARGS__)
 
+using namespace YamiMediaCodec;
+
 static void *encodeThread(void *arg)
 {
     AVCodecContext *avctx = (AVCodecContext *)arg;

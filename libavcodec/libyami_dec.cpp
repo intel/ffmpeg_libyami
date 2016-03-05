@@ -27,6 +27,7 @@
 
 #define DECODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "# decode # line:%4d " format, __LINE__, ##__VA_ARGS__)
 
+using namespace YamiMediaCodec;
 
 int yami_dec_init(AVCodecContext *avctx, char *mime_type)
 {
@@ -239,15 +240,15 @@ static int convert_to_AVFrame(AVCodecContext *avctx, VideoFrameRawData *from, AV
 
 
         to->buf[0] = av_buffer_create((uint8_t *) from,
-                                                     sizeof(VideoFrameRawData),
-                                                     yami_recycle_frame, avctx, 0);
+                                      sizeof(VideoFrameRawData),
+                                      yami_recycle_frame, avctx, 0);
 
     }
     return 0;
 }
 
 int yami_dec_frame(AVCodecContext *avctx, void *data,
-                          int *got_frame, AVPacket *avpkt)
+                   int *got_frame, AVPacket *avpkt)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     if (!s || !s->decoder)
@@ -370,7 +371,7 @@ int yami_dec_close(AVCodecContext *avctx)
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
 
     pthread_mutex_lock(&s->mutex_);
-    while (s->decode_status != DECODE_THREAD_EXIT 
+    while (s->decode_status != DECODE_THREAD_EXIT
            && s->decode_status != DECODE_THREAD_NOT_INIT) { //if decode thread do not create do not loop
         // potential race condition on s->decode_status
         s->decode_status = DECODE_THREAD_GOT_EOS;
