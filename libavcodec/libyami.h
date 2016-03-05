@@ -53,7 +53,7 @@ extern "C" {
 #endif
 
 
-int yami_dec_init(AVCodecContext *avctx, char* mime_type);
+int yami_dec_init(AVCodecContext *avctx, const char* mime_type);
 
 int yami_dec_frame(AVCodecContext *avctx, void *data,
                    int *got_frame, AVPacket *avpkt);

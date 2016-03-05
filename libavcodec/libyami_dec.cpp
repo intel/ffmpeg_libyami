@@ -29,7 +29,7 @@
 
 using namespace YamiMediaCodec;
 
-int yami_dec_init(AVCodecContext *avctx, char *mime_type)
+int yami_dec_init(AVCodecContext *avctx, const char *mime_type)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     Decode_Status status;
@@ -76,7 +76,7 @@ int yami_dec_init(AVCodecContext *avctx, char *mime_type)
     config_buffer.profile = VAProfileNone;
     status = s->decoder->start(&config_buffer);
     if (status != DECODE_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "yami h264 decoder fail to start\n");
+        av_log(avctx, AV_LOG_ERROR, "yami decoder fail to start\n");
         return -1;
     }
 
@@ -127,7 +127,7 @@ static void *decodeThread(void *arg)
         pthread_mutex_unlock(&s->in_mutex);
 
         // decode one input buffer
-        DECODE_TRACE("try to process one input buffer, in_buffer->data=%p, in_buffer->size=%d\n", in_buffer->data, in_buffer->size);
+        DECODE_TRACE("try to process one input buffer, in_buffer->data=%p, in_buffer->size=%zu\n", in_buffer->data, in_buffer->size);
         Decode_Status status = s->decoder->decode(in_buffer);
         DECODE_TRACE("decode() status=%d, decode_count_yami=%d render_count %d\n", status, s->decode_count_yami, s->render_count);
 
@@ -192,8 +192,8 @@ static int convert_to_AVFrame(AVCodecContext *avctx, VideoFrameRawData *from, AV
         to->data[3] = reinterpret_cast<uint8_t *>(from);
 
         to->buf[0] = av_buffer_create((uint8_t *)from,
-                                         sizeof(VideoFrameRawData),
-                                         yami_recycle_frame, avctx, 0);
+                                      sizeof(VideoFrameRawData),
+                                      yami_recycle_frame, avctx, 0);
     } else {
         int src_linesize[4] = {0};
         uint8_t *src_data[4] = {0};
@@ -283,7 +283,7 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
         }
         pthread_mutex_unlock(&s->in_mutex);
 
-        av_log(avctx, AV_LOG_DEBUG, 
+        av_log(avctx, AV_LOG_DEBUG,
                "s->in_queue->size()=%ld, s->decode_count=%d, s->decode_count_yami=%d, too many buffer are under decoding, wait ...\n",
                s->in_queue->size(), s->decode_count, s->decode_count_yami);
         usleep(1000);
@@ -301,7 +301,7 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
         }
         break;
     case DECODE_THREAD_RUNING:
-        if (!avpkt->data || ! avpkt->size)
+        if (!avpkt->data || !avpkt->size)
             s->decode_status = DECODE_THREAD_GOT_EOS; // call releaseLock for seek
         break;
     case DECODE_THREAD_GOT_EOS:
@@ -372,7 +372,7 @@ int yami_dec_close(AVCodecContext *avctx)
 
     pthread_mutex_lock(&s->mutex_);
     while (s->decode_status != DECODE_THREAD_EXIT
-           && s->decode_status != DECODE_THREAD_NOT_INIT) { //if decode thread do not create do not loop
+           && s->decode_status != DECODE_THREAD_NOT_INIT) { // if decode thread do not create do not loop
         // potential race condition on s->decode_status
         s->decode_status = DECODE_THREAD_GOT_EOS;
         pthread_mutex_unlock(&s->mutex_);
@@ -397,7 +397,7 @@ int yami_dec_close(AVCodecContext *avctx)
         av_free(in_buffer);
     }
     delete s->in_queue;
-    av_log(avctx, AV_LOG_VERBOSE, "yami_close\n");
+    av_log(avctx, AV_LOG_VERBOSE, "yami_dec_close\n");
 
     return 0;
 }

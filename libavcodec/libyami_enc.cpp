@@ -190,7 +190,7 @@ static bool destroyOutputBuffer(VideoEncOutputBuffer *outputBuffer)
 int yami_enc_init(AVCodecContext *avctx)
 {
     YamiEncContext *s = (YamiEncContext *) avctx->priv_data;
-    Decode_Status status;
+    Encode_Status status;
 
     enum AVPixelFormat pix_fmts[4] =
         {
@@ -208,7 +208,7 @@ int yami_enc_init(AVCodecContext *avctx)
         avctx->pix_fmt      = (AVPixelFormat)ret;
     }
 
-    av_log(avctx, AV_LOG_VERBOSE, "yami_init h264 encoder\n");
+    av_log(avctx, AV_LOG_VERBOSE, "yami_enc_init\n");
     s->encoder = createVideoEncoder(YAMI_MIME_H264);
     if (!s->encoder) {
         av_log(avctx, AV_LOG_ERROR, "fail to create libyami h264 encoder\n");
@@ -284,7 +284,10 @@ int yami_enc_init(AVCodecContext *avctx)
     s->encoder->setParameters(VideoConfigTypeAVCStreamFormat, &streamFormat);
 
     status = s->encoder->start();
-    assert(status == ENCODE_SUCCESS);
+    if (status != ENCODE_SUCCESS) {
+        av_log(avctx, AV_LOG_ERROR, "yami encoder fail to start\n");
+        return -1;
+    }
 
     // init output buffer
     s->encoder->getMaxOutSize(&(s->maxOutSize));
