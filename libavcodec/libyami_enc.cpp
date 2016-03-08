@@ -68,6 +68,8 @@ static void *encodeThread(void *arg)
             uint8_t *dst_data[4];
 
             in_buffer = (VideoFrameRawData *)av_malloc(sizeof(VideoFrameRawData));
+            if (frame->pict_type == AV_PICTURE_TYPE_I)
+                in_buffer->flags |= VIDEO_FRAME_FLAGS_KEY;
 
             in_buffer->width = avctx->width;
             in_buffer->height = avctx->height;
@@ -138,6 +140,9 @@ static void *encodeThread(void *arg)
                 yami_frame->crop.width = avctx->width;
                 yami_frame->crop.height = avctx->height;
                 yami_frame->flags = 0;
+                if (frame->pict_type == AV_PICTURE_TYPE_I)
+                    in_buffer->flags |= VIDEO_FRAME_FLAGS_KEY;
+
             }
 
             /* handle decoder busy case */
@@ -401,6 +406,8 @@ int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
 
     void *p = pkt->data;
     memcpy(p, s->outputBuffer.data, s->outputBuffer.dataSize);
+    if (s->outputBuffer.flag & ENCODE_BUFFERFLAG_SYNCFRAME)
+        pkt->flags |= AV_PKT_FLAG_KEY;
 
     *got_packet = 1;
 
