@@ -255,6 +255,7 @@ External library support:
   --enable-libyami         enable libyami public code [no]
   --enable-libyami-h264    enable h264 decoding encoding via libyami [no]
   --enable-libyami-hevc    enable hevc decoding encoding via libyami [no]
+  --enable-libyami-vp8     enable vp8 decoding encoding via libyami [no]
   --enable-libyami-vpp     enable VPP filter via libyami [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
   --enable-libtwolame      enable MP2 encoding via libtwolame [no]
@@ -1519,6 +1520,7 @@ EXTERNAL_LIBRARY_LIST="
     libyami
     libyami_h264
     libyami_hevc
+    libyami_vp8
     libyami_vpp
     libtheora
     libtwolame
@@ -2734,6 +2736,7 @@ libspeex_encoder_deps="libspeex"
 libspeex_encoder_select="audio_frame_queue"
 libyami_h264_decoder_deps="libyami_h264"
 libyami_hevc_decoder_deps="libyami_hevc"
+libyami_vp8_decoder_deps="libyami_vp8"
 libyami_h264_encoder_deps="libyami_h264"
 libtheora_encoder_deps="libtheora"
 libtwolame_encoder_deps="libtwolame"
@@ -5628,6 +5631,7 @@ enabled libspeex          && require_pkg_config speex speex/speex.h speex_decode
 enabled libtesseract      && require_pkg_config tesseract tesseract/capi.h TessBaseAPICreate
 enabled libyami_h264      && require_pkg_config "libyami libva" VideoDecoderHost.h createVideoDecoder && add_cxx_extralibs
 enabled libyami_hevc      && require_pkg_config "libyami libva" VideoDecoderHost.h createVideoDecoder && add_cxx_extralibs
+enabled libyami_vp8       && require_pkg_config "libyami libva" VideoDecoderHost.h createVideoDecoder && add_cxx_extralibs
 enabled libyami_vpp       && require_pkg_config "libyami libva" VideoPostProcessHost.h createVideoPostProcess && add_cxx_extralibs
 enabled libtheora         && require libtheora theora/theoraenc.h th_info_init -ltheoraenc -ltheoradec -logg
 enabled libtwolame        && require libtwolame twolame.h twolame_init -ltwolame &&
