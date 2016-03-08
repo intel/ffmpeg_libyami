@@ -187,7 +187,7 @@ static bool destroyOutputBuffer(VideoEncOutputBuffer *outputBuffer)
     return true;
 }
 
-int yami_enc_init(AVCodecContext *avctx)
+int yami_enc_init(AVCodecContext *avctx, const char *mime_type)
 {
     YamiEncContext *s = (YamiEncContext *) avctx->priv_data;
     Encode_Status status;
@@ -209,9 +209,9 @@ int yami_enc_init(AVCodecContext *avctx)
     }
 
     av_log(avctx, AV_LOG_VERBOSE, "yami_enc_init\n");
-    s->encoder = createVideoEncoder(YAMI_MIME_H264);
+    s->encoder = createVideoEncoder(mime_type);
     if (!s->encoder) {
-        av_log(avctx, AV_LOG_ERROR, "fail to create libyami h264 encoder\n");
+        av_log(avctx, AV_LOG_ERROR, "fail to create libyami %s encoder\n", mime_type);
         return -1;
     }
 
@@ -278,10 +278,12 @@ int yami_enc_init(AVCodecContext *avctx)
     encVideoParams.size = sizeof(VideoParamsCommon);
     s->encoder->setParameters(VideoParamsTypeCommon, &encVideoParams);
 
-    VideoConfigAVCStreamFormat streamFormat;
-    streamFormat.size = sizeof(VideoConfigAVCStreamFormat);
-    streamFormat.streamFormat = AVC_STREAM_FORMAT_ANNEXB;
-    s->encoder->setParameters(VideoConfigTypeAVCStreamFormat, &streamFormat);
+    if (!strcmp(mime_type, YAMI_MIME_H264)) {
+        VideoConfigAVCStreamFormat streamFormat;
+        streamFormat.size = sizeof(VideoConfigAVCStreamFormat);
+        streamFormat.streamFormat = AVC_STREAM_FORMAT_ANNEXB;
+        s->encoder->setParameters(VideoConfigTypeAVCStreamFormat, &streamFormat);
+    }
 
     status = s->encoder->start();
     if (status != ENCODE_SUCCESS) {
@@ -399,6 +401,7 @@ int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
 
     void *p = pkt->data;
     memcpy(p, s->outputBuffer.data, s->outputBuffer.dataSize);
+
     *got_packet = 1;
 
     return 0;
