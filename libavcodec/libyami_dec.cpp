@@ -141,7 +141,7 @@ static void *decodeThread(void *arg)
             avctx->height = s->format_info->height;
 
         }
-        if (status <= 0 || !s->format_info) {//if format_info is null means current frame decode failed
+        if (status < 0 || !s->format_info) {//if format_info is null means current frame decode failed
             av_log(avctx, AV_LOG_ERROR, "decode error %d\n", status);
             break;
         }
