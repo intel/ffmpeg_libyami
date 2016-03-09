@@ -234,7 +234,6 @@ enum AVPixelFormat {
      *  mfxFrameSurface1 structure.
      */
     AV_PIX_FMT_QSV,
-    AV_PIX_FMT_YAMI,
     /**
      * HW acceleration though MMAL, data[3] contains a pointer to the
      * MMAL_BUFFER_HEADER_T structure.
@@ -289,6 +288,11 @@ enum AVPixelFormat {
     AV_PIX_FMT_AYUV64BE,    ///< packed AYUV 4:4:4,64bpp (1 Cr & Cb sample per 1x1 Y & A samples), big-endian
 
     AV_PIX_FMT_VIDEOTOOLBOX, ///< hardware decoding through Videotoolbox
+    /**
+     *  HW acceleration through libyami, data[3] contains a pointer to the
+     *  VideoFrameRawData structure.
+     */
+    AV_PIX_FMT_YAMI,
 
     AV_PIX_FMT_NB,        ///< number of pixel formats, DO NOT USE THIS if you want to link with shared libav* because the number of formats might differ between versions
 };
