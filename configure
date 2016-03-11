@@ -253,10 +253,6 @@ External library support:
   --enable-libssh          enable SFTP protocol via libssh [no]
   --enable-libtesseract    enable Tesseract, needed for ocr filter [no]
   --enable-libyami         enable libyami public code [no]
-  --enable-libyami-h264    enable h264 decoding encoding via libyami [no]
-  --enable-libyami-hevc    enable hevc decoding encoding via libyami [no]
-  --enable-libyami-vp8     enable vp8 decoding encoding via libyami [no]
-  --enable-libyami-vpp     enable VPP filter via libyami [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
   --enable-libtwolame      enable MP2 encoding via libtwolame [no]
   --enable-libutvideo      enable Ut Video encoding and decoding via libutvideo [no]
@@ -1518,10 +1514,6 @@ EXTERNAL_LIBRARY_LIST="
     libssh
     libtesseract
     libyami
-    libyami_h264
-    libyami_hevc
-    libyami_vp8
-    libyami_vpp
     libtheora
     libtwolame
     libutvideo
@@ -2734,11 +2726,18 @@ libshine_encoder_select="audio_frame_queue"
 libspeex_decoder_deps="libspeex"
 libspeex_encoder_deps="libspeex"
 libspeex_encoder_select="audio_frame_queue"
-libyami_h264_decoder_deps="libyami_h264"
-libyami_hevc_decoder_deps="libyami_hevc"
-libyami_vp8_decoder_deps="libyami_vp8"
-libyami_h264_encoder_deps="libyami_h264"
-libyami_vp8_encoder_deps="libyami_vp8"
+libyami_decoder_deps="libyami"
+libyami_encoder_deps="libyami"
+libyami_h264_decoder_deps="libyami"
+libyami_h264_decoder_select="libyami_decoder"
+libyami_hevc_decoder_deps="libyami"
+libyami_hevc_decoder_select="libyami_decoder"
+libyami_vp8_decoder_deps="libyami"
+libyami_vp8_decoder_select="libyami_decoder"
+libyami_vp8_encoder_deps="libyami"
+libyami_vp8_encoder_select="libyami_encoder"
+libyami_h264_encoder_deps="libyami"
+libyami_h264_encoder_select="libyami_encoder"
 libtheora_encoder_deps="libtheora"
 libtwolame_encoder_deps="libtwolame"
 libutvideo_decoder_deps="libutvideo"
@@ -3037,7 +3036,7 @@ zoompan_filter_deps="swscale"
 zscale_filter_deps="libzimg"
 scale_npp_filter_deps="cuda libnpp"
 scale_vaapi_filter_deps="vaapi VAProcPipelineParameterBuffer"
-yamivpp_filter_deps="libyami_vpp"
+yamivpp_filter_deps="libyami"
 
 # examples
 avcodec_example_deps="avcodec avutil"
@@ -5630,10 +5629,7 @@ enabled libsoxr           && require libsoxr soxr.h soxr_create -lsoxr && LIBSOX
 enabled libssh            && require_pkg_config libssh libssh/sftp.h sftp_init
 enabled libspeex          && require_pkg_config speex speex/speex.h speex_decoder_init -lspeex
 enabled libtesseract      && require_pkg_config tesseract tesseract/capi.h TessBaseAPICreate
-enabled libyami_h264      && require_pkg_config "libyami libva" VideoDecoderHost.h createVideoDecoder && add_cxx_extralibs
-enabled libyami_hevc      && require_pkg_config "libyami libva" VideoDecoderHost.h createVideoDecoder && add_cxx_extralibs
-enabled libyami_vp8       && require_pkg_config "libyami libva" VideoDecoderHost.h createVideoDecoder && add_cxx_extralibs
-enabled libyami_vpp       && require_pkg_config "libyami libva" VideoPostProcessHost.h createVideoPostProcess && add_cxx_extralibs
+enabled libyami           && require_pkg_config "libyami libva" VideoDecoderHost.h createVideoDecoder && add_cxx_extralibs
 enabled libtheora         && require libtheora theora/theoraenc.h th_info_init -ltheoraenc -ltheoradec -logg
 enabled libtwolame        && require libtwolame twolame.h twolame_init -ltwolame &&
                              { check_lib twolame.h twolame_encode_buffer_float32_interleaved -ltwolame ||
