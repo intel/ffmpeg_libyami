@@ -2784,7 +2784,7 @@ static void set_encoder_id(OutputFile *of, OutputStream *ost)
                 AV_DICT_DONT_STRDUP_VAL | AV_DICT_DONT_OVERWRITE);
 }
 
-#if CONFIG_LIBYAMI_H264
+#if CONFIG_LIBYAMI
 #define AVFILTER_NONE     0
 #define AVFILTER_VPP_ONLY 1
 #define AVFILTER_MORE     2

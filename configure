@@ -251,7 +251,7 @@ External library support:
   --enable-libspeex        enable Speex de/encoding via libspeex [no]
   --enable-libssh          enable SFTP protocol via libssh [no]
   --enable-libtesseract    enable Tesseract, needed for ocr filter [no]
-  --enable-libyami         enable libyami public code [no]
+  --enable-libyami         enable Libyami video encoding/decoding/post-processing [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
   --enable-libtwolame      enable MP2 encoding via libtwolame [no]
   --enable-libutvideo      enable Ut Video encoding and decoding via libutvideo [no]
