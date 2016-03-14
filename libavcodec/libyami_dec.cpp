@@ -21,8 +21,20 @@
  * License along with FFmpeg; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
+#include <pthread.h>
+#include <unistd.h>
+#include <assert.h>
+#include <deque>
 
-#include "libyami.h"
+extern "C" {
+#include "avcodec.h"
+#include "libavutil/imgutils.h"
+#include "libavutil/opt.h"
+#include "internal.h"
+}
+
+#include "VideoDecoderHost.h"
+#include "libyami_dec.h"
 #include "libyami_utils.h"
 
 #define DECODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "# decode # line:%4d " format, __LINE__, ##__VA_ARGS__)
