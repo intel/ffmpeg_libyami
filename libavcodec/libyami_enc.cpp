@@ -22,7 +22,21 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include "libyami.h"
+#include <pthread.h>
+#include <unistd.h>
+#include <assert.h>
+#include <deque>
+
+extern "C" {
+#include "avcodec.h"
+#include "libavutil/imgutils.h"
+#include "libavutil/opt.h"
+#include "internal.h"
+}
+
+#include "VideoEncoderHost.h"
+
+#include "libyami_enc.h"
 #include "libyami_utils.h"
 
 #define ENCODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "< encode > line:%4d " format, __LINE__, ##__VA_ARGS__)
@@ -60,7 +74,7 @@ static void *encodeThread(void *arg)
         pthread_mutex_unlock(&s->in_mutex);
 
         // encode one input in_buffer
-        Decode_Status status;
+        Encode_Status status;
         if (frame->format != AV_PIX_FMT_YAMI) { /* non zero-copy mode */
             uint32_t src_linesize[4];
             const uint8_t *src_data[4];

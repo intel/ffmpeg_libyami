@@ -30,6 +30,14 @@
 #include <unistd.h>
 #include <va/va_drm.h>
 
+#ifndef VA_FOURCC_I420
+#define VA_FOURCC_I420 VA_FOURCC('I','4','2','0')
+#endif
+
+#ifndef VA_FOURCC_NV12
+#define VA_FOURCC_NV12 VA_FOURCC('N','V','1','2')
+#endif
+
 VADisplay createVADisplay(void);
 
 
