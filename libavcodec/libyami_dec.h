@@ -37,10 +37,10 @@ typedef enum {
 
 struct YamiDecContext {
     AVCodecContext *avctx;
-    pthread_mutex_t mutex_; // mutex for decoder->getOutput() and YamiContext itself update (decode_status, etc)
+    pthread_mutex_t ctx_mutex; // mutex for decoder->getOutput() and YamiContext itself update (decode_status, etc)
 
     YamiMediaCodec::IVideoDecoder *decoder;
-    VideoDataMemoryType output_type;
+    //VideoDataMemoryType output_type;
     const VideoFormatInfo *format_info;
     pthread_t decode_thread_id;
     std::deque<VideoDecodeBuffer *> *in_queue;

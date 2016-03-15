@@ -30,6 +30,7 @@ extern "C" {
 #include "avcodec.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
+#include "libavutil/time.h"
 #include "internal.h"
 }
 
@@ -39,74 +40,41 @@ extern "C" {
 
 using namespace YamiMediaCodec;
 
-int yami_dec_init(AVCodecContext *avctx, const char *mime_type)
+static int ff_yami_decode_thread_init(YamiDecContext *s)
 {
-    YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
-    Decode_Status status;
-
-    s->decoder = NULL;
-    enum AVPixelFormat pix_fmts[4] =
-        {
-            AV_PIX_FMT_YAMI,
-            AV_PIX_FMT_NV12,
-            AV_PIX_FMT_YUV420P,
-            AV_PIX_FMT_NONE
-        };
-    if (avctx->pix_fmt == AV_PIX_FMT_NONE) {
-        int ret = ff_get_format(avctx, pix_fmts);
-        if (ret < 0)
-            return ret;
-
-        avctx->pix_fmt      = (AVPixelFormat)ret;
-    }
-    VADisplay m_display = createVADisplay();
-    if (!m_display) {
-        av_log(avctx, AV_LOG_ERROR, "\nfail to create %s display\n", mime_type);
+    int ret = 0; 
+    if (!s)
         return -1;
-    }
-    av_log(avctx, AV_LOG_VERBOSE, "yami_dec_init\n");
-    s->decoder = createVideoDecoder(mime_type);
-    if (!s->decoder) {
-        av_log(avctx, AV_LOG_ERROR, "fail to create %s decoder\n", mime_type);
-        return -1;
-    }
-
-    NativeDisplay native_display;
-    native_display.type = NATIVE_DISPLAY_VA;
-
-    native_display.handle = (intptr_t)m_display;
-    s->decoder->setNativeDisplay(&native_display);
-
-    VideoConfigBuffer config_buffer;
-    memset(&config_buffer, 0, sizeof(VideoConfigBuffer));
-    if (avctx->extradata && avctx->extradata_size && avctx->extradata[0] == 1) {
-        config_buffer.data = avctx->extradata;
-        config_buffer.size = avctx->extradata_size;
-    }
-    config_buffer.profile = VAProfileNone;
-    status = s->decoder->start(&config_buffer);
-    if (status != DECODE_SUCCESS) {
-        av_log(avctx, AV_LOG_ERROR, "yami decoder fail to start\n");
-        return -1;
-    }
-
-    /* XXX: now used this as default, maybe change this with private options */
-    s->output_type = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
-
-    s->in_queue = new std::deque<VideoDecodeBuffer*>;
-    pthread_mutex_init(&s->mutex_, NULL);
-    pthread_mutex_init(&s->in_mutex, NULL);
-    pthread_cond_init(&s->in_cond, NULL);
+    if ((ret = pthread_mutex_init(&s->ctx_mutex, NULL)) < 0)
+        return ret;
+    if ((ret = pthread_mutex_init(&s->in_mutex, NULL)) < 0)
+        return ret;
+    if ((ret = pthread_cond_init(&s->in_cond, NULL)) < 0)
+        return ret;
     s->decode_status = DECODE_THREAD_NOT_INIT;
-
-    s->decode_count = 0;
-    s->decode_count_yami = 0;
-    s->render_count = 0;
-
     return 0;
 }
 
-static void *decodeThread(void *arg)
+static int ff_yami_decode_thread_close(YamiDecContext *s)
+{
+    pthread_mutex_lock(&s->ctx_mutex);
+    while (s->decode_status != DECODE_THREAD_EXIT
+           && s->decode_status != DECODE_THREAD_NOT_INIT) { // if decode thread do not create do not loop
+        // potential race condition on s->decode_status
+        s->decode_status = DECODE_THREAD_GOT_EOS;
+        pthread_mutex_unlock(&s->ctx_mutex);
+        pthread_cond_signal(&s->in_cond);
+        av_usleep(10000);
+        pthread_mutex_lock(&s->ctx_mutex);
+    }
+    pthread_mutex_unlock(&s->ctx_mutex);
+    
+    pthread_mutex_destroy(&s->in_mutex);
+    pthread_cond_destroy(&s->in_cond);
+    return 0;
+}
+
+static void *ff_yami_decode_thread(void *arg)
 {
     AVCodecContext *avctx = (AVCodecContext *)arg;
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
@@ -162,13 +130,13 @@ static void *decodeThread(void *arg)
     }
 
     av_log(avctx, AV_LOG_VERBOSE, "decode thread exit\n");
-    pthread_mutex_lock(&s->mutex_);
+    pthread_mutex_lock(&s->ctx_mutex);
     s->decode_status = DECODE_THREAD_EXIT;
-    pthread_mutex_unlock(&s->mutex_);
+    pthread_mutex_unlock(&s->ctx_mutex);
     return NULL;
 }
 
-static void yami_recycle_frame(void *opaque, uint8_t *data)
+static void ff_yami_recycle_frame(void *opaque, uint8_t *data)
 {
     AVCodecContext *avctx = (AVCodecContext *)opaque;
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
@@ -176,15 +144,15 @@ static void yami_recycle_frame(void *opaque, uint8_t *data)
 
     if (!s || !s->decoder || !yami_frame) // XXX, use shared pointer for s
         return;
-    pthread_mutex_lock(&s->mutex_);
+    pthread_mutex_lock(&s->ctx_mutex);
     s->decoder->renderDone(yami_frame);
     /* XXX: should I delete frame buffer?? */
     av_free(yami_frame);
-    pthread_mutex_unlock(&s->mutex_);
+    pthread_mutex_unlock(&s->ctx_mutex);
     av_log(avctx, AV_LOG_DEBUG, "recycle previous frame: %p\n", yami_frame);
 }
 
-static int convert_to_AVFrame(AVCodecContext *avctx, VideoFrameRawData *from, AVFrame *to)
+static int ff_convert_to_frame(AVCodecContext *avctx, VideoFrameRawData *from, AVFrame *to)
 {
     if(!avctx || !from || !to)
         return -1;
@@ -194,7 +162,7 @@ static int convert_to_AVFrame(AVCodecContext *avctx, VideoFrameRawData *from, AV
         to->width = avctx->width;
         to->height = avctx->height;
 
-        to->format = AV_PIX_FMT_YAMI; /* FIXME */
+        to->format = AV_PIX_FMT_YAMI; 
         to->extended_data = NULL;
 
         to->extended_data = to->data;
@@ -203,7 +171,7 @@ static int convert_to_AVFrame(AVCodecContext *avctx, VideoFrameRawData *from, AV
 
         to->buf[0] = av_buffer_create((uint8_t *)from,
                                       sizeof(VideoFrameRawData),
-                                      yami_recycle_frame, avctx, 0);
+                                      ff_yami_recycle_frame, avctx, 0);
     } else {
         int src_linesize[4] = {0};
         uint8_t *src_data[4] = {0};
@@ -251,9 +219,77 @@ static int convert_to_AVFrame(AVCodecContext *avctx, VideoFrameRawData *from, AV
 
         to->buf[0] = av_buffer_create((uint8_t *) from,
                                       sizeof(VideoFrameRawData),
-                                      yami_recycle_frame, avctx, 0);
+                                      ff_yami_recycle_frame, avctx, 0);
 
     }
+    return 0;
+}
+
+int yami_dec_init(AVCodecContext *avctx, const char *mime_type)
+{
+    YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
+    Decode_Status status;
+
+    s->decoder = NULL;
+    enum AVPixelFormat pix_fmts[4] =
+        {
+            AV_PIX_FMT_YAMI,
+            AV_PIX_FMT_NV12,
+            AV_PIX_FMT_YUV420P,
+            AV_PIX_FMT_NONE
+        };
+    if (avctx->pix_fmt == AV_PIX_FMT_NONE) {
+        int ret = ff_get_format(avctx, pix_fmts);
+        if (ret < 0)
+            return ret;
+
+        avctx->pix_fmt = (AVPixelFormat)ret;
+    }
+    VADisplay va_display = createVADisplay();
+    if (!va_display) {
+        av_log(avctx, AV_LOG_ERROR, "\nfail to create %s display\n", mime_type);
+        return -1;
+    }
+    av_log(avctx, AV_LOG_VERBOSE, "yami_dec_init\n");
+    s->decoder = createVideoDecoder(mime_type);
+    if (!s->decoder) {
+        av_log(avctx, AV_LOG_ERROR, "fail to create %s decoder\n", mime_type);
+        return -1;
+    }
+
+    NativeDisplay native_display;
+    native_display.type = NATIVE_DISPLAY_VA;
+
+    native_display.handle = (intptr_t)va_display;
+    s->decoder->setNativeDisplay(&native_display);
+
+    VideoConfigBuffer config_buffer;
+    memset(&config_buffer, 0, sizeof(VideoConfigBuffer));
+    if (avctx->extradata && avctx->extradata_size && avctx->extradata[0] == 1) {
+        config_buffer.data = avctx->extradata;
+        config_buffer.size = avctx->extradata_size;
+    }
+    config_buffer.profile = VAProfileNone;
+    status = s->decoder->start(&config_buffer);
+    if (status != DECODE_SUCCESS) {
+        av_log(avctx, AV_LOG_ERROR, "yami decoder fail to start\n");
+        return -1;
+    }
+
+    s->in_queue = new std::deque<VideoDecodeBuffer*>;
+
+#if HAVE_PTHREADS
+    if (ff_yami_decode_thread_init(s) < 0)
+        return AVERROR(ENOMEM);
+#else
+    av_log(avctx, AV_LOG_ERROR, "pthread lib must be supported\n");
+    return AVERROR(ENOMEM);
+#endif
+    
+    s->decode_count = 0;
+    s->decode_count_yami = 0;
+    s->render_count = 0;
+
     return 0;
 }
 
@@ -296,18 +332,18 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
         av_log(avctx, AV_LOG_DEBUG,
                "s->in_queue->size()=%ld, s->decode_count=%d, s->decode_count_yami=%d, too many buffer are under decoding, wait ...\n",
                s->in_queue->size(), s->decode_count, s->decode_count_yami);
-        usleep(1000);
+        av_usleep(1000);
     };
     s->decode_count++;
 
     // decode thread status update
-    pthread_mutex_lock(&s->mutex_);
+    pthread_mutex_lock(&s->ctx_mutex);
     switch (s->decode_status) {
     case DECODE_THREAD_NOT_INIT:
     case DECODE_THREAD_EXIT:
         if (avpkt->data && avpkt->size) {
             s->decode_status = DECODE_THREAD_RUNING;
-            pthread_create(&s->decode_thread_id, NULL, &decodeThread, avctx);
+            pthread_create(&s->decode_thread_id, NULL, &ff_yami_decode_thread, avctx);
         }
         break;
     case DECODE_THREAD_RUNING:
@@ -321,7 +357,7 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
     default:
         break;
     }
-    pthread_mutex_unlock(&s->mutex_);
+    pthread_mutex_unlock(&s->ctx_mutex);
 
     // get an output buffer from yami
     yami_frame = (VideoFrameRawData *)av_mallocz(sizeof(VideoFrameRawData));
@@ -339,7 +375,7 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
 
     do {
         if (!s->format_info) {
-            usleep(10000);
+            av_usleep(10000);
             continue;
         }
 
@@ -362,7 +398,7 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
     }
 
     // process the output frame
-    if (convert_to_AVFrame(avctx, yami_frame, frame) < 0)
+    if (ff_convert_to_frame(avctx, yami_frame, frame) < 0)
         av_log(avctx, AV_LOG_VERBOSE, "yami frame convert av_frame failed\n");;
 
     *got_frame = 1;
@@ -379,27 +415,14 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
 int yami_dec_close(AVCodecContext *avctx)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
-
-    pthread_mutex_lock(&s->mutex_);
-    while (s->decode_status != DECODE_THREAD_EXIT
-           && s->decode_status != DECODE_THREAD_NOT_INIT) { // if decode thread do not create do not loop
-        // potential race condition on s->decode_status
-        s->decode_status = DECODE_THREAD_GOT_EOS;
-        pthread_mutex_unlock(&s->mutex_);
-        pthread_cond_signal(&s->in_cond);
-        usleep(10000);
-        pthread_mutex_lock(&s->mutex_);
-    }
-    pthread_mutex_unlock(&s->mutex_);
-
+    
+    ff_yami_decode_thread_close(s);
     if (s->decoder) {
         s->decoder->stop();
         releaseVideoDecoder(s->decoder);
         s->decoder = NULL;
     }
 
-    pthread_mutex_destroy(&s->in_mutex);
-    pthread_cond_destroy(&s->in_cond);
     while (!s->in_queue->empty()) {
         VideoDecodeBuffer *in_buffer = s->in_queue->front();
         s->in_queue->pop_front();
