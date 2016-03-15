@@ -248,13 +248,13 @@ int yami_dec_init(AVCodecContext *avctx, const char *mime_type)
     VADisplay va_display = createVADisplay();
     if (!va_display) {
         av_log(avctx, AV_LOG_ERROR, "\nfail to create %s display\n", mime_type);
-        return -1;
+        return AVERROR_BUG;
     }
     av_log(avctx, AV_LOG_VERBOSE, "yami_dec_init\n");
     s->decoder = createVideoDecoder(mime_type);
     if (!s->decoder) {
         av_log(avctx, AV_LOG_ERROR, "fail to create %s decoder\n", mime_type);
-        return -1;
+        return AVERROR_BUG;
     }
 
     NativeDisplay native_display;
@@ -273,7 +273,7 @@ int yami_dec_init(AVCodecContext *avctx, const char *mime_type)
     status = s->decoder->start(&config_buffer);
     if (status != DECODE_SUCCESS) {
         av_log(avctx, AV_LOG_ERROR, "yami decoder fail to start\n");
-        return -1;
+        return AVERROR_BUG;
     }
 
     s->in_queue = new std::deque<VideoDecodeBuffer*>;
@@ -282,8 +282,8 @@ int yami_dec_init(AVCodecContext *avctx, const char *mime_type)
     if (ff_yami_decode_thread_init(s) < 0)
         return AVERROR(ENOMEM);
 #else
-    av_log(avctx, AV_LOG_ERROR, "pthread lib must be supported\n");
-    return AVERROR(ENOMEM);
+    av_log(avctx, AV_LOG_ERROR, "pthread libaray must be supported\n");
+    return AVERROR(ENOSYS);
 #endif
     
     s->decode_count = 0;
