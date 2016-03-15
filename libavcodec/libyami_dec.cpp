@@ -37,8 +37,6 @@ extern "C" {
 #include "libyami_dec.h"
 #include "libyami_utils.h"
 
-#define DECODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "# decode # line:%4d " format, __LINE__, ##__VA_ARGS__)
-
 using namespace YamiMediaCodec;
 
 int yami_dec_init(AVCodecContext *avctx, const char *mime_type)
@@ -116,14 +114,14 @@ static void *decodeThread(void *arg)
     while (1) {
         VideoDecodeBuffer *in_buffer = NULL;
         // deque one input buffer
-        DECODE_TRACE("decode thread runs one cycle start ... \n");
+        av_log(avctx, AV_LOG_VERBOSE, "decode thread runs one cycle start ... \n");
         pthread_mutex_lock(&s->in_mutex);
         if (s->in_queue->empty()) {
             if (s->decode_status == DECODE_THREAD_GOT_EOS) {
                 pthread_mutex_unlock(&s->in_mutex);
                 break;
             } else {
-                DECODE_TRACE("decode thread wait because s->in_queue is empty\n");
+                av_log(avctx, AV_LOG_VERBOSE, "decode thread wait because s->in_queue is empty\n");
                 pthread_cond_wait(&s->in_cond, &s->in_mutex); // wait if no todo frame is available
             }
         }
@@ -133,22 +131,22 @@ static void *decodeThread(void *arg)
             continue;
         }
 
-        DECODE_TRACE("s->in_queue->size()=%ld\n", s->in_queue->size());
+        av_log(avctx, AV_LOG_VERBOSE, "s->in_queue->size()=%ld\n", s->in_queue->size());
         in_buffer = s->in_queue->front();
 
         pthread_mutex_unlock(&s->in_mutex);
 
         // decode one input buffer
-        DECODE_TRACE("try to process one input buffer, in_buffer->data=%p, in_buffer->size=%zu\n", in_buffer->data, in_buffer->size);
+        av_log(avctx, AV_LOG_VERBOSE, "try to process one input buffer, in_buffer->data=%p, in_buffer->size=%zu\n", in_buffer->data, in_buffer->size);
         Decode_Status status = s->decoder->decode(in_buffer);
-        DECODE_TRACE("decode() status=%d, decode_count_yami=%d render_count %d\n", status, s->decode_count_yami, s->render_count);
+        av_log(avctx, AV_LOG_VERBOSE, "decode() status=%d, decode_count_yami=%d render_count %d\n", status, s->decode_count_yami, s->render_count);
 
         if (DECODE_FORMAT_CHANGE == status) {
             s->format_info = s->decoder->getFormatInfo();
-            DECODE_TRACE("decode format change %dx%d\n", s->format_info->width,s->format_info->height);
+            av_log(avctx, AV_LOG_VERBOSE, "decode format change %dx%d\n", s->format_info->width,s->format_info->height);
             // resend the buffer to decoder
             status = s->decoder->decode(in_buffer);
-            DECODE_TRACE("decode() status=%d\n",status);
+            av_log(avctx, AV_LOG_VERBOSE, "decode() status=%d\n",status);
             avctx->width = s->format_info->width;
             avctx->height = s->format_info->height;
 
@@ -163,7 +161,7 @@ static void *decodeThread(void *arg)
         av_free(in_buffer);
     }
 
-    DECODE_TRACE("decode thread exit\n");
+    av_log(avctx, AV_LOG_VERBOSE, "decode thread exit\n");
     pthread_mutex_lock(&s->mutex_);
     s->decode_status = DECODE_THREAD_EXIT;
     pthread_mutex_unlock(&s->mutex_);

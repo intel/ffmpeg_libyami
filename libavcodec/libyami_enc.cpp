@@ -39,8 +39,6 @@ extern "C" {
 #include "libyami_enc.h"
 #include "libyami_utils.h"
 
-#define ENCODE_TRACE(format, ...)  av_log(avctx, AV_LOG_VERBOSE, "< encode > line:%4d " format, __LINE__, ##__VA_ARGS__)
-
 using namespace YamiMediaCodec;
 
 static void *encodeThread(void *arg)
@@ -52,14 +50,14 @@ static void *encodeThread(void *arg)
         AVFrame *frame;
         VideoFrameRawData *in_buffer = NULL;
         // deque one input buffer
-        ENCODE_TRACE("encode thread runs one cycle start ... \n");
+        av_log(avctx, AV_LOG_VERBOSE, "encode thread runs one cycle start ... \n");
         pthread_mutex_lock(&s->in_mutex);
         if (s->in_queue->empty()) {
             if (s->encode_status == ENCODE_THREAD_GOT_EOS) {
                 pthread_mutex_unlock(&s->in_mutex);
                 break;
             } else {
-                ENCODE_TRACE("encode thread wait because s->in_queue is empty\n");
+                av_log(avctx, AV_LOG_VERBOSE, "encode thread wait because s->in_queue is empty\n");
                 pthread_cond_wait(&s->in_cond, &s->in_mutex); // wait if no todo frame is available
             }
         }
@@ -69,7 +67,7 @@ static void *encodeThread(void *arg)
             continue;
         }
 
-        ENCODE_TRACE("s->in_queue->size()=%ld\n", s->in_queue->size());
+        av_log(avctx, AV_LOG_VERBOSE, "encode s->in_queue->size()=%ld\n", s->in_queue->size());
         frame = s->in_queue->front();
         pthread_mutex_unlock(&s->in_mutex);
 
@@ -139,7 +137,7 @@ static void *encodeThread(void *arg)
                  status = s->encoder->encode(in_buffer);
             } while (status == ENCODE_IS_BUSY);
 
-            ENCODE_TRACE("encode() status=%d, encode_count_yami=%d\n", status, s->encode_count_yami);
+            av_log(avctx, AV_LOG_VERBOSE, "encode() status=%d, encode_count_yami=%d\n", status, s->encode_count_yami);
             av_free(in_buffer);
         } else { /* zero-copy mode */
             SharedPtr < VideoFrame > yami_frame;
@@ -164,7 +162,7 @@ static void *encodeThread(void *arg)
                  status = s->encoder->encode(yami_frame);
             } while (status == ENCODE_IS_BUSY);
 
-            ENCODE_TRACE("encode() status=%d, encode_count_yami=%d\n", status, s->encode_count_yami);
+            av_log(avctx, AV_LOG_VERBOSE, "encode() status=%d, encode_count_yami=%d\n", status, s->encode_count_yami);
         }
 
         if (status < 0) {
@@ -178,7 +176,7 @@ static void *encodeThread(void *arg)
         s->in_queue->pop_front();
     }
 
-    ENCODE_TRACE("encode thread exit\n");
+    av_log(avctx, AV_LOG_VERBOSE, "encode thread exit\n");
     pthread_mutex_lock(&s->mutex_);
     s->encode_status = ENCODE_THREAD_EXIT;
     pthread_mutex_unlock(&s->mutex_);
