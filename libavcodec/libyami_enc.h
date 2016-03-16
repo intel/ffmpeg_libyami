@@ -37,9 +37,9 @@ typedef enum {
 struct YamiEncContext {
     AVCodecContext *avctx;
 
-    pthread_mutex_t mutex_; // mutex for encoder->getOutput() and YamiEncContext itself update (encode_status, etc)
+    pthread_mutex_t ctx_mutex; // mutex for encoder->getOutput() and YamiEncContext itself update (encode_status, etc)
     YamiMediaCodec::IVideoEncoder *encoder;
-    VideoEncOutputBuffer outputBuffer;
+    VideoEncOutputBuffer enc_out_buf;
 
     pthread_t encode_thread_id;
     std::deque<AVFrame *> *in_queue;
@@ -49,8 +49,8 @@ struct YamiEncContext {
     pthread_cond_t in_cond;    // encode thread condition wait
     EncodeThreadStatus encode_status;
 
-    uint8_t *m_buffer;
-    uint32_t m_frameSize;
+    uint8_t *enc_frame_buf;
+    uint32_t enc_frame_size;
     /***video commom param*****/
     uint32_t cqp;           // qp value 0-52
     uint32_t frame_rate;    // frame rate trasfer the time stamp
@@ -60,7 +60,7 @@ struct YamiEncContext {
     char *profile;          // profile main|baseline|high
     /*******************/
 
-    uint32_t maxOutSize;
+    uint32_t max_out_size;
 
     // debug use
     int encode_count;
