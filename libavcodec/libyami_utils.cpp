@@ -24,33 +24,59 @@
 
 #include "libyami_utils.h"
 
-static VADisplay getVADisplay(void)
+#define HAVE_VAAPI_X11 0
+
+#if HAVE_VAAPI_X11
+#include <X11/Xlib.h>
+#endif
+
+static VADisplay ff_get_display(void)
 {
-    static VADisplay vadisplay = NULL;
-
-
-    if (!vadisplay) {
-        int fd = open("/dev/dri/card0", O_RDWR);
-        if (fd < 0) {
-//            av_log(NULL, AV_LOG_ERROR, "open card0 failed");
+    static VADisplay display = NULL;
+    
+    if(!display) {
+#if HAVE_VAAPI_X11
+        const char *device = NULL;/*FIXME*/
+            // Try to open the device as an X11 display.
+        Display *x11_display = XOpenDisplay(device);
+        if(!x11_display) {
             return NULL;
+        } else {
+            display = vaGetDisplay(x11_display);
+            if(!display) {
+                XCloseDisplay(x11_display);
+            } 
         }
-        vadisplay = vaGetDisplayDRM(fd);
+#else
+        const char *device = "/dev/dri/card0";/*FIXME*/
+        // Try to open the device as a DRM path.
+        int drm_fd = open(device, O_RDWR);
+        if(drm_fd < 0) {
+            return NULL;
+        } else {
+            display = vaGetDisplayDRM(drm_fd);
+            if(!display) 
+                close(drm_fd);
+        }    
+#endif
+        if (!display)
+            return NULL;
         int majorVersion, minorVersion;
-        VAStatus vaStatus = vaInitialize(vadisplay, &majorVersion, &minorVersion);
+        VAStatus vaStatus = vaInitialize(display, &majorVersion, &minorVersion);
         if (vaStatus != VA_STATUS_SUCCESS) {
-//            av_log(NULL, AV_LOG_ERROR, "va init failed, status =  %d", vaStatus);
-            close(fd);
-            vadisplay = NULL;
+#if !HAVE_VAAPI_X11
+            close(drm_fd);
+#endif
+            display = NULL;
             return NULL;
         }
-        return vadisplay;
+        return display;
     } else {
-        return vadisplay;
+        return display;
     }
 }
 
-VADisplay createVADisplay(void)
+VADisplay ff_vaapi_create_display(void)
 {
-    return getVADisplay();
+    return ff_get_display();
 }

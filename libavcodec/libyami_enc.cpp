@@ -38,7 +38,6 @@ extern "C" {
 
 #include "libyami_enc.h"
 #include "libyami_utils.h"
-
 using namespace YamiMediaCodec;
 
 static void *encodeThread(void *arg)
@@ -234,7 +233,7 @@ int yami_enc_init(AVCodecContext *avctx, const char *mime_type)
 
     NativeDisplay native_display;
     native_display.type = NATIVE_DISPLAY_VA;
-    VADisplay m_display = createVADisplay();
+    VADisplay m_display = ff_vaapi_create_display();
     native_display.handle = (intptr_t)m_display;
     s->encoder->setNativeDisplay(&native_display);
 
