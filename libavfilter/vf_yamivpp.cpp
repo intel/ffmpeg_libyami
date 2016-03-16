@@ -345,6 +345,7 @@ static int map_fmt_to_fourcc(int fmt)
         break;
 
     case AV_PIX_FMT_NV12:
+    case AV_PIX_FMT_YAMI:
         fourcc =  VA_FOURCC_NV12;
         break;
 
