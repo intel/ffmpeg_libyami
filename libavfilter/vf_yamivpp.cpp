@@ -122,7 +122,7 @@ static const AVOption yamivpp_options[] = {
     {"framerate",   "output frame rate",                          OFFSET(framerate),   AV_OPT_TYPE_RATIONAL, {.dbl=0.0},0, DBL_MAX, .flags = FLAGS},
     {"pipeline",    "yamivpp in hw pipeline: 0=off, 1=on",        OFFSET(pipeline),    AV_OPT_TYPE_INT, {.i64=0}, 0, 1, .flags = FLAGS, .unit = "pipeline"},
         { "off",    "don't put yamivpp in hw pipeline",        0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, .flags=FLAGS, .unit="pipeline"},
-        { "on",     "put yamivpp in hw pipeline)",             0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, .flags=FLAGS, .unit="pipeline"},
+        { "on",     "put yamivpp in hw pipeline",             0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, .flags=FLAGS, .unit="pipeline"},
     { NULL }
 };
 
@@ -466,7 +466,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             native_display.handle = (intptr_t)m_display;
             yamivpp->scaler->setNativeDisplay(native_display);
 
-            /* create src/dest surface, then load yuv to src surface and get 
+            /* create src/dest surface, then load yuv to src surface and get
 	       yuv from dest surfcace */
             yamivpp->src  = ff_vaapi_create_nopipeline_surface(in->format, in->width, in->height);
             yamivpp->dest = ff_vaapi_create_nopipeline_surface(out->format, outlink->w, outlink->h);
