@@ -28,7 +28,10 @@
 
 #include <fcntl.h>
 #include <unistd.h>
+
+
 #include <va/va_drm.h>
+#include <va/va_x11.h>
 
 #ifndef VA_FOURCC_I420
 #define VA_FOURCC_I420 VA_FOURCC('I','4','2','0')
@@ -38,7 +41,7 @@
 #define VA_FOURCC_NV12 VA_FOURCC('N','V','1','2')
 #endif
 
-VADisplay createVADisplay(void);
+VADisplay ff_vaapi_create_display(void);
 
 
 #endif /* LIBAVCODEC_LIBYAMI_UTILS_H_ */

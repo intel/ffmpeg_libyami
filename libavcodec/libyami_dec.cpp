@@ -57,6 +57,8 @@ static int ff_yami_decode_thread_init(YamiDecContext *s)
 
 static int ff_yami_decode_thread_close(YamiDecContext *s)
 {
+    if (!s)
+        return -1;
     pthread_mutex_lock(&s->ctx_mutex);
     while (s->decode_status != DECODE_THREAD_EXIT
            && s->decode_status != DECODE_THREAD_NOT_INIT) { // if decode thread do not create do not loop
@@ -245,7 +247,7 @@ int yami_dec_init(AVCodecContext *avctx, const char *mime_type)
 
         avctx->pix_fmt = (AVPixelFormat)ret;
     }
-    VADisplay va_display = createVADisplay();
+    VADisplay va_display = ff_vaapi_create_display();
     if (!va_display) {
         av_log(avctx, AV_LOG_ERROR, "\nfail to create %s display\n", mime_type);
         return AVERROR_BUG;

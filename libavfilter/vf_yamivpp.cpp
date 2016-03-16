@@ -80,30 +80,58 @@ typedef struct {
 
 #include <fcntl.h>
 #include <unistd.h>
+
 #include <va/va_drm.h>
+#include <va/va_x11.h>
+#define HAVE_VAAPI_DRM 1
 
-static VADisplay createVADisplay(void)
+#if HAVE_VAAPI_X11
+#include <X11/Xlib.h>
+#endif
+
+static VADisplay ff_vaapi_create_display(void)
 {
-    static VADisplay vadisplay = NULL;
-
-    if (!vadisplay) {
-        int fd = open("/dev/dri/card0", O_RDWR);
-        if (fd < 0) {
-            av_log(NULL, AV_LOG_ERROR, "open card0 failed");
+    static VADisplay display = NULL;
+    
+    if(!display) {
+#if !HAVE_VAAPI_DRM
+        const char *device = NULL;/*FIXME*/
+            // Try to open the device as an X11 display.
+        Display *x11_display = XOpenDisplay(device);
+        if(!x11_display) {
             return NULL;
+        } else {
+            display = vaGetDisplay(x11_display);
+            if(!display) {
+                XCloseDisplay(x11_display);
+            } 
         }
-
-        vadisplay = vaGetDisplayDRM(fd);
+#else
+        const char *device = "/dev/dri/card0";/*FIXME*/
+        // Try to open the device as a DRM path.
+        int drm_fd = open(device, O_RDWR);
+        if(drm_fd < 0) {
+            return NULL;
+        } else {
+            display = vaGetDisplayDRM(drm_fd);
+            if(!display) 
+                close(drm_fd);
+        }    
+#endif
+        if (!display)
+            return NULL;
         int majorVersion, minorVersion;
-        VAStatus vaStatus = vaInitialize(vadisplay, &majorVersion, &minorVersion);
+        VAStatus vaStatus = vaInitialize(display, &majorVersion, &minorVersion);
         if (vaStatus != VA_STATUS_SUCCESS) {
-            av_log(NULL, AV_LOG_ERROR, "va init failed, status =  %d", vaStatus);
-            close(fd);
+#if HAVE_VAAPI_DRM
+            close(drm_fd);
+#endif
+            display = NULL;
             return NULL;
         }
-        return vadisplay;
+        return display;
     } else {
-        return vadisplay;
+        return display;
     }
 }
 
@@ -210,7 +238,7 @@ static SharedPtr<VideoFrame> ff_vaapi_create_surface(uint32_t rt_fmt, int pix_fm
     VASurfaceID id;
     VASurfaceAttrib attrib;
 
-    VADisplay m_vaDisplay = createVADisplay();
+    VADisplay m_vaDisplay = ff_vaapi_create_display();
 
     attrib.type =  VASurfaceAttribPixelFormat;
     attrib.flags = VA_SURFACE_ATTRIB_SETTABLE;
@@ -238,7 +266,7 @@ static bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in)
     const uint8_t *src_data[4];
     uint8_t *dest_data[4];
 
-    VADisplay m_vaDisplay = createVADisplay();
+    VADisplay m_vaDisplay = ff_vaapi_create_display();
 
     VAStatus status = vaDeriveImage(m_vaDisplay, surface, &image);
     if (!ff_check_vaapi_status(status, "vaDeriveImage"))
@@ -288,7 +316,7 @@ static bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
     const uint8_t *src_data[4];
     uint8_t *dest_data[4];
 
-    VADisplay m_vaDisplay = createVADisplay();
+    VADisplay m_vaDisplay = ff_vaapi_create_display();
 
     VAStatus status = vaDeriveImage(m_vaDisplay, surface, &image);
     if (!ff_check_vaapi_status(status, "vaDeriveImage"))
@@ -463,7 +491,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         if (yamivpp->frame_number == 0) {
             NativeDisplay native_display;
             native_display.type = NATIVE_DISPLAY_VA;
-            m_display = createVADisplay();
+            m_display = ff_vaapi_create_display();
             native_display.handle = (intptr_t)m_display;
             yamivpp->scaler->setNativeDisplay(native_display);
 
@@ -514,7 +542,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             if (in->format == AV_PIX_FMT_YAMI) {
                 m_display = (VADisplay)in_buffer->handle;
             } else {
-                m_display = createVADisplay();
+                m_display = ff_vaapi_create_display();
             }
             NativeDisplay native_display;
             native_display.type = NATIVE_DISPLAY_VA;
