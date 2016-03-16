@@ -26,10 +26,6 @@
 #define LIBAVCODEC_LIBYAMI_UTILS_H_
 
 
-#include <fcntl.h>
-#include <unistd.h>
-
-
 #include <va/va_drm.h>
 #include <va/va_x11.h>
 

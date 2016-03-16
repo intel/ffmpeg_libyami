@@ -23,8 +23,11 @@
  */
 
 #include "libyami_utils.h"
+#include "config.h"
+#include <fcntl.h>
+#include <unistd.h>
 
-#define HAVE_VAAPI_X11 0
+#define HAVE_VAAPI_DRM 1
 
 #if HAVE_VAAPI_X11
 #include <X11/Xlib.h>
@@ -34,16 +37,16 @@ static VADisplay ff_get_display(void)
 {
     static VADisplay display = NULL;
     
-    if(!display) {
-#if HAVE_VAAPI_X11
+    if (!display) {
+#if !HAVE_VAAPI_DRM
         const char *device = NULL;/*FIXME*/
             // Try to open the device as an X11 display.
         Display *x11_display = XOpenDisplay(device);
-        if(!x11_display) {
+        if (!x11_display) {
             return NULL;
         } else {
             display = vaGetDisplay(x11_display);
-            if(!display) {
+            if (!display) {
                 XCloseDisplay(x11_display);
             } 
         }
@@ -64,7 +67,7 @@ static VADisplay ff_get_display(void)
         int majorVersion, minorVersion;
         VAStatus vaStatus = vaInitialize(display, &majorVersion, &minorVersion);
         if (vaStatus != VA_STATUS_SUCCESS) {
-#if !HAVE_VAAPI_X11
+#if HAVE_VAAPI_DRM
             close(drm_fd);
 #endif
             display = NULL;
