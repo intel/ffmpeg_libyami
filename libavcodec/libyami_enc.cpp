@@ -89,9 +89,6 @@ static int av_convert_to_yami(AVCodecContext *avctx, AVFrame *from, VideoFrameRa
     if (from->pict_type == AV_PICTURE_TYPE_I)
         to->flags |= VIDEO_FRAME_FLAGS_KEY;
 
-    to->width = avctx->width;
-    to->height = avctx->height;
-
     uint8_t *yamidata = reinterpret_cast<uint8_t *>(s->enc_frame_buf);
     
     if (avctx->pix_fmt == AV_PIX_FMT_YUV420P){
@@ -134,6 +131,7 @@ static int av_convert_to_yami(AVCodecContext *avctx, AVFrame *from, VideoFrameRa
     to->width = avctx->width;
     to->height = avctx->height;
     to->fourcc = avctx->pix_fmt == AV_PIX_FMT_YUV420P ? VA_FOURCC_I420 : VA_FOURCC_NV12;
+    to->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
     to->offset[0] = 0;
     to->offset[1] = to->pitch[0] * avctx->height;
     to->offset[2] = to->offset[1] + to->pitch[1] * ((avctx->height + 1) >> 1);
@@ -173,7 +171,7 @@ static void *ff_yami_encode_thread(void *arg)
         // encode one input in_buffer
         Encode_Status status;
         if (frame->format != AV_PIX_FMT_YAMI) { /* non zero-copy mode */
-            in_buffer = (VideoFrameRawData *)av_malloc(sizeof(VideoFrameRawData));
+            in_buffer = (VideoFrameRawData *)av_mallocz(sizeof(VideoFrameRawData));
             if (av_convert_to_yami(avctx, frame, in_buffer) < 0)
                 av_log(avctx, AV_LOG_ERROR,
                    "av_convert_to_yami convert frame failed\n");
