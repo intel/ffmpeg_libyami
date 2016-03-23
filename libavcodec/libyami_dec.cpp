@@ -40,6 +40,12 @@ extern "C" {
 
 using namespace YamiMediaCodec;
 
+typedef struct {
+    VideoFrameRawData *video_raw_data;
+    VAImage *va_image;
+    SharedPtr<VideoFrame> output_frame;
+}YamiDecImage;
+
 static int ff_yami_decode_thread_init(YamiDecContext *s)
 {
     int ret = 0; 
@@ -142,24 +148,31 @@ static void ff_yami_recycle_frame(void *opaque, uint8_t *data)
 {
     AVCodecContext *avctx = (AVCodecContext *)opaque;
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
-    VideoFrameRawData *yami_frame = (VideoFrameRawData *)data;
-
-    if (!s || !s->decoder || !yami_frame) // XXX, use shared pointer for s
+    YamiDecImage *yami_image = (YamiDecImage *)data;
+    if (!s || !s->decoder || !yami_image) // XXX, use shared pointer for s
         return;
+    VideoFrameRawData *yami_frame = yami_image->video_raw_data;
+    VAImage *va_image = yami_image->va_image;
     pthread_mutex_lock(&s->ctx_mutex);
-    s->decoder->renderDone(yami_frame);
     /* XXX: should I delete frame buffer?? */
+    if (va_image) {
+        VADisplay va_display = ff_vaapi_create_display();
+        vaUnmapBuffer(va_display, va_image->buf);
+        vaDestroyImage(va_display, va_image->image_id);
+    }
+    yami_image->output_frame.reset();
     av_free(yami_frame);
+    av_free(yami_image);
     pthread_mutex_unlock(&s->ctx_mutex);
     av_log(avctx, AV_LOG_DEBUG, "recycle previous frame: %p\n", yami_frame);
 }
 
-static int ff_convert_to_frame(AVCodecContext *avctx, VideoFrameRawData *from, AVFrame *to)
+static int ff_convert_to_frame(AVCodecContext *avctx, YamiDecImage *from, AVFrame *to)
 {
     if(!avctx || !from || !to)
         return -1;
     if (avctx->pix_fmt == AV_PIX_FMT_YAMI) {
-        to->pts = from->timeStamp;
+        to->pts = from->video_raw_data->timeStamp;
 
         to->width = avctx->width;
         to->height = avctx->height;
@@ -169,22 +182,22 @@ static int ff_convert_to_frame(AVCodecContext *avctx, VideoFrameRawData *from, A
 
         to->extended_data = to->data;
         /* XXX: put the surface id to data[3] */
-        to->data[3] = reinterpret_cast<uint8_t *>(from);
+        to->data[3] = reinterpret_cast<uint8_t *>(from->video_raw_data);
 
         to->buf[0] = av_buffer_create((uint8_t *)from,
-                                      sizeof(VideoFrameRawData),
+                                      sizeof(YamiDecImage),
                                       ff_yami_recycle_frame, avctx, 0);
     } else {
         int src_linesize[4] = {0};
         uint8_t *src_data[4] = {0};
         if (avctx->pix_fmt == AV_PIX_FMT_YUV420P) {
-            src_linesize[0] = from->pitch[0];
-            src_linesize[1] = from->pitch[1];
-            src_linesize[2] = from->pitch[2];
-            uint8_t* yami_data = reinterpret_cast<uint8_t*>(from->handle);
-            src_data[0] = yami_data + from->offset[0];
-            src_data[1] = yami_data + from->offset[1];
-            src_data[2] = yami_data + from->offset[2];
+            src_linesize[0] = from->video_raw_data->pitch[0];
+            src_linesize[1] = from->video_raw_data->pitch[1];
+            src_linesize[2] = from->video_raw_data->pitch[2];
+            uint8_t* yami_data = reinterpret_cast<uint8_t*>(from->video_raw_data->handle);
+            src_data[0] = yami_data + from->video_raw_data->offset[0];
+            src_data[1] = yami_data + from->video_raw_data->offset[1];
+            src_data[2] = yami_data + from->video_raw_data->offset[2];
 
             to->data[0] = reinterpret_cast<uint8_t*>(src_data[0]);
             to->data[1] = reinterpret_cast<uint8_t*>(src_data[1]);
@@ -193,12 +206,12 @@ static int ff_convert_to_frame(AVCodecContext *avctx, VideoFrameRawData *from, A
             to->linesize[1] = src_linesize[1];
             to->linesize[2] = src_linesize[2];
         } else {
-            src_linesize[0] = from->pitch[0];
-            src_linesize[1] = from->pitch[1];
-            src_linesize[2] = from->pitch[2];
-            uint8_t* yami_data = reinterpret_cast<uint8_t*>(from->handle);
-            src_data[0] = yami_data + from->offset[0];
-            src_data[1] = yami_data + from->offset[1];
+            src_linesize[0] = from->video_raw_data->pitch[0];
+            src_linesize[1] = from->video_raw_data->pitch[1];
+            src_linesize[2] = from->video_raw_data->pitch[2];
+            uint8_t* yami_data = reinterpret_cast<uint8_t*>(from->video_raw_data->handle);
+            src_data[0] = yami_data + from->video_raw_data->offset[0];
+            src_data[1] = yami_data + from->video_raw_data->offset[1];
 
             to->data[0] = reinterpret_cast<uint8_t*>(src_data[0]);
             to->data[1] = reinterpret_cast<uint8_t*>(src_data[1]);
@@ -207,7 +220,7 @@ static int ff_convert_to_frame(AVCodecContext *avctx, VideoFrameRawData *from, A
         }
 
         to->pkt_pts = AV_NOPTS_VALUE;
-        to->pkt_dts = from->timeStamp;
+        to->pkt_dts = from->video_raw_data->timeStamp;
         to->pts = AV_NOPTS_VALUE;
 
         to->width = avctx->width;
@@ -220,8 +233,70 @@ static int ff_convert_to_frame(AVCodecContext *avctx, VideoFrameRawData *from, A
 
 
         to->buf[0] = av_buffer_create((uint8_t *) from,
-                                      sizeof(VideoFrameRawData),
+                                      sizeof(YamiDecImage),
                                       ff_yami_recycle_frame, avctx, 0);
+
+    }
+    return 0;
+}
+
+static int
+fill_yami_dec_image(AVCodecContext *avctx, YamiDecImage *yami_dec_image, VideoFrameRawData *yami_frame, VAImage *va_image)
+{
+    yami_dec_image->video_raw_data = yami_frame;
+
+    yami_frame->memoryType = VIDEO_DATA_MEMORY_TYPE_SURFACE_ID;
+    yami_frame->width = yami_dec_image->output_frame->crop.width;
+    yami_frame->height = yami_dec_image->output_frame->crop.height;
+    yami_frame->fourcc = yami_dec_image->output_frame->fourcc;
+    VADisplay va_display = ff_vaapi_create_display();
+    yami_frame->handle = reinterpret_cast<intptr_t> (va_display);        // planar data has one fd for now, raw data also uses one pointer (+ offset)
+    yami_frame->internalID = yami_dec_image->output_frame->surface; // internal identification for image/surface recycle
+    yami_frame->timeStamp = yami_dec_image->output_frame->timeStamp;
+    yami_frame->flags = yami_dec_image->output_frame->flags;             //see VIDEO_FRAME_FLAGS_XXX
+
+    if (avctx->pix_fmt != AV_PIX_FMT_YAMI) {
+    /*map surface to va_image*/
+        VAStatus status;
+        vaSyncSurface(va_display, yami_frame->internalID);
+        yami_frame->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
+        unsigned char *surface_p = NULL;
+        if (avctx->pix_fmt == AV_PIX_FMT_NV12) {
+            status = vaDeriveImage(va_display, yami_frame->internalID, va_image);
+            if (status != VA_STATUS_SUCCESS) {
+                av_log(avctx, AV_LOG_ERROR, "vaDeriveImage: %s\n", vaErrorStr(status));
+                return -1;
+             }
+        } else {
+            VAImageFormat image_format;
+            image_format.fourcc = VA_FOURCC_I420;
+            image_format.byte_order = 1;
+            image_format.bits_per_pixel = 12;
+            status = vaCreateImage(va_display, &image_format, avctx->width, avctx->height, va_image);
+            if (status != VA_STATUS_SUCCESS) {
+                av_log(avctx, AV_LOG_ERROR, "vaDeriveImage: %s\n", vaErrorStr(status));
+                return -1;
+             }
+             status = vaGetImage(va_display, yami_frame->internalID, 0, 0, avctx->width, avctx->height, va_image->image_id);
+             if (status != VA_STATUS_SUCCESS) {
+                av_log(avctx, AV_LOG_ERROR, "vaDeriveImage: %s\n", vaErrorStr(status));
+                return -1;
+             }
+        }
+        status = vaMapBuffer(va_display, va_image->buf, (void **) &surface_p);
+        if (status != VA_STATUS_SUCCESS) {
+            av_log(avctx, AV_LOG_ERROR, "vaDeriveImage: %s\n", vaErrorStr(status));
+            return -1;
+        }
+        yami_frame->handle = reinterpret_cast<intptr_t> (surface_p);
+        yami_frame->pitch[0] = va_image->pitches[0];
+        yami_frame->pitch[1] = va_image->pitches[1];
+        yami_frame->pitch[2] = va_image->pitches[2];
+        yami_frame->offset[0] = va_image->offsets[0];
+        yami_frame->offset[1] = va_image->offsets[1];
+        yami_frame->offset[2] = va_image->offsets[2];
+
+        yami_dec_image->va_image = va_image;
 
     }
     return 0;
@@ -304,6 +379,7 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
     VideoDecodeBuffer *in_buffer = NULL;
     Decode_Status status = RENDER_NO_AVAILABLE_FRAME;
     VideoFrameRawData *yami_frame = NULL;
+    YamiDecImage *yami_dec_image =  NULL;
     AVFrame *frame = (AVFrame *)data;
 
     av_log(avctx, AV_LOG_VERBOSE, "yami_dec_frame\n");
@@ -365,15 +441,6 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
     yami_frame = (VideoFrameRawData *)av_mallocz(sizeof(VideoFrameRawData));
     if (!yami_frame)
         return AVERROR(ENOMEM);
-    if (avctx->pix_fmt == AV_PIX_FMT_YAMI)
-        yami_frame->memoryType = VIDEO_DATA_MEMORY_TYPE_SURFACE_ID;
-    else
-        yami_frame->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
-    /* FIXME */
-    if (avctx->pix_fmt == AV_PIX_FMT_NV12)
-        yami_frame->fourcc = VA_FOURCC_NV12;
-    else
-        yami_frame->fourcc = VA_FOURCC_I420;
 
     do {
         if (!s->format_info) {
@@ -381,16 +448,31 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
             continue;
         }
 
+        yami_dec_image = (YamiDecImage *)av_mallocz(sizeof(YamiDecImage));
+        if (!yami_dec_image) {
+            av_free(yami_frame);
+            yami_dec_image->output_frame.reset();
+            return AVERROR(ENOMEM);
+        }
         do{
-            status = s->decoder->getOutput(yami_frame, false);
+            yami_dec_image->output_frame = s->decoder->getOutput();
             av_log(avctx, AV_LOG_DEBUG, "getoutput() status=%d\n", status);
-        } while (!avpkt->data && status != RENDER_SUCCESS && s->in_queue->size() > 0);
-        if (status == RENDER_SUCCESS) {
+        } while (!avpkt->data && !yami_dec_image->output_frame && s->in_queue->size() > 0);
+        if (yami_dec_image->output_frame) {
+            VAImage *va_image =  (VAImage *)av_mallocz(sizeof(VAImage));
+            if (fill_yami_dec_image(avctx, yami_dec_image, yami_frame, va_image) < 0) {
+                av_free(va_image);
+                av_free(yami_frame);
+                yami_dec_image->output_frame.reset();
+                return AVERROR(ENOMEM);
+            };
+
+            status = RENDER_SUCCESS;
             break;
         }
-
         *got_frame = 0;
         av_free(yami_frame);
+        av_free(yami_dec_image);
         return avpkt->size;
     } while (s->decode_status == DECODE_THREAD_RUNING);
 
@@ -400,7 +482,7 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
     }
 
     // process the output frame
-    if (ff_convert_to_frame(avctx, yami_frame, frame) < 0)
+    if (ff_convert_to_frame(avctx, yami_dec_image, frame) < 0)
         av_log(avctx, AV_LOG_VERBOSE, "yami frame convert av_frame failed\n");;
 
     *got_frame = 1;
