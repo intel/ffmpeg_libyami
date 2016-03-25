@@ -297,7 +297,9 @@ int yami_enc_init(AVCodecContext *avctx, const char *mime_type)
     }
     // picture type and bitrate
     encVideoParams.intraPeriod = av_clip(avctx->gop_size, 1, 250);
-    encVideoParams.ipPeriod = !avctx->has_b_frames ? 1 : 3;
+    encVideoParams.ipPeriod = avctx->max_b_frames > 3 ? 1 : 3;
+
+    s->max_inqueue_size = FFMAX(encVideoParams.ipPeriod, ENCODE_QUEUE_SIZE);
     if (s->rcmod){
         if (!strcmp(s->rcmod, "CQP"))
             encVideoParams.rcMode = RATE_CONTROL_CQP;
@@ -396,7 +398,7 @@ int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
 
         while (s->encode_status < ENCODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
             pthread_mutex_lock(&s->in_mutex);
-            if (s->in_queue->size() < ENCODE_QUEUE_SIZE) {
+            if (s->in_queue->size() < s->max_inqueue_size) {
                 s->in_queue->push_back(qframe);
                 av_log(avctx, AV_LOG_VERBOSE, "wakeup encode thread ...\n");
                 pthread_cond_signal(&s->in_cond);
