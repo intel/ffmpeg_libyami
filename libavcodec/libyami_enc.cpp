@@ -297,7 +297,7 @@ int yami_enc_init(AVCodecContext *avctx, const char *mime_type)
     }
     // picture type and bitrate
     encVideoParams.intraPeriod = av_clip(avctx->gop_size, 1, 250);
-    encVideoParams.ipPeriod = avctx->max_b_frames > 3 ? 1 : 3;
+    encVideoParams.ipPeriod = avctx->max_b_frames < 2 ? 1 : 3;
 
     s->max_inqueue_size = FFMAX(encVideoParams.ipPeriod, ENCODE_QUEUE_SIZE);
     if (s->rcmod){
