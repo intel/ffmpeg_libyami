@@ -42,6 +42,7 @@ struct YamiEncContext {
     VideoEncOutputBuffer enc_out_buf;
 
     pthread_t encode_thread_id;
+    int max_inqueue_size;
     std::deque<AVFrame *> *in_queue;
     std::deque<AVFrame *> *out_queue;
     pthread_mutex_t in_mutex;  // mutex for in_queue
