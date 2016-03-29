@@ -96,7 +96,7 @@ static VADisplay ff_vaapi_create_display(void)
     if (!display) {
 #if !HAVE_VAAPI_DRM
         const char *device = NULL;/*FIXME*/
-            // Try to open the device as an X11 display.
+	// Try to open the device as an X11 display.
         Display *x11_display = XOpenDisplay(device);
         if (!x11_display) {
             return NULL;
@@ -107,7 +107,7 @@ static VADisplay ff_vaapi_create_display(void)
             } 
         }
 #else
-        const char *device = "/dev/dri/card0";/*FIXME*/
+        const char *device = "/dev/dri/card0"; /* FIXME */
         // Try to open the device as a DRM path.
         int drm_fd = open(device, O_RDWR);
         if (drm_fd < 0) {
