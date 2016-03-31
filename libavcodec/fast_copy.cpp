@@ -1,10 +1,38 @@
+/*
+ * Copyright (c) 2016 Intel Corporation
+ *     Jun Zhao(jun.zhao@intel.com)
+ *     Zhou Yun(yunx.z.zhou@intel.com)
+ *
+ * This file is part of FFmpeg.
+ *
+ * FFmpeg is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * FFmpeg is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with FFmpeg; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+ */
+
 #include "fast_copy.h"
 #include <smmintrin.h>
 
+/*
+ * Used SSE4 MOVNTDQA instruction improving performance of data copies from 
+ * Uncacheable Speculative Write Combining (USWC) memory to ordinary write back (WB) 
+ * system memory.
+ * https://software.intel.com/en-us/articles/copying-accelerated-video-decode-frame-buffers/
+ */
 void *fast_copy(void *dst, void *src, size_t size)
 {
     char aligned;
-    size_t remain;
+    int remain;
     int i, round;
     __m128i x0, x1, x2, x3, x4, x5, x6, x7;
     __m128i *pDst, *pSrc;
@@ -16,7 +44,7 @@ void *fast_copy(void *dst, void *src, size_t size)
     aligned = (((size_t) dst) | ((size_t) src)) & 0x0F;
 
     if (aligned != 0) {
-        printf("Normal copy from 0x%x to 0x%x\n", src, dst);
+        printf("No data aligned!!!\n");
         return NULL;
     }
 

@@ -51,7 +51,7 @@ typedef struct {
 
 static int ff_yami_decode_thread_init(YamiDecContext *s)
 {
-    int ret = 0; 
+    int ret = 0;
     if (!s)
         return -1;
     if ((ret = pthread_mutex_init(&s->ctx_mutex, NULL)) < 0)
@@ -79,7 +79,7 @@ static int ff_yami_decode_thread_close(YamiDecContext *s)
         pthread_mutex_lock(&s->ctx_mutex);
     }
     pthread_mutex_unlock(&s->ctx_mutex);
-    
+
     pthread_mutex_destroy(&s->in_mutex);
     pthread_cond_destroy(&s->in_cond);
     return 0;
@@ -152,7 +152,7 @@ static void ff_yami_recycle_frame(void *opaque, uint8_t *data)
     AVCodecContext *avctx = (AVCodecContext *)opaque;
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     YamiDecImage *yami_image = (YamiDecImage *)data;
-    if (!s || !s->decoder || !yami_image) // XXX, use shared pointer for s
+    if (!s || !s->decoder || !yami_image)
         return;
     VideoFrameRawData *yami_frame = yami_image->video_raw_data;
     VAImage *va_image = yami_image->va_image;
@@ -181,7 +181,7 @@ static int ff_convert_to_frame(AVCodecContext *avctx, YamiDecImage *from, AVFram
         to->width = avctx->width;
         to->height = avctx->height;
 
-        to->format = AV_PIX_FMT_YAMI; 
+        to->format = AV_PIX_FMT_YAMI;
         to->extended_data = NULL;
 
         to->extended_data = to->data;
@@ -243,11 +243,9 @@ static int ff_convert_to_frame(AVCodecContext *avctx, YamiDecImage *from, AVFram
 
         to->extended_data = to->data;
 
-
         to->buf[0] = av_buffer_create((uint8_t *) from,
                                       sizeof(YamiDecImage),
                                       ff_yami_recycle_frame, avctx, 0);
-
     }
     return 0;
 }
@@ -264,13 +262,13 @@ fill_yami_dec_image(AVCodecContext *avctx, YamiDecImage *yami_dec_image, VideoFr
     yami_frame->height = yami_dec_image->output_frame->crop.height;
     yami_frame->fourcc = yami_dec_image->output_frame->fourcc;
     VADisplay va_display = ff_vaapi_create_display();
-    yami_frame->handle = reinterpret_cast<intptr_t> (va_display);        // planar data has one fd for now, raw data also uses one pointer (+ offset)
+    yami_frame->handle = reinterpret_cast<intptr_t> (va_display);   // planar data has one fd for now, raw data also uses one pointer (+ offset)
     yami_frame->internalID = yami_dec_image->output_frame->surface; // internal identification for image/surface recycle
     yami_frame->timeStamp = yami_dec_image->output_frame->timeStamp;
-    yami_frame->flags = yami_dec_image->output_frame->flags;             //see VIDEO_FRAME_FLAGS_XXX
+    yami_frame->flags = yami_dec_image->output_frame->flags;        //see VIDEO_FRAME_FLAGS_XXX
 
     if (avctx->pix_fmt != AV_PIX_FMT_YAMI) {
-    /*map surface to va_image*/
+        /* map surface to va_image */
         VAStatus status;
         vaSyncSurface(va_display, yami_frame->internalID);
         yami_frame->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
@@ -376,7 +374,7 @@ int yami_dec_init(AVCodecContext *avctx, const char *mime_type)
     av_log(avctx, AV_LOG_ERROR, "pthread libaray must be supported\n");
     return AVERROR(ENOSYS);
 #endif
-    
+
     s->decode_count = 0;
     s->decode_count_yami = 0;
     s->render_count = 0;
@@ -394,7 +392,7 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
     Decode_Status status = RENDER_NO_AVAILABLE_FRAME;
     VideoFrameRawData *yami_frame = NULL;
     YamiDecImage *yami_dec_image =  NULL;
-    int ret;
+    int ret = 0;
     AVFrame *frame = (AVFrame *)data;
 
     av_log(avctx, AV_LOG_VERBOSE, "yami_dec_frame\n");
@@ -510,6 +508,7 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
            s->decode_count_yami, s->decode_count, s->render_count);
 
     return avpkt->size;
+
 fail:
     if (yami_dec_image) {
         if (yami_dec_image->plane_buf)
@@ -531,7 +530,7 @@ fail:
 int yami_dec_close(AVCodecContext *avctx)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
-    
+
     ff_yami_decode_thread_close(s);
     if (s->decoder) {
         s->decoder->stop();
