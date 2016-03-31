@@ -1111,8 +1111,7 @@ check_func_headers(){
             echo "long check_$func(void) { return (long) $func; }"
         done
         echo "int main(void) { return 0; }"
-    ## both C++/C header check goes here, use 'cxx'
-    } | check_ld "cxx" "$@" && enable $funcs && enable_safe $headers
+    } | check_ld "cc" "$@" && enable $funcs && enable_safe $headers
 }
 
 check_class_headers_cpp(){
@@ -1173,15 +1172,14 @@ check_lib_cpp(){
 
 check_pkg_config(){
     log check_pkg_config "$@"
-    ## one component may depend on multiple pkgs
-    allpkgs="$1"
+    pkgandversion="$1"
     pkg="${1%% *}"
     headers="$2"
     funcs="$3"
     shift 3
-    check_cmd $pkg_config --exists --print-errors $allpkgs || return
-    pkg_cflags=$($pkg_config --cflags $pkg_config_flags $allpkgs)
-    pkg_libs=$($pkg_config --libs $pkg_config_flags $allpkgs)
+    check_cmd $pkg_config --exists --print-errors $pkgandversion || return
+    pkg_cflags=$($pkg_config --cflags $pkg_config_flags $pkg)
+    pkg_libs=$($pkg_config --libs $pkg_config_flags $pkg)
     check_func_headers "$headers" "$funcs" $pkg_cflags $pkg_libs "$@" &&
         set_safe "${pkg}_cflags" $pkg_cflags   &&
         set_safe "${pkg}_libs"   $pkg_libs
@@ -1294,14 +1292,6 @@ use_pkg_config(){
 
 require_pkg_config(){
     use_pkg_config "$@" || die "ERROR: $pkg not found using pkg-config$pkg_config_fail_message"
-}
-
-cxx_extralibs_added="no"
-add_cxx_extralibs(){
-    if [ $cxx_extralibs_added = "no" ]; then
-        add_extralibs "-lstdc++ -Wl,--no-as-needed -ldl"
-        cxx_extralibs_added="yes"
-    fi
 }
 
 require_libfreetype(){
@@ -2649,8 +2639,10 @@ libshine_encoder_select="audio_frame_queue"
 libspeex_decoder_deps="libspeex"
 libspeex_encoder_deps="libspeex"
 libspeex_encoder_select="audio_frame_queue"
-libyami_decoder_deps="libyami"
-libyami_encoder_deps="libyami"
+libyami_decoder_deps="libyami pthreads"
+libyami_decoder_extralibs="-lstdc++"
+libyami_encoder_deps="libyami pthreads"
+libyami_encoder_extralibs="-lstdc++"
 libyami_h264_decoder_deps="libyami"
 libyami_h264_decoder_select="libyami_decoder"
 libyami_hevc_decoder_deps="libyami"
@@ -2942,6 +2934,7 @@ zmq_filter_deps="libzmq"
 zoompan_filter_deps="swscale"
 zscale_filter_deps="libzimg"
 yamivpp_filter_deps="libyami"
+yamivpp_filter_extralibs="-lstdc++"
 
 # examples
 avio_reading="avformat avcodec avutil"
@@ -5502,7 +5495,7 @@ enabled libsoxr           && require libsoxr soxr.h soxr_create -lsoxr && LIBSOX
 enabled libssh            && require_pkg_config libssh libssh/sftp.h sftp_init
 enabled libspeex          && require_pkg_config speex speex/speex.h speex_decoder_init -lspeex
 enabled libtesseract      && require_pkg_config tesseract tesseract/capi.h TessBaseAPICreate
-enabled libyami           && require_pkg_config "libyami libva" VideoDecoderHost.h createVideoDecoder && add_cxx_extralibs
+enabled libyami           && require_pkg_config libyami VideoDecoderDefs.h "" -lstdc++
 enabled libtheora         && require libtheora theora/theoraenc.h th_info_init -ltheoraenc -ltheoradec -logg
 enabled libtwolame        && require libtwolame twolame.h twolame_init -ltwolame &&
                              { check_lib twolame.h twolame_encode_buffer_float32_interleaved -ltwolame ||
@@ -6108,8 +6101,6 @@ enabled showspectrum_filter && prepend avfilter_deps "avcodec"
 enabled smartblur_filter    && prepend avfilter_deps "swscale"
 enabled subtitles_filter    && prepend avfilter_deps "avformat avcodec"
 enabled uspp_filter         && prepend avfilter_deps "avcodec"
-enabled yamivpp_filter      && require_pkg_config "libyami libva" VideoPostProcessHost.h createVideoPostProcess && add_cxx_extralibs
-#enabled yamivpp_filter      && require_pkg_config "libyami_vpp"
 
 
 enabled lavfi_indev         && prepend avdevice_deps "avfilter"
