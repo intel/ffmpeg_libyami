@@ -23,7 +23,6 @@
  */
 #include <pthread.h>
 #include <unistd.h>
-#include <assert.h>
 #include <deque>
 
 extern "C" {
@@ -314,7 +313,7 @@ fill_yami_dec_image(AVCodecContext *avctx, YamiDecImage *yami_dec_image, VideoFr
     return 0;
 }
 
-int yami_dec_init(AVCodecContext *avctx, const char *mime_type)
+static int yami_dec_init(AVCodecContext *avctx)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     Decode_Status status;
@@ -336,13 +335,26 @@ int yami_dec_init(AVCodecContext *avctx, const char *mime_type)
     }
     VADisplay va_display = ff_vaapi_create_display();
     if (!va_display) {
-        av_log(avctx, AV_LOG_ERROR, "\nfail to create %s display\n", mime_type);
+        av_log(avctx, AV_LOG_ERROR, "\nfail to create display\n");
         return AVERROR_BUG;
     }
     av_log(avctx, AV_LOG_VERBOSE, "yami_dec_init\n");
-    s->decoder = createVideoDecoder(mime_type);
+    switch (avctx->codec_id) {
+    case AV_CODEC_ID_H264:
+        s->decoder = createVideoDecoder(YAMI_MIME_H264);
+        break;
+    case AV_CODEC_ID_HEVC:
+        s->decoder = createVideoDecoder(YAMI_MIME_HEVC);
+        break;
+    case AV_CODEC_ID_VP8:
+        s->decoder = createVideoDecoder(YAMI_MIME_VP8);
+        break;
+    default:
+        s->decoder = NULL;
+        break;
+    }
     if (!s->decoder) {
-        av_log(avctx, AV_LOG_ERROR, "fail to create %s decoder\n", mime_type);
+        av_log(avctx, AV_LOG_ERROR, "fail to create decoder\n");
         return AVERROR_BUG;
     }
 
@@ -382,7 +394,7 @@ int yami_dec_init(AVCodecContext *avctx, const char *mime_type)
     return 0;
 }
 
-int yami_dec_frame(AVCodecContext *avctx, void *data,
+static int yami_dec_frame(AVCodecContext *avctx, void *data,
                    int *got_frame, AVPacket *avpkt)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
@@ -502,7 +514,6 @@ int yami_dec_frame(AVCodecContext *avctx, void *data,
     *got_frame = 1;
 
     s->render_count++;
-    assert(data->buf[0] || !*got_frame);
     av_log(avctx, AV_LOG_VERBOSE,
            "decode_count_yami=%d, decode_count=%d, render_count=%d\n",
            s->decode_count_yami, s->decode_count, s->render_count);
@@ -527,7 +538,7 @@ fail:
     return ret;
 }
 
-int yami_dec_close(AVCodecContext *avctx)
+static int yami_dec_close(AVCodecContext *avctx)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
 
@@ -551,22 +562,6 @@ int yami_dec_close(AVCodecContext *avctx)
 }
 
 #if CONFIG_LIBYAMI_H264_DECODER
-static av_cold int yami_dec_h264_init(AVCodecContext *avctx)
-{
-    return yami_dec_init(avctx, YAMI_MIME_H264);
-}
-
-static int yami_dec_h264_frame(AVCodecContext *avctx, void *data,
-                               int *got_frame, AVPacket *avpkt)
-{
-    return yami_dec_frame(avctx, data,got_frame, avpkt);
-}
-
-static av_cold int yami_dec_h264_close(AVCodecContext *avctx)
-{
-    return yami_dec_close(avctx);
-}
-
 AVCodec ff_libyami_h264_decoder = {
     .name                  = "libyami_h264",
     .long_name             = NULL_IF_CONFIG_SMALL("libyami H.264 decoder"),
@@ -592,33 +587,17 @@ AVCodec ff_libyami_h264_decoder = {
     .update_thread_context = NULL,
     .defaults              = NULL,
     .init_static_data      = NULL,
-    .init                  = yami_dec_h264_init,
+    .init                  = yami_dec_init,
     .encode_sub            = NULL,
     .encode2               = NULL,
-    .decode                = yami_dec_h264_frame,
-    .close                 = yami_dec_h264_close,
+    .decode                = yami_dec_frame,
+    .close                 = yami_dec_close,
     .flush                 = NULL, // TODO, add it
     .caps_internal         = FF_CODEC_CAP_SETS_PKT_DTS
 };
 #endif
 
 #if CONFIG_LIBYAMI_HEVC_DECODER
-static av_cold int yami_dec_hevc_init(AVCodecContext *avctx)
-{
-    return yami_dec_init(avctx, YAMI_MIME_H265);
-}
-
-static int yami_dec_hevc_frame(AVCodecContext *avctx, void *data,
-                               int *got_frame, AVPacket *avpkt)
-{
-    return yami_dec_frame(avctx, data, got_frame, avpkt);
-}
-
-static av_cold int yami_dec_hevc_close(AVCodecContext *avctx)
-{
-    return yami_dec_close(avctx);
-}
-
 AVCodec ff_libyami_hevc_decoder = {
     .name                  = "libyami_hevc",
     .long_name             = NULL_IF_CONFIG_SMALL("libyami H.265 decoder"),
@@ -644,33 +623,17 @@ AVCodec ff_libyami_hevc_decoder = {
     .update_thread_context = NULL,
     .defaults              = NULL,
     .init_static_data      = NULL,
-    .init                  = yami_dec_hevc_init,
+    .init                  = yami_dec_init,
     .encode_sub            = NULL,
     .encode2               = NULL,
-    .decode                = yami_dec_hevc_frame,
-    .close                 = yami_dec_hevc_close,
+    .decode                = yami_dec_frame,
+    .close                 = yami_dec_close,
     .flush                 = NULL, // TODO, add it
     .caps_internal         = FF_CODEC_CAP_SETS_PKT_DTS
 };
 #endif
 
 #if CONFIG_LIBYAMI_VP8_DECODER
-static av_cold int yami_dec_vp8_init(AVCodecContext *avctx)
-{
-    return yami_dec_init(avctx, YAMI_MIME_VP8);
-}
-
-static int yami_dec_vp8_frame(AVCodecContext *avctx, void *data,
-                               int *got_frame, AVPacket *avpkt)
-{
-    return yami_dec_frame(avctx, data,got_frame, avpkt);
-}
-
-static av_cold int yami_dec_vp8_close(AVCodecContext *avctx)
-{
-    return yami_dec_close(avctx);
-}
-
 AVCodec ff_libyami_vp8_decoder = {
     .name                  = "libyami_vp8",
     .long_name             = NULL_IF_CONFIG_SMALL("libyami VP8 decoder"),
@@ -696,11 +659,11 @@ AVCodec ff_libyami_vp8_decoder = {
     .update_thread_context = NULL,
     .defaults              = NULL,
     .init_static_data      = NULL,
-    .init                  = yami_dec_vp8_init,
+    .init                  = yami_dec_init,
     .encode_sub            = NULL,
     .encode2               = NULL,
-    .decode                = yami_dec_vp8_frame,
-    .close                 = yami_dec_vp8_close,
+    .decode                = yami_dec_frame,
+    .close                 = yami_dec_close,
     .flush                 = NULL, // TODO, add it
     .caps_internal         = FF_CODEC_CAP_SETS_PKT_DTS
 };
