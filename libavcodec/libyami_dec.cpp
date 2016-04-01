@@ -344,7 +344,7 @@ static int yami_dec_init(AVCodecContext *avctx)
         s->decoder = createVideoDecoder(YAMI_MIME_H264);
         break;
     case AV_CODEC_ID_HEVC:
-        s->decoder = createVideoDecoder(YAMI_MIME_HEVC);
+        s->decoder = createVideoDecoder(YAMI_MIME_H265);
         break;
     case AV_CODEC_ID_VP8:
         s->decoder = createVideoDecoder(YAMI_MIME_VP8);
