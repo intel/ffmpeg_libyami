@@ -24,7 +24,6 @@
 
 #include <pthread.h>
 #include <unistd.h>
-#include <assert.h>
 #include <deque>
 
 extern "C" {
@@ -247,7 +246,7 @@ static bool ff_out_buffer_destroy(VideoEncOutputBuffer *enc_out_buf)
     return true;
 }
 
-int yami_enc_init(AVCodecContext *avctx, const char *mime_type)
+static int yami_enc_init(AVCodecContext *avctx)
 {
     YamiEncContext *s = (YamiEncContext *) avctx->priv_data;
     Encode_Status status;
@@ -268,12 +267,30 @@ int yami_enc_init(AVCodecContext *avctx, const char *mime_type)
         avctx->pix_fmt      = (AVPixelFormat)ret;
     }
 
+    if (avctx->codec_id == AV_CODEC_ID_H264 && avctx->width % 2 != 0
+            || avctx->height % 2 != 0) {
+        av_log(avctx, AV_LOG_ERROR,
+                "width or height not divisible by 2 (%dx%d) .\n", avctx->width,
+                avctx->height);
+        return AVERROR(EINVAL);
+    }
     av_log(avctx, AV_LOG_VERBOSE, "yami_enc_init\n");
-    s->encoder = createVideoEncoder(mime_type);
+    switch (avctx->codec_id) {
+    case AV_CODEC_ID_H264:
+        s->encoder = createVideoEncoder(YAMI_MIME_H264);
+        break;
+    case AV_CODEC_ID_VP8:
+        s->encoder = createVideoEncoder(YAMI_MIME_VP8);
+        break;
+    default:
+        s->encoder = NULL;
+        break;
+    }
     if (!s->encoder) {
-        av_log(avctx, AV_LOG_ERROR, "fail to create libyami %s encoder\n", mime_type);
+        av_log(avctx, AV_LOG_ERROR, "fail to create libyami encoder\n");
         return AVERROR_BUG;
     }
+
 
     NativeDisplay native_display;
     native_display.type = NATIVE_DISPLAY_VA;
@@ -335,7 +352,7 @@ int yami_enc_init(AVCodecContext *avctx, const char *mime_type)
     encVideoParams.size = sizeof(VideoParamsCommon);
     s->encoder->setParameters(VideoParamsTypeCommon, &encVideoParams);
 
-    if (!strcmp(mime_type, YAMI_MIME_H264)) {
+    if (avctx->codec_id == AV_CODEC_ID_H264) {
         VideoConfigAVCStreamFormat streamFormat;
         streamFormat.size = sizeof(VideoConfigAVCStreamFormat);
         streamFormat.streamFormat = AVC_STREAM_FORMAT_ANNEXB;
@@ -376,7 +393,7 @@ int yami_enc_init(AVCodecContext *avctx, const char *mime_type)
     return 0;
 }
 
-int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
+static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
                    const AVFrame *frame, int *got_packet)
 {
     YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
@@ -469,7 +486,7 @@ int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     return 0;
 }
 
-int yami_enc_close(AVCodecContext *avctx)
+static int yami_enc_close(AVCodecContext *avctx)
 {
     YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
     ff_out_buffer_destroy(&s->enc_out_buf);
@@ -502,34 +519,6 @@ int yami_enc_close(AVCodecContext *avctx)
 }
 
 #if CONFIG_LIBYAMI_H264_ENCODER
-static av_cold int yami_enc_h264_init(AVCodecContext *avctx)
-{
-    if (avctx->width%2 != 0 || avctx->height%2 != 0) {
-        av_log(avctx, AV_LOG_ERROR,
-                      "width or height not divisible by 2 (%dx%d) .\n",
-                       avctx->width, avctx->height);
-        return AVERROR(EINVAL);
-    }
-    return yami_enc_init(avctx, YAMI_MIME_H264);
-}
-
-static int yami_enc_h264_frame(AVCodecContext *avctx, AVPacket *pkt,
-                               const AVFrame *frame, int *got_packet)
-{
-    return yami_enc_frame(avctx, pkt, frame, got_packet);
-}
-
-static av_cold int yami_enc_h264_close(AVCodecContext *avctx)
-{
-    return yami_enc_close(avctx);
-}
-
-static const AVCodecDefault yami_enc_264_defaults[] = {
-    { (uint8_t *)("b"),                (uint8_t *)("2M") },
-    { (uint8_t *)("g"),                (uint8_t *)("30") },
-    { NULL },
-};
-
 #define OFFSET(x) offsetof(YamiEncContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption h264_options[] = {
@@ -537,8 +526,6 @@ static const AVOption h264_options[] = {
     { "level",         "Specify level (as defined by Annex A)", OFFSET(level), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
     { "rcmode",        "rate control mode", OFFSET(rcmod), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
     { "qp",            "Constant quantization parameter rate control method",OFFSET(cqp),        AV_OPT_TYPE_INT,    { .i64 = 26 }, 1, 52, VE },
-//    { "cavlc",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "coder" },
-//    { "cabac",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "coder" },
     { NULL },
 };
 
@@ -572,40 +559,18 @@ AVCodec ff_libyami_h264_encoder = {
     .next                  = NULL,
     .init_thread_copy      = NULL,
     .update_thread_context = NULL,
-    .defaults              = yami_enc_264_defaults,
+    .defaults              = NULL,
     .init_static_data      = NULL,
-    .init                  = yami_enc_h264_init,
+    .init                  = yami_enc_init,
     .encode_sub            = NULL,
-    .encode2               = yami_enc_h264_frame,
+    .encode2               = yami_enc_frame,
     .decode                = NULL,
-    .close                 = yami_enc_h264_close,
+    .close                 = yami_enc_close,
     .flush                 = NULL, // TODO, add it
 };
 #endif
 
 #if CONFIG_LIBYAMI_VP8_ENCODER
-static av_cold int yami_enc_vp8_init(AVCodecContext *avctx)
-{
-    return yami_enc_init(avctx, YAMI_MIME_VP8);
-}
-
-static int yami_enc_vp8_frame(AVCodecContext *avctx, AVPacket *pkt,
-                               const AVFrame *frame, int *got_packet)
-{
-    return yami_enc_frame(avctx, pkt, frame, got_packet);
-}
-
-static av_cold int yami_enc_vp8_close(AVCodecContext *avctx)
-{
-    return yami_enc_close(avctx);
-}
-
-static const AVCodecDefault yami_enc_vp8_defaults[] = {
-    { (uint8_t *)("b"),                (uint8_t *)("2M") },
-    { (uint8_t *)("g"),                (uint8_t *)("30") },
-    { NULL },
-};
-
 #define OFFSET(x) offsetof(YamiEncContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption vp8_options[] = {
@@ -613,8 +578,6 @@ static const AVOption vp8_options[] = {
     { "level",         "Specify level (as defined by Annex A)", OFFSET(level), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
     { "rcmode",        "rate control mode", OFFSET(rcmod), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
     { "qp",            "Constant quantization parameter rate control method",OFFSET(cqp),        AV_OPT_TYPE_INT,    { .i64 = 26 }, 1, 52, VE },
-//    { "cavlc",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 0 },  INT_MIN, INT_MAX, VE, "coder" },
-//    { "cabac",            NULL, 0, AV_OPT_TYPE_CONST, { .i64 = 1 },  INT_MIN, INT_MAX, VE, "coder" },
     { NULL },
 };
 
@@ -648,13 +611,13 @@ AVCodec ff_libyami_vp8_encoder = {
     .next                  = NULL,
     .init_thread_copy      = NULL,
     .update_thread_context = NULL,
-    .defaults              = yami_enc_vp8_defaults,
+    .defaults              = NULL,
     .init_static_data      = NULL,
-    .init                  = yami_enc_vp8_init,
+    .init                  = yami_enc_init,
     .encode_sub            = NULL,
-    .encode2               = yami_enc_vp8_frame,
+    .encode2               = yami_enc_frame,
     .decode                = NULL,
-    .close                 = yami_enc_vp8_close,
+    .close                 = yami_enc_close,
     .flush                 = NULL, // TODO, add it
 };
 #endif
