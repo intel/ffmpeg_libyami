@@ -77,7 +77,7 @@ static int ff_yami_encode_thread_close(YamiEncContext *s)
     return 0;
 }
 
-static int av_convert_to_yami(AVCodecContext *avctx, AVFrame *from, VideoFrameRawData *to)
+static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, VideoFrameRawData *to)
 {
     uint32_t src_linesize[4];
     const uint8_t *src_data[4];
