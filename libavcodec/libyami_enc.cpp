@@ -171,7 +171,7 @@ static void *ff_yami_encode_thread(void *arg)
         Encode_Status status;
         if (frame->format != AV_PIX_FMT_YAMI) { /* non zero-copy mode */
             in_buffer = (VideoFrameRawData *)av_mallocz(sizeof(VideoFrameRawData));
-            if (av_convert_to_yami(avctx, frame, in_buffer) < 0)
+            if (ff_convert_to_yami(avctx, frame, in_buffer) < 0)
                 av_log(avctx, AV_LOG_ERROR,
                    "av_convert_to_yami convert frame failed\n");
             /* handle decoder busy case */
@@ -468,7 +468,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     if (!s->out_queue->empty()) {
         AVFrame *qframe = s->out_queue->front();
         if (qframe) {
-            pkt->pts = qframe->pts;
+            pkt->pts = pkt->dts = qframe->pts;
             av_frame_free(&qframe);
         }
         s->out_queue->pop_front();
