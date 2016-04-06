@@ -3033,11 +3033,8 @@ static int transcode_init(void)
 #endif
 
 #if CONFIG_LIBYAMI
-            if (ost && ist && 0 == strncmp(ost->enc_ctx->codec->name, "libyami", strlen("libyami")) &&
-                0 == strncmp(ist->dec_ctx->codec->name, "libyami", strlen("libyami"))) {
-                if (yami_transcode_init(ost))
-                    exit_program(1);
-            }
+            if (yami_transcode_init(ist, ost))
+                exit_program(1);
 #endif
             if (!ost->filter &&
                 (enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO ||
@@ -3049,15 +3046,6 @@ static int transcode_init(void)
                         exit_program(1);
                     }
             }
-
-#if CONFIG_LIBYAMI
-            if (ost && ist && 0 == strncmp(ost->enc_ctx->codec->name, "libyami", strlen("libyami")) &&
-                0 == strncmp(ist->dec_ctx->codec->name, "libyami", strlen("libyami"))) {
-                if (yami_filter_init(ost, filtergraphs[i]))
-                    exit_program(1);
-
-            }
-#endif
 
             if (enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO) {
                 if (!ost->frame_rate.num)
