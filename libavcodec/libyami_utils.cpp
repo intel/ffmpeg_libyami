@@ -191,7 +191,7 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
 {
     VASurfaceID surface = (VASurfaceID)frame->surface;
     VAImage image;
-
+    VAStatus status;
     uint32_t src_linesize[4] = { 0 };
     uint32_t dest_linesize[4] = { 0 };
     const uint8_t *src_data[4];
@@ -199,9 +199,22 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
 
     VADisplay m_vaDisplay = ff_vaapi_create_display();
 
-    VAStatus status = vaDeriveImage(m_vaDisplay, surface, &image);
-    if (!ff_check_vaapi_status(status, "vaDeriveImage"))
-        return false;
+    if (out->format == AV_PIX_FMT_NV12) {
+        status = vaDeriveImage(m_vaDisplay, surface, &image);
+        if (!ff_check_vaapi_status(status, "vaDeriveImage"))
+            return false;
+    } else {
+        VAImageFormat image_format;
+        image_format.fourcc = VA_FOURCC_I420;
+        image_format.byte_order = 1;
+        image_format.bits_per_pixel = 12;
+        status = vaCreateImage(m_vaDisplay, &image_format, frame->crop.width, frame->crop.height, &image);
+        if (!ff_check_vaapi_status(status, "vaCreateImage"))
+            return false;
+        status = vaGetImage(m_vaDisplay, surface, 0, 0, out->width, out->height, image.image_id);
+        if (!ff_check_vaapi_status(status, "vaGetImage"))
+            return false;
+    }
 
     uint8_t *buf = NULL;
     status = vaMapBuffer(m_vaDisplay, image.buf, (void**)&buf);
