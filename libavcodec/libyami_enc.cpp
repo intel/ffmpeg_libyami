@@ -89,6 +89,8 @@ static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *t
         to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, VA_FOURCC_NV12, avctx->width, avctx->height);
         ff_vaapi_load_image(to->output_frame, from);
     }
+    to->va_display = ff_vaapi_create_display();
+    from->data[3] = reinterpret_cast<uint8_t *>(to);
     return 0;
 }
 
@@ -123,29 +125,23 @@ static void *ff_yami_encode_thread(void *arg)
 
         // encode one input in_buffer
         Encode_Status status;
+        YamiImage *yami_image = NULL;
         if (frame->format != AV_PIX_FMT_YAMI) { /* non zero-copy mode */
-            YamiImage *yami_image = (YamiImage *)av_mallocz(sizeof(YamiImage));
+            yami_image = (YamiImage *)av_mallocz(sizeof(YamiImage));
             if (ff_convert_to_yami(avctx, frame, yami_image) < 0)
                 av_log(avctx, AV_LOG_ERROR,
                    "av_convert_to_yami convert frame failed\n");
             /* handle decoder busy case */
-            do {
-                 status = s->encoder->encode(yami_image->output_frame);
-            } while (status == ENCODE_IS_BUSY);
-
-            av_log(avctx, AV_LOG_VERBOSE, "encode() status=%d, encode_count_yami=%d\n", status, s->encode_count_yami);
-            av_free(yami_image);
         } else { /* zero-copy mode */
-            YamiImage *yami_image;
             yami_image = (YamiImage *)frame->data[3];
-
-            /* handle decoder busy case */
-            do {
-                 status = s->encoder->encode(yami_image->output_frame);
-            } while (status == ENCODE_IS_BUSY);
-
-            av_log(avctx, AV_LOG_VERBOSE, "encode() status=%d, encode_count_yami=%d\n", status, s->encode_count_yami);
         }
+        /* handle decoder busy case */
+        do {
+             status = s->encoder->encode(yami_image->output_frame);
+        } while (status == ENCODE_IS_BUSY);
+
+        av_log(avctx, AV_LOG_VERBOSE, "encode() status=%d, encode_count_yami=%d\n", status, s->encode_count_yami);
+
 
         if (status < 0) {
             av_log(avctx, AV_LOG_ERROR,
@@ -409,6 +405,13 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
         AVFrame *qframe = s->out_queue->front();
         if (qframe) {
             pkt->pts = pkt->dts = qframe->pts;
+            if (qframe->format != AV_PIX_FMT_YAMI) {
+                YamiImage *yami_image = (YamiImage *)qframe->data[3];
+
+                ff_vaapi_delete_surface(yami_image->output_frame);
+                yami_image->output_frame.reset();
+                av_free(yami_image);
+            };
             av_frame_free(&qframe);
         }
         s->out_queue->pop_front();
