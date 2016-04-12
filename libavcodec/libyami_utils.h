@@ -37,7 +37,16 @@
 #define VA_FOURCC_NV12 VA_FOURCC('N','V','1','2')
 #endif
 
-VADisplay ff_vaapi_create_display(void);
+typedef struct {
+    SharedPtr<VideoFrame> output_frame;
+    VADisplay va_display;
+/*if map the output_frame to buffer will use follow value*/
+}YamiImage;
 
+VADisplay ff_vaapi_create_display(void);
+SharedPtr<VideoFrame> ff_vaapi_create_surface(uint32_t rt_fmt, int pix_fmt, uint32_t w, uint32_t h);
+bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in);
+bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out);
+inline bool ff_check_vaapi_status(VAStatus status, const char *msg);
 
 #endif /* LIBAVCODEC_LIBYAMI_UTILS_H_ */

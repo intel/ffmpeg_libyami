@@ -77,63 +77,18 @@ static int ff_yami_encode_thread_close(YamiEncContext *s)
     return 0;
 }
 
-static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, VideoFrameRawData *to)
+static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *to)
 {
-    uint32_t src_linesize[4];
-    const uint8_t *src_data[4];
-    YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
-
-    uint8_t *dst_data[4];
-
     if (from->pict_type == AV_PICTURE_TYPE_I)
-        to->flags |= VIDEO_FRAME_FLAGS_KEY;
-
-    uint8_t *yamidata = reinterpret_cast<uint8_t *>(s->enc_frame_buf);
+        to->output_frame->flags |= VIDEO_FRAME_FLAGS_KEY;
     
-    if (avctx->pix_fmt == AV_PIX_FMT_YUV420P){
-        to->pitch[0] = avctx->width;
-        to->pitch[1] = (to->pitch[0] + 1) >> 1;
-        to->pitch[2] = (to->pitch[0] + 1) >> 1;
-        
-        src_linesize[0] = from->linesize[0];
-        src_linesize[1] = from->linesize[1];
-        src_linesize[2] = from->linesize[2];
-        
-        dst_data[0] = yamidata;
-        dst_data[1] = yamidata + to->pitch[0] * avctx->height;
-        dst_data[2] = dst_data[1] + to->pitch[1] * ((avctx->height + 1) >> 1);
-        
-        src_data[0] = from->data[0];
-        src_data[1] = from->data[1];
-        src_data[2] = from->data[2];
+    if (avctx->pix_fmt == AV_PIX_FMT_YUV420P) {
+        to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, VA_FOURCC_I420, avctx->width, avctx->height);
+        ff_vaapi_load_image(to->output_frame, from);
     } else if (avctx->pix_fmt == AV_PIX_FMT_NV12){
-        to->pitch[0] = avctx->width;
-        to->pitch[1] = avctx->width;
-        
-        src_linesize[0] = from->linesize[0];
-        src_linesize[1] = from->linesize[1];
-        
-        dst_data[0] = yamidata;
-        dst_data[1] = yamidata + to->pitch[0] * avctx->height;
-        
-        src_data[0] = from->data[0];
-        src_data[1] = from->data[1];
-        src_data[2] = from->data[2];
-
+        to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, VA_FOURCC_NV12, avctx->width, avctx->height);
+        ff_vaapi_load_image(to->output_frame, from);
     }
-
-    av_image_copy(dst_data, (int *)to->pitch, src_data,
-                  (int *)src_linesize, avctx->pix_fmt, avctx->width,
-                  avctx->height);
-
-    to->handle = reinterpret_cast<intptr_t>(yamidata);
-    to->width = avctx->width;
-    to->height = avctx->height;
-    to->fourcc = avctx->pix_fmt == AV_PIX_FMT_YUV420P ? VA_FOURCC_I420 : VA_FOURCC_NV12;
-    to->memoryType = VIDEO_DATA_MEMORY_TYPE_RAW_POINTER;
-    to->offset[0] = 0;
-    to->offset[1] = to->pitch[0] * avctx->height;
-    to->offset[2] = to->offset[1] + to->pitch[1] * ((avctx->height + 1) >> 1);
     return 0;
 }
 
@@ -144,7 +99,6 @@ static void *ff_yami_encode_thread(void *arg)
 
     while (1) {
         AVFrame *frame;
-        VideoFrameRawData *in_buffer = NULL;
         // deque one input buffer
         av_log(avctx, AV_LOG_VERBOSE, "encode thread runs one cycle start ... \n");
         pthread_mutex_lock(&s->in_mutex);
@@ -170,38 +124,24 @@ static void *ff_yami_encode_thread(void *arg)
         // encode one input in_buffer
         Encode_Status status;
         if (frame->format != AV_PIX_FMT_YAMI) { /* non zero-copy mode */
-            in_buffer = (VideoFrameRawData *)av_mallocz(sizeof(VideoFrameRawData));
-            if (ff_convert_to_yami(avctx, frame, in_buffer) < 0)
+            YamiImage *yami_image = (YamiImage *)av_mallocz(sizeof(YamiImage));
+            if (ff_convert_to_yami(avctx, frame, yami_image) < 0)
                 av_log(avctx, AV_LOG_ERROR,
                    "av_convert_to_yami convert frame failed\n");
             /* handle decoder busy case */
             do {
-                 status = s->encoder->encode(in_buffer);
+                 status = s->encoder->encode(yami_image->output_frame);
             } while (status == ENCODE_IS_BUSY);
 
             av_log(avctx, AV_LOG_VERBOSE, "encode() status=%d, encode_count_yami=%d\n", status, s->encode_count_yami);
-            av_free(in_buffer);
+            av_free(yami_image);
         } else { /* zero-copy mode */
-            SharedPtr < VideoFrame > yami_frame;
-            in_buffer = (VideoFrameRawData *)frame->data[3];
-
-            if (frame) {
-                yami_frame.reset(new VideoFrame);
-                yami_frame->surface = (intptr_t)in_buffer->internalID; /* XXX: get decoded surface */
-                yami_frame->timeStamp = in_buffer->timeStamp;
-                yami_frame->crop.x = 0;
-                yami_frame->crop.y = 0;
-                yami_frame->crop.width = avctx->width;
-                yami_frame->crop.height = avctx->height;
-                yami_frame->flags = 0;
-                if (frame->pict_type == AV_PICTURE_TYPE_I)
-                    in_buffer->flags |= VIDEO_FRAME_FLAGS_KEY;
-
-            }
+            YamiImage *yami_image;
+            yami_image = (YamiImage *)frame->data[3];
 
             /* handle decoder busy case */
             do {
-                 status = s->encoder->encode(yami_frame);
+                 status = s->encoder->encode(yami_image->output_frame);
             } while (status == ENCODE_IS_BUSY);
 
             av_log(avctx, AV_LOG_VERBOSE, "encode() status=%d, encode_count_yami=%d\n", status, s->encode_count_yami);
