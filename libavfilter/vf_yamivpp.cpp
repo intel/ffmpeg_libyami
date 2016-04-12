@@ -42,6 +42,7 @@ extern "C" {
 #include "video.h"
 }
 #include "VideoPostProcessHost.h"
+#include "libavcodec/libyami_utils.h"
 
 using namespace YamiMediaCodec;
 
@@ -88,52 +89,6 @@ typedef struct {
 #if HAVE_VAAPI_X11
 #include <X11/Xlib.h>
 #endif
-
-static VADisplay ff_vaapi_create_display(void)
-{
-    static VADisplay display = NULL;
-    
-    if (!display) {
-#if !HAVE_VAAPI_DRM
-        const char *device = NULL;/*FIXME*/
-	// Try to open the device as an X11 display.
-        Display *x11_display = XOpenDisplay(device);
-        if (!x11_display) {
-            return NULL;
-        } else {
-            display = vaGetDisplay(x11_display);
-            if (!display) {
-                XCloseDisplay(x11_display);
-            } 
-        }
-#else
-        const char *device = "/dev/dri/card0"; /* FIXME */
-        // Try to open the device as a DRM path.
-        int drm_fd = open(device, O_RDWR);
-        if (drm_fd < 0) {
-            return NULL;
-        } else {
-            display = vaGetDisplayDRM(drm_fd);
-            if(!display) 
-                close(drm_fd);
-        }    
-#endif
-        if (!display)
-            return NULL;
-        int majorVersion, minorVersion;
-        VAStatus vaStatus = vaInitialize(display, &majorVersion, &minorVersion);
-        if (vaStatus != VA_STATUS_SUCCESS) {
-#if HAVE_VAAPI_DRM
-            close(drm_fd);
-#endif
-            display = NULL;
-            return NULL;
-        }
-        return display;
-    } else {
-        return display;
-    }
-}
 
 #define OFFSET(x) offsetof(YamivppContext, x)
 #define FLAGS AV_OPT_FLAG_FILTERING_PARAM|AV_OPT_FLAG_VIDEO_PARAM
@@ -222,155 +177,6 @@ static int config_props(AVFilterLink *inlink)
     return 0;
 }
 
-static inline bool ff_check_vaapi_status(VAStatus status, const char *msg)
-{
-    if (status != VA_STATUS_SUCCESS) {
-        av_log(NULL, AV_LOG_ERROR, "%s: %s", msg, vaErrorStr(status));
-        return false;
-    }
-    return true;
-}
-
-static SharedPtr<VideoFrame> ff_vaapi_create_surface(uint32_t rt_fmt, int pix_fmt, uint32_t w, uint32_t h)
-{
-    SharedPtr<VideoFrame> frame;
-    VAStatus status;
-    VASurfaceID id;
-    VASurfaceAttrib attrib;
-
-    VADisplay m_vaDisplay = ff_vaapi_create_display();
-
-    attrib.type =  VASurfaceAttribPixelFormat;
-    attrib.flags = VA_SURFACE_ATTRIB_SETTABLE;
-    attrib.value.type = VAGenericValueTypeInteger;
-    attrib.value.value.i = pix_fmt;
-
-    status = vaCreateSurfaces(m_vaDisplay, rt_fmt, w, h, &id, 1, &attrib, 1);
-    if (!ff_check_vaapi_status(status, "vaCreateSurfaces"))
-        return frame;
-    frame.reset(new VideoFrame);
-    frame->surface = (intptr_t)id;
-    frame->crop.x = frame->crop.y = 0;
-    frame->crop.width = w;
-    frame->crop.height = h;
-
-    return frame;
-}
-
-static bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in)
-{
-    VASurfaceID surface = (VASurfaceID)frame->surface;
-    VAImage image;
-
-    uint32_t dest_linesize[4] = {0};
-    const uint8_t *src_data[4];
-    uint8_t *dest_data[4];
-
-    VADisplay m_vaDisplay = ff_vaapi_create_display();
-
-    VAStatus status = vaDeriveImage(m_vaDisplay, surface, &image);
-    if (!ff_check_vaapi_status(status, "vaDeriveImage"))
-        return false;
-
-    uint8_t *buf = NULL;
-    status = vaMapBuffer(m_vaDisplay, image.buf, (void**)&buf);
-    if (!ff_check_vaapi_status(status, "vaMapBuffer")) {
-        vaDestroyImage(m_vaDisplay, image.image_id);
-        return false;
-    }
-
-    src_data[0] = in->data[0];
-    src_data[1] = in->data[1];
-    src_data[2] = in->data[2];
-
-    dest_data[0] = buf + image.offsets[0];
-    dest_data[1] = buf + image.offsets[1];
-    dest_data[2] = buf + image.offsets[2];
-
-    if (in->format == AV_PIX_FMT_YUV420P) {
-        dest_linesize[0] = image.pitches[0];
-        dest_linesize[1] = image.pitches[1];
-        dest_linesize[2] = image.pitches[2];
-    } else if (in->format == AV_PIX_FMT_NV12) {
-        dest_linesize[0] = image.pitches[0];
-        dest_linesize[1] = image.pitches[1];
-        dest_linesize[2] = image.pitches[2];
-    }
-
-    av_image_copy(dest_data, (int *)dest_linesize, src_data,
-                  (int *)in->linesize, (AVPixelFormat)in->format,
-                  in->width, in->height);
-
-    ff_check_vaapi_status(vaUnmapBuffer(m_vaDisplay, image.buf), "vaUnmapBuffer");
-    ff_check_vaapi_status(vaDestroyImage(m_vaDisplay, image.image_id), "vaDestroyImage");
-    return true;
-}
-
-static bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
-{
-    VASurfaceID surface = (VASurfaceID)frame->surface;
-    VAImage image;
-
-    uint32_t src_linesize[4] = { 0 };
-    uint32_t dest_linesize[4] = { 0 };
-    const uint8_t *src_data[4];
-    uint8_t *dest_data[4];
-
-    VADisplay m_vaDisplay = ff_vaapi_create_display();
-
-    VAStatus status = vaDeriveImage(m_vaDisplay, surface, &image);
-    if (!ff_check_vaapi_status(status, "vaDeriveImage"))
-        return false;
-
-    uint8_t *buf = NULL;
-    status = vaMapBuffer(m_vaDisplay, image.buf, (void**)&buf);
-    if (!ff_check_vaapi_status(status, "vaMapBuffer")) {
-        vaDestroyImage(m_vaDisplay, image.image_id);
-        return false;
-    }
-
-    dest_data[0] = out->data[0];
-    dest_data[1] = out->data[1];
-    dest_data[2] = out->data[2];
-
-    src_data[0] = buf + image.offsets[0];
-    src_data[1] = buf + image.offsets[1];
-    src_data[2] = buf + image.offsets[2];
-
-    if (out->format == AV_PIX_FMT_YUV420P) {
-        dest_linesize[0] = out->linesize[0];
-        dest_linesize[1] = out->linesize[1];
-        dest_linesize[2] = out->linesize[2];
-
-        src_linesize[0] = image.pitches[0];
-        src_linesize[1] = image.pitches[1];
-        src_linesize[2] = image.pitches[2];
-    } else if (out->format == AV_PIX_FMT_NV12) {
-        dest_linesize[0] = out->linesize[0];
-        dest_linesize[1] = out->linesize[1];
-        dest_linesize[2] = out->linesize[2];
-
-        src_linesize[0] = image.pitches[0];
-        src_linesize[1] = image.pitches[1];
-        src_linesize[2] = image.pitches[2];
-    }
-
-    /* 
-     * TODO:
-     * Need to improving performance of data copies from Uncacheable 
-     * Speculative Write Combining(USWC) memory to ordinary Write Back(WB) 
-     * system memory
-     * https://software.intel.com/en-us/articles/copying-accelerated-video-decode-frame-buffers/
-     */
-    av_image_copy(dest_data, (int *)dest_linesize, src_data,
-                  (int *)src_linesize, (AVPixelFormat)out->format,
-                  out->width, out->height);
-
-    ff_check_vaapi_status(vaUnmapBuffer(m_vaDisplay, image.buf), "vaUnmapBuffer");
-    ff_check_vaapi_status(vaDestroyImage(m_vaDisplay, image.image_id), "vaDestroyImage");
-    return true;
-}
-
 static int map_fmt_to_fourcc(int fmt)
 {
     int fourcc = VA_FOURCC_I420;
@@ -410,25 +216,10 @@ static SharedPtr<VideoFrame> ff_vaapi_create_nopipeline_surface(int fmt, uint32_
 
 static SharedPtr<VideoFrame> ff_vaapi_create_pipeline_src_surface(int fmt, uint32_t w, uint32_t h, AVFrame *frame)
 {
-    SharedPtr<VideoFrame> src;
-    int fourcc = map_fmt_to_fourcc(fmt);
+    YamiImage *yami_image = NULL;
+    yami_image = (YamiImage *)frame->data[3];
 
-    VideoFrameRawData *in_buffer = NULL;
-    in_buffer = (VideoFrameRawData *)frame->data[3];
-
-    if (frame) {
-        src.reset(new VideoFrame);
-        src->surface = (intptr_t)in_buffer->internalID; /* XXX: get decoded surface */
-        src->timeStamp = in_buffer->timeStamp;
-        src->crop.x = 0;
-        src->crop.y = 0;
-        src->crop.width = w;
-        src->crop.height = h;
-        src->flags = 0;
-        src->fourcc = fourcc;
-    }
-
-    return src;
+    return yami_image->output_frame;
 }
 
 static SharedPtr<VideoFrame> ff_vaapi_create_pipeline_dest_surface(int fmt, uint32_t w, uint32_t h, AVFrame *frame)
@@ -436,13 +227,13 @@ static SharedPtr<VideoFrame> ff_vaapi_create_pipeline_dest_surface(int fmt, uint
     SharedPtr<VideoFrame> dest;
     int fourcc = map_fmt_to_fourcc(fmt);
 
-    VideoFrameRawData *in_buffer = NULL;
-    in_buffer = (VideoFrameRawData *)frame->data[3];
+    YamiImage *yami_image = NULL;
+    yami_image = (YamiImage *)frame->data[3];
     VAStatus status;
     VASurfaceID id;
     VASurfaceAttrib attrib;
 
-    VADisplay m_vaDisplay = (VADisplay)in_buffer->handle;
+    VADisplay m_vaDisplay = (VADisplay)yami_image->va_display;
 
     attrib.type =  VASurfaceAttribPixelFormat;
     attrib.flags = VA_SURFACE_ATTRIB_SETTABLE;
@@ -460,18 +251,21 @@ static SharedPtr<VideoFrame> ff_vaapi_create_pipeline_dest_surface(int fmt, uint
     dest->fourcc = fourcc;
 
     return dest;
+
+//    return ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, fourcc, w, h);
 }
 
 static void av_recycle_surface(void *opaque, uint8_t *data)
 {
     if (!data)
         return;
-    VideoFrameRawData *yami_frame = (VideoFrameRawData *)data;
+    YamiImage *yami_image = (YamiImage *)data;
     av_log(NULL, AV_LOG_DEBUG, "free %p in yamivpp\n", data);
 
-    VASurfaceID id = reinterpret_cast<VASurfaceID>(yami_frame->internalID);
-    vaDestroySurfaces((VADisplay)yami_frame->handle, &id, 1);
-    av_free(yami_frame);
+    VASurfaceID id = (VASurfaceID)(yami_image->output_frame->surface);
+    vaDestroySurfaces((VADisplay)yami_image->va_display, &id, 1);
+    yami_image->output_frame.reset();
+    av_free(yami_image);
 
     return;
 }
@@ -508,7 +302,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             yamivpp->scaler->setNativeDisplay(native_display);
 
             /* create src/dest surface, then load yuv to src surface and get
-	       yuv from dest surfcace */
+           yuv from dest surfcace */
             yamivpp->src  = ff_vaapi_create_nopipeline_surface(in->format, in->width, in->height);
             yamivpp->dest = ff_vaapi_create_nopipeline_surface(out->format, outlink->w, outlink->h);
         }
@@ -538,21 +332,18 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             return AVERROR(ENOMEM);
         }
         av_frame_copy_props(out, in);
-        VideoFrameRawData *out_buffer = NULL;
-        out_buffer = (VideoFrameRawData *)av_malloc(sizeof(VideoFrameRawData));
-        out->width = out_buffer->width =  outlink->w;
-        out->height = out_buffer->height = outlink->h;
+        YamiImage *yami_image = NULL;
+        yami_image = (YamiImage *)av_mallocz(sizeof(YamiImage));
+        out->width = outlink->w;
+        out->height = outlink->h;
         out->format = AV_PIX_FMT_YAMI;
-        out->data[3] = reinterpret_cast<uint8_t *>(out_buffer);
-        out->buf[0] = av_buffer_create((uint8_t *)out->data[3],
-                                       sizeof(VideoFrameRawData),
-                                       av_recycle_surface, NULL, 0);
-        VideoFrameRawData *in_buffer = NULL;
-        in_buffer = (VideoFrameRawData *)in->data[3];
+
+        YamiImage *in_buffer = NULL;
+        in_buffer = (YamiImage *)in->data[3];
         if (yamivpp->frame_number == 0) {
             /* used the same display handle in pipeline if it's YAMI format */
             if (in->format == AV_PIX_FMT_YAMI) {
-                m_display = (VADisplay)in_buffer->handle;
+                m_display = (VADisplay)in_buffer->va_display;
             } else {
                 m_display = ff_vaapi_create_display();
             }
@@ -570,8 +361,12 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         yamivpp->dest = ff_vaapi_create_pipeline_dest_surface(in->format, outlink->w, outlink->h, in);
 
         /* update the out surface to out avframe */
-        out_buffer->handle = in_buffer->handle;
-        out_buffer->internalID = yamivpp->dest->surface;
+        yami_image->output_frame = yamivpp->dest;
+        yami_image->va_display = m_display;
+        out->data[3] = reinterpret_cast<uint8_t *>(yami_image);
+        out->buf[0] = av_buffer_create((uint8_t *)out->data[3],
+                                   sizeof(YamiImage),
+                                   av_recycle_surface, NULL, 0);
 
         status = yamivpp->scaler->process(yamivpp->src, yamivpp->dest);
         if (status != YAMI_SUCCESS) {
