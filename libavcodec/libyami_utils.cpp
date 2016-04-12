@@ -127,6 +127,17 @@ SharedPtr<VideoFrame> ff_vaapi_create_surface(uint32_t rt_fmt, int pix_fmt, uint
     return frame;
 }
 
+bool ff_vaapi_delete_surface(SharedPtr<VideoFrame>& frame)
+{
+    VADisplay m_vaDisplay = ff_vaapi_create_display();
+    VASurfaceID id = (VASurfaceID)(frame->surface);
+    VAStatus status = vaDestroySurfaces((VADisplay)m_vaDisplay, &id, 1);
+    if (!ff_check_vaapi_status(status, "vaDestroySurfaces"))
+        return false;
+
+    return true;
+}
+
 bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in)
 {
     VASurfaceID surface = (VASurfaceID)frame->surface;

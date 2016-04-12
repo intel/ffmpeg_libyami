@@ -262,8 +262,7 @@ static void av_recycle_surface(void *opaque, uint8_t *data)
     YamiImage *yami_image = (YamiImage *)data;
     av_log(NULL, AV_LOG_DEBUG, "free %p in yamivpp\n", data);
 
-    VASurfaceID id = (VASurfaceID)(yami_image->output_frame->surface);
-    vaDestroySurfaces((VADisplay)yami_image->va_display, &id, 1);
+    bool ff_vaapi_delete_surface(yami_image->output_frame);
     yami_image->output_frame.reset();
     av_free(yami_image);
 
