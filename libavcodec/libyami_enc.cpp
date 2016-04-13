@@ -79,16 +79,20 @@ static int ff_yami_encode_thread_close(YamiEncContext *s)
 
 static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *to)
 {
+    int pix_fmt = VA_FOURCC_NV12;
     if (from->pict_type == AV_PICTURE_TYPE_I)
         to->output_frame->flags |= VIDEO_FRAME_FLAGS_KEY;
 
     if (avctx->pix_fmt == AV_PIX_FMT_YUV420P) {
-        to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, VA_FOURCC_I420, avctx->width, avctx->height);
-        ff_vaapi_load_image(to->output_frame, from);
-    } else if (avctx->pix_fmt == AV_PIX_FMT_NV12){
-        to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, VA_FOURCC_NV12, avctx->width, avctx->height);
-        ff_vaapi_load_image(to->output_frame, from);
+        pix_fmt =  VA_FOURCC_I420;
+    } else if (avctx->pix_fmt == AV_PIX_FMT_NV12) {
+        pix_fmt =  VA_FOURCC_NV12;
+    } else {
+        av_log(avctx, AV_LOG_VERBOSE, "yami used the un-support format ... \n");
     }
+
+    to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, pix_fmt, avctx->width, avctx->height);
+    ff_vaapi_load_image(to->output_frame, from);
     to->va_display = ff_vaapi_create_display();
     from->data[3] = reinterpret_cast<uint8_t *>(to);
     return 0;

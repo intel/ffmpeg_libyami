@@ -206,7 +206,7 @@ static SharedPtr<VideoFrame> ff_vaapi_create_nopipeline_surface(int fmt, uint32_
     int fourcc = map_fmt_to_fourcc(fmt);
 
     src = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, fourcc, w, h);
-    src->fourcc = fourcc;
+
     return src;
 }
 
