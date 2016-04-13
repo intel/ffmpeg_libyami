@@ -92,7 +92,7 @@ VADisplay ff_vaapi_create_display(void)
     }
 }
 
-inline bool ff_check_vaapi_status(VAStatus status, const char *msg)
+bool ff_check_vaapi_status(VAStatus status, const char *msg)
 {
     if (status != VA_STATUS_SUCCESS) {
         av_log(NULL, AV_LOG_ERROR, "%s: %s", msg, vaErrorStr(status));
@@ -127,7 +127,7 @@ SharedPtr<VideoFrame> ff_vaapi_create_surface(uint32_t rt_fmt, int pix_fmt, uint
     return frame;
 }
 
-bool ff_vaapi_delete_surface(SharedPtr<VideoFrame>& frame)
+bool ff_vaapi_destory_surface(SharedPtr<VideoFrame>& frame)
 {
     VADisplay m_vaDisplay = ff_vaapi_create_display();
     VASurfaceID id = (VASurfaceID)(frame->surface);
@@ -259,13 +259,6 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
         src_linesize[2] = image.pitches[2];
     }
 
-    /*
-     * TODO:
-     * Need to improving performance of data copies from Uncacheable
-     * Speculative Write Combining(USWC) memory to ordinary Write Back(WB)
-     * system memory
-     * https://software.intel.com/en-us/articles/copying-accelerated-video-decode-frame-buffers/
-     */
     av_image_copy(dest_data, (int *)dest_linesize, src_data,
                   (int *)src_linesize, (AVPixelFormat)out->format,
                   out->width, out->height);
