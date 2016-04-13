@@ -273,9 +273,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
     AVFrame *out;
     VADisplay m_display;
 
-    if (in->width == inlink->w
-        && in->height == inlink->h
-        && in->format == inlink->format)
+    if (in->width == outlink->w
+        && in->height == outlink->h
+        && in->format == outlink->format)
          return ff_filter_frame(outlink, in);
 
     if (in->format != AV_PIX_FMT_YAMI && yamivpp->pipeline == 0) {
