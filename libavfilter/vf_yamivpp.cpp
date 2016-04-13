@@ -46,10 +46,6 @@ extern "C" {
 
 using namespace YamiMediaCodec;
 
-#ifndef VA_FOURCC_I420
-#define VA_FOURCC_I420 VA_FOURCC('I','4','2','0')
-#endif
-
 typedef struct {
     const AVClass *cls;
 
@@ -227,8 +223,7 @@ static SharedPtr<VideoFrame> ff_vaapi_create_pipeline_dest_surface(int fmt, uint
     SharedPtr<VideoFrame> dest;
     int fourcc = map_fmt_to_fourcc(fmt);
 
-    YamiImage *yami_image = NULL;
-    yami_image = (YamiImage *)frame->data[3];
+    YamiImage *yami_image = (YamiImage *)frame->data[3];
     VAStatus status;
     VASurfaceID id;
     VASurfaceAttrib attrib;
@@ -262,7 +257,7 @@ static void av_recycle_surface(void *opaque, uint8_t *data)
     YamiImage *yami_image = (YamiImage *)data;
     av_log(NULL, AV_LOG_DEBUG, "free %p in yamivpp\n", data);
 
-    bool ff_vaapi_delete_surface(yami_image->output_frame);
+    ff_vaapi_destory_surface(yami_image->output_frame);
     yami_image->output_frame.reset();
     av_free(yami_image);
 

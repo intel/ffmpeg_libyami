@@ -42,7 +42,7 @@ using namespace YamiMediaCodec;
 
 static int ff_yami_encode_thread_init(YamiEncContext *s)
 {
-    int ret = 0; 
+    int ret = 0;
     if (!s)
         return -1;
     if ((ret = pthread_mutex_init(&s->ctx_mutex, NULL)) < 0)
@@ -81,7 +81,7 @@ static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *t
 {
     if (from->pict_type == AV_PICTURE_TYPE_I)
         to->output_frame->flags |= VIDEO_FRAME_FLAGS_KEY;
-    
+
     if (avctx->pix_fmt == AV_PIX_FMT_YUV420P) {
         to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, VA_FOURCC_I420, avctx->width, avctx->height);
         ff_vaapi_load_image(to->output_frame, from);
@@ -397,7 +397,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     } while (!frame && status != ENCODE_SUCCESS && s->in_queue->size() > 0);
     if (status != ENCODE_SUCCESS)
         return 0;
-    
+
     if ((ret = ff_alloc_packet2(avctx, pkt, s->enc_out_buf.dataSize, 0)) < 0)
         return ret;
     pthread_mutex_lock(&s->out_mutex);
@@ -408,7 +408,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
             if (qframe->format != AV_PIX_FMT_YAMI) {
                 YamiImage *yami_image = (YamiImage *)qframe->data[3];
 
-                ff_vaapi_delete_surface(yami_image->output_frame);
+                ff_vaapi_destory_surface(yami_image->output_frame);
                 yami_image->output_frame.reset();
                 av_free(yami_image);
             };
@@ -439,7 +439,7 @@ static int yami_enc_close(AVCodecContext *avctx)
         releaseVideoEncoder(s->encoder);
         s->encoder = NULL;
     }
-    
+
     while (!s->in_queue->empty()) {
         AVFrame *in_buffer = s->in_queue->front();
         s->in_queue->pop_front();

@@ -45,9 +45,9 @@ typedef struct {
 
 VADisplay ff_vaapi_create_display(void);
 SharedPtr<VideoFrame> ff_vaapi_create_surface(uint32_t rt_fmt, int pix_fmt, uint32_t w, uint32_t h);
-bool ff_vaapi_delete_surface(SharedPtr<VideoFrame>& frame);
+bool ff_vaapi_destory_surface(SharedPtr<VideoFrame>& frame);
 bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in);
 bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out);
-inline bool ff_check_vaapi_status(VAStatus status, const char *msg);
+bool ff_check_vaapi_status(VAStatus status, const char *msg);
 
 #endif /* LIBAVCODEC_LIBYAMI_UTILS_H_ */
