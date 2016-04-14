@@ -181,6 +181,7 @@ bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in)
     av_image_copy(dest_data, (int *)dest_linesize, src_data,
                   (int *)in->linesize, (AVPixelFormat)in->format,
                   in->width, in->height);
+    frame->timeStamp = in->pts;
 
     ff_check_vaapi_status(vaUnmapBuffer(m_vaDisplay, image.buf), "vaUnmapBuffer");
     ff_check_vaapi_status(vaDestroyImage(m_vaDisplay, image.image_id), "vaDestroyImage");

@@ -134,6 +134,8 @@ static void *ff_yami_encode_thread(void *arg)
             /* handle decoder busy case */
         } else { /* zero-copy mode */
             yami_image = (YamiImage *)frame->data[3];
+            /*encode use the AVFrame pts*/
+            yami_image->output_frame->timeStamp = frame->pts;
         }
         /* handle decoder busy case */
         do {
@@ -250,7 +252,7 @@ static int yami_enc_init(AVCodecContext *avctx)
     }
     // picture type and bitrate
     encVideoParams.intraPeriod = av_clip(avctx->gop_size, 1, 250);
-    encVideoParams.ipPeriod = avctx->max_b_frames < 2 ? 1 : 3;
+    s->ip_period = encVideoParams.ipPeriod = avctx->max_b_frames < 2 ? 1 : 3;
 
     s->max_inqueue_size = FFMAX(encVideoParams.ipPeriod, ENCODE_QUEUE_SIZE);
     if (s->rcmod){
@@ -404,7 +406,8 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     if (!s->out_queue->empty()) {
         AVFrame *qframe = s->out_queue->front();
         if (qframe) {
-            pkt->pts = pkt->dts = qframe->pts;
+            pkt->pts = s->enc_out_buf.timeStamp;
+            //pkt->dts = qframe->pts - s->ip_period;
             if (qframe->format != AV_PIX_FMT_YAMI) {
                 YamiImage *yami_image = (YamiImage *)qframe->data[3];
 
