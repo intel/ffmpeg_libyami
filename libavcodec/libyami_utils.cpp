@@ -123,6 +123,7 @@ SharedPtr<VideoFrame> ff_vaapi_create_surface(uint32_t rt_fmt, int pix_fmt, uint
     frame->crop.x = frame->crop.y = 0;
     frame->crop.width = w;
     frame->crop.height = h;
+    frame->fourcc = pix_fmt;
 
     return frame;
 }

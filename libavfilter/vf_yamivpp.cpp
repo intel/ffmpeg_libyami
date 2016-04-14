@@ -206,7 +206,7 @@ static SharedPtr<VideoFrame> ff_vaapi_create_nopipeline_surface(int fmt, uint32_
     int fourcc = map_fmt_to_fourcc(fmt);
 
     src = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, fourcc, w, h);
-    src->fourcc = fourcc;
+
     return src;
 }
 
@@ -223,31 +223,9 @@ static SharedPtr<VideoFrame> ff_vaapi_create_pipeline_dest_surface(int fmt, uint
     SharedPtr<VideoFrame> dest;
     int fourcc = map_fmt_to_fourcc(fmt);
 
-    YamiImage *yami_image = (YamiImage *)frame->data[3];
-    VAStatus status;
-    VASurfaceID id;
-    VASurfaceAttrib attrib;
-
-    VADisplay m_vaDisplay = (VADisplay)yami_image->va_display;
-
-    attrib.type =  VASurfaceAttribPixelFormat;
-    attrib.flags = VA_SURFACE_ATTRIB_SETTABLE;
-    attrib.value.type = VAGenericValueTypeInteger;
-    attrib.value.value.i = fourcc;
-
-    status = vaCreateSurfaces(m_vaDisplay, VA_RT_FORMAT_YUV420, w, h, &id, 1, &attrib, 1);
-    if (!ff_check_vaapi_status(status, "vaCreateSurfaces"))
-        return dest;
-    dest.reset(new VideoFrame);
-    dest->surface = (intptr_t)id;
-    dest->crop.x = dest->crop.y = 0;
-    dest->crop.width = w;
-    dest->crop.height = h;
-    dest->fourcc = fourcc;
+    dest =  ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, fourcc, w, h);
 
     return dest;
-
-//    return ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, fourcc, w, h);
 }
 
 static void av_recycle_surface(void *opaque, uint8_t *data)
