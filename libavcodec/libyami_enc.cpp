@@ -411,7 +411,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
         AVFrame *qframe = s->out_queue->front();
         if (qframe) {
             pkt->pts = s->enc_out_buf.timeStamp;
-            //pkt->dts = qframe->pts - s->ip_period;
+            //pkt->dts = qframe->pts - s->ip_period;/*FIX ME*/
             if (qframe->format != AV_PIX_FMT_YAMI) {
                 YamiImage *yami_image = (YamiImage *)qframe->data[3];
 
