@@ -112,6 +112,9 @@ int qp_hist           = 0;
 int stdin_interaction = 1;
 int frame_bits_per_raw_sample = 0;
 float max_error_rate  = 2.0/3;
+//PLEX
+int force_yami_pipeline = 0;
+//PLEX
 
 
 static int intra_only         = 0;
@@ -3437,6 +3440,7 @@ const OptionDef options[] = {
         "force data codec ('copy' to copy stream)", "codec" },
     { "dn", OPT_BOOL | OPT_VIDEO | OPT_OFFSET | OPT_INPUT | OPT_OUTPUT, { .off = OFFSET(data_disable) },
         "disable data" },
+    { "force_yami_pipeline", OPT_BOOL | OPT_EXPERT, { &force_yami_pipeline }, "force use of libyami pipelining"},
 
     { NULL, },
 };
