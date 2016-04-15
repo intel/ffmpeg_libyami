@@ -119,6 +119,7 @@ SharedPtr<VideoFrame> ff_vaapi_create_surface(uint32_t rt_fmt, int pix_fmt, uint
     if (!ff_check_vaapi_status(status, "vaCreateSurfaces"))
         return frame;
     frame.reset(new VideoFrame);
+    memset(frame.get(), 0 , sizeof(VideoFrame));
     frame->surface = (intptr_t)id;
     frame->crop.x = frame->crop.y = 0;
     frame->crop.width = w;
