@@ -27,12 +27,12 @@
 
 extern "C" {
 #include "avcodec.h"
+#include "libavutil/avassert.h"
 #include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
 #include "libavutil/time.h"
 #include "internal.h"
 }
-
 #include "VideoDecoderHost.h"
 #include "libyami_dec.h"
 #include "libyami_utils.h"
@@ -69,7 +69,6 @@ static int ff_yami_decode_thread_close(YamiDecContext *s)
         pthread_mutex_lock(&s->ctx_mutex);
     }
     pthread_mutex_unlock(&s->ctx_mutex);
-
     pthread_mutex_destroy(&s->in_mutex);
     pthread_cond_destroy(&s->in_cond);
     return 0;
@@ -79,7 +78,6 @@ static void *ff_yami_decode_thread(void *arg)
 {
     AVCodecContext *avctx = (AVCodecContext *)arg;
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
-
     while (1) {
         VideoDecodeBuffer *in_buffer = NULL;
         // deque one input buffer
@@ -99,17 +97,13 @@ static void *ff_yami_decode_thread(void *arg)
             pthread_mutex_unlock(&s->in_mutex);
             continue;
         }
-
         av_log(avctx, AV_LOG_VERBOSE, "s->in_queue->size()=%ld\n", s->in_queue->size());
         in_buffer = s->in_queue->front();
-
         pthread_mutex_unlock(&s->in_mutex);
-
         // decode one input buffer
         av_log(avctx, AV_LOG_VERBOSE, "try to process one input buffer, in_buffer->data=%p, in_buffer->size=%zu\n", in_buffer->data, in_buffer->size);
         Decode_Status status = s->decoder->decode(in_buffer);
         av_log(avctx, AV_LOG_VERBOSE, "decode() status=%d, decode_count_yami=%d render_count %d\n", status, s->decode_count_yami, s->render_count);
-
         if (DECODE_FORMAT_CHANGE == status) {
             s->format_info = s->decoder->getFormatInfo();
             av_log(avctx, AV_LOG_VERBOSE, "decode format change %dx%d\n", s->format_info->width,s->format_info->height);
@@ -118,7 +112,6 @@ static void *ff_yami_decode_thread(void *arg)
             av_log(avctx, AV_LOG_VERBOSE, "decode() status=%d\n",status);
             avctx->width = s->format_info->width;
             avctx->height = s->format_info->height;
-
         }
         if (status < 0 || !s->format_info) {//if format_info is null means current frame decode failed
             av_log(avctx, AV_LOG_ERROR, "decode error %d\n", status);
@@ -158,17 +151,13 @@ static int ff_convert_to_frame(AVCodecContext *avctx, YamiImage *from, AVFrame *
         return -1;
     if (avctx->pix_fmt == AV_PIX_FMT_YAMI) {
         to->pts = from->output_frame->timeStamp;
-
         to->width = avctx->width;
         to->height = avctx->height;
-
         to->format = AV_PIX_FMT_YAMI;
         to->extended_data = NULL;
-
         to->extended_data = to->data;
         /* XXX: put the surface id to data[3] */
         to->data[3] = reinterpret_cast<uint8_t *>(from);
-
         to->buf[0] = av_buffer_create((uint8_t *)from,
                                       sizeof(YamiImage),
                                       ff_yami_recycle_frame, avctx, 0);
@@ -178,15 +167,11 @@ static int ff_convert_to_frame(AVCodecContext *avctx, YamiImage *from, AVFrame *
         to->pkt_pts = AV_NOPTS_VALUE;
         to->pkt_dts = from->output_frame->timeStamp;
         to->pts = AV_NOPTS_VALUE;
-
         to->width = avctx->width;
         to->height = avctx->height;
-
         to->format = avctx->pix_fmt;
         to->extended_data = NULL;
-
         to->extended_data = to->data;
-
         ff_vaapi_get_image(from->output_frame, to);
         to->buf[3] = av_buffer_create((uint8_t *) from,
                                       sizeof(YamiImage),
@@ -195,12 +180,25 @@ static int ff_convert_to_frame(AVCodecContext *avctx, YamiImage *from, AVFrame *
     return 0;
 }
 
+static const char *get_mime(AVCodecID id)
+{
+    switch (id) {
+    case AV_CODEC_ID_H264:
+        return YAMI_MIME_H264;
+    case AV_CODEC_ID_HEVC:
+        return YAMI_MIME_H265;
+    case AV_CODEC_ID_VP8:
+        return YAMI_MIME_VP8;
+    default:
+        av_assert0(!"Invalid codec ID!");
+        return 0;
+    }
+}
 
 static int yami_dec_init(AVCodecContext *avctx)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     Decode_Status status;
-
     s->decoder = NULL;
     enum AVPixelFormat pix_fmts[4] =
         {
@@ -222,31 +220,16 @@ static int yami_dec_init(AVCodecContext *avctx)
         return AVERROR_BUG;
     }
     av_log(avctx, AV_LOG_VERBOSE, "yami_dec_init\n");
-    switch (avctx->codec_id) {
-    case AV_CODEC_ID_H264:
-        s->decoder = createVideoDecoder(YAMI_MIME_H264);
-        break;
-    case AV_CODEC_ID_HEVC:
-        s->decoder = createVideoDecoder(YAMI_MIME_H265);
-        break;
-    case AV_CODEC_ID_VP8:
-        s->decoder = createVideoDecoder(YAMI_MIME_VP8);
-        break;
-    default:
-        s->decoder = NULL;
-        break;
-    }
+    const char *mime_type = get_mime(avctx->codec_id);
+    s->decoder = createVideoDecoder(mime_type);
     if (!s->decoder) {
         av_log(avctx, AV_LOG_ERROR, "fail to create decoder\n");
         return AVERROR_BUG;
     }
-
     NativeDisplay native_display;
     native_display.type = NATIVE_DISPLAY_VA;
-
     native_display.handle = (intptr_t)va_display;
     s->decoder->setNativeDisplay(&native_display);
-
     VideoConfigBuffer config_buffer;
     memset(&config_buffer, 0, sizeof(VideoConfigBuffer));
     if (avctx->extradata && avctx->extradata_size && avctx->extradata[0] == 1) {
@@ -259,7 +242,6 @@ static int yami_dec_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "yami decoder fail to start\n");
         return AVERROR_BUG;
     }
-
     s->in_queue = new std::deque<VideoDecodeBuffer*>;
 
 #if HAVE_PTHREADS
@@ -269,11 +251,9 @@ static int yami_dec_init(AVCodecContext *avctx)
     av_log(avctx, AV_LOG_ERROR, "pthread libaray must be supported\n");
     return AVERROR(ENOSYS);
 #endif
-
     s->decode_count = 0;
     s->decode_count_yami = 0;
     s->render_count = 0;
-
     return 0;
 }
 
@@ -288,9 +268,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     YamiImage *yami_image =  NULL;
     int ret = 0;
     AVFrame *frame = (AVFrame *)data;
-
     av_log(avctx, AV_LOG_VERBOSE, "yami_dec_frame\n");
-
     // append avpkt to input buffer queue
     in_buffer = (VideoDecodeBuffer *)av_mallocz(sizeof(VideoDecodeBuffer));
     if (!in_buffer)
@@ -302,7 +280,6 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     memcpy(in_buffer->data, avpkt->data, avpkt->size);
     in_buffer->size = avpkt->size;
     in_buffer->timeStamp = avpkt->pts;
-
     while (s->decode_status < DECODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
         pthread_mutex_lock(&s->in_mutex);
         if (s->in_queue->size() < DECODE_QUEUE_SIZE) {
@@ -313,14 +290,12 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
             break;
         }
         pthread_mutex_unlock(&s->in_mutex);
-
         av_log(avctx, AV_LOG_DEBUG,
                "s->in_queue->size()=%ld, s->decode_count=%d, s->decode_count_yami=%d, too many buffer are under decoding, wait ...\n",
                s->in_queue->size(), s->decode_count, s->decode_count_yami);
         av_usleep(1000);
     };
     s->decode_count++;
-
     // decode thread status update
     pthread_mutex_lock(&s->ctx_mutex);
     switch (s->decode_status) {
@@ -343,15 +318,12 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         break;
     }
     pthread_mutex_unlock(&s->ctx_mutex);
-
     // get an output buffer from yami
-
     do {
         if (!s->format_info) {
             av_usleep(10000);
             continue;
         }
-
         yami_image = (YamiImage *)av_mallocz(sizeof(YamiImage));
         if (!yami_image) {
             ret = AVERROR(ENOMEM);
@@ -370,25 +342,19 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         av_free(yami_image);
         return avpkt->size;
     } while (s->decode_status == DECODE_THREAD_RUNING);
-
     if (status != RENDER_SUCCESS) {
         av_log(avctx, AV_LOG_VERBOSE, "after processed EOS, return\n");
         return avpkt->size;
     }
-
     // process the output frame
     if (ff_convert_to_frame(avctx, yami_image, frame) < 0)
         av_log(avctx, AV_LOG_VERBOSE, "yami frame convert av_frame failed\n");
-
     *got_frame = 1;
-
     s->render_count++;
     av_log(avctx, AV_LOG_VERBOSE,
            "decode_count_yami=%d, decode_count=%d, render_count=%d\n",
            s->decode_count_yami, s->decode_count, s->render_count);
-
     return avpkt->size;
-
 fail:
     if (yami_image) {
         yami_image->output_frame.reset();
@@ -408,7 +374,6 @@ static int yami_dec_close(AVCodecContext *avctx)
         releaseVideoDecoder(s->decoder);
         s->decoder = NULL;
     }
-
     while (!s->in_queue->empty()) {
         VideoDecodeBuffer *in_buffer = s->in_queue->front();
         s->in_queue->pop_front();
@@ -417,114 +382,50 @@ static int yami_dec_close(AVCodecContext *avctx)
     }
     delete s->in_queue;
     av_log(avctx, AV_LOG_VERBOSE, "yami_dec_close\n");
-
     return 0;
 }
 
+#define YAMI_DEC(NAME, ID) \
+AVCodec ff_libyami_##NAME##_decoder = { \
+    .name                   = "libyami_" #NAME, \
+    .long_name              = NULL_IF_CONFIG_SMALL(#NAME " (libyami)"), \
+    .type                   = AVMEDIA_TYPE_VIDEO, \
+    .id                     = ID, \
+    .capabilities          = CODEC_CAP_DELAY, \
+    .supported_framerates  = NULL,  \
+    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI ,\
+                                                            AV_PIX_FMT_NV12 ,\
+                                                            AV_PIX_FMT_YUV420P,\
+                                                            AV_PIX_FMT_NONE},\
+    .supported_samplerates = NULL,  \
+    .sample_fmts           = NULL,  \
+    .channel_layouts       = NULL,  \
+    .max_lowres            = 0,     \
+    .priv_class            = NULL,  \
+    .profiles              = NULL,  \
+    .priv_data_size        = sizeof(YamiDecContext),    \
+    .next                  = NULL,  \
+    .init_thread_copy      = NULL,  \
+    .update_thread_context = NULL,  \
+    .defaults              = NULL,  \
+    .init_static_data      = NULL,  \
+    .init                  = yami_dec_init,    \
+    .encode_sub            = NULL,  \
+    .encode2               = NULL,  \
+    .decode                = yami_dec_frame,   \
+    .close                 = yami_dec_close,   \
+    .flush                 = NULL,  \
+    .caps_internal         = FF_CODEC_CAP_SETS_PKT_DTS  \
+}; 
+
 #if CONFIG_LIBYAMI_H264_DECODER
-AVCodec ff_libyami_h264_decoder = {
-    .name                  = "libyami_h264",
-    .long_name             = NULL_IF_CONFIG_SMALL("libyami H.264 decoder"),
-    .type                  = AVMEDIA_TYPE_VIDEO,
-    .id                    = AV_CODEC_ID_H264,
-    .capabilities          = CODEC_CAP_DELAY, // it is not necessary to support multi-threads
-    .supported_framerates  = NULL,
-    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI ,
-                                                            AV_PIX_FMT_NV12 ,
-                                                            AV_PIX_FMT_YUV420P,
-                                                            AV_PIX_FMT_NONE},
-    .supported_samplerates = NULL,
-    .sample_fmts           = NULL,
-    .channel_layouts       = NULL,
-#if FF_API_LOWRES
-    .max_lowres            = 0,
-#endif
-    .priv_class            = NULL,
-    .profiles              = NULL,
-    .priv_data_size        = sizeof(YamiDecContext),
-    .next                  = NULL,
-    .init_thread_copy      = NULL,
-    .update_thread_context = NULL,
-    .defaults              = NULL,
-    .init_static_data      = NULL,
-    .init                  = yami_dec_init,
-    .encode_sub            = NULL,
-    .encode2               = NULL,
-    .decode                = yami_dec_frame,
-    .close                 = yami_dec_close,
-    .flush                 = NULL, // TODO, add it
-    .caps_internal         = FF_CODEC_CAP_SETS_PKT_DTS
-};
+YAMI_DEC(h264, AV_CODEC_ID_H264)
 #endif
 
 #if CONFIG_LIBYAMI_HEVC_DECODER
-AVCodec ff_libyami_hevc_decoder = {
-    .name                  = "libyami_hevc",
-    .long_name             = NULL_IF_CONFIG_SMALL("libyami H.265 decoder"),
-    .type                  = AVMEDIA_TYPE_VIDEO,
-    .id                    = AV_CODEC_ID_HEVC,
-    .capabilities          = CODEC_CAP_DELAY, // it is not necessary to support multi-threads
-    .supported_framerates  = NULL,
-    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI ,
-                                                            AV_PIX_FMT_NV12 ,
-                                                            AV_PIX_FMT_YUV420P,
-                                                            AV_PIX_FMT_NONE},
-    .supported_samplerates = NULL,
-    .sample_fmts           = NULL,
-    .channel_layouts       = NULL,
-#if FF_API_LOWRES
-    .max_lowres            = 0,
-#endif
-    .priv_class            = NULL,
-    .profiles              = NULL,
-    .priv_data_size        = sizeof(YamiDecContext),
-    .next                  = NULL,
-    .init_thread_copy      = NULL,
-    .update_thread_context = NULL,
-    .defaults              = NULL,
-    .init_static_data      = NULL,
-    .init                  = yami_dec_init,
-    .encode_sub            = NULL,
-    .encode2               = NULL,
-    .decode                = yami_dec_frame,
-    .close                 = yami_dec_close,
-    .flush                 = NULL, // TODO, add it
-    .caps_internal         = FF_CODEC_CAP_SETS_PKT_DTS
-};
+YAMI_DEC(hevc, AV_CODEC_ID_HEVC)
 #endif
 
 #if CONFIG_LIBYAMI_VP8_DECODER
-AVCodec ff_libyami_vp8_decoder = {
-    .name                  = "libyami_vp8",
-    .long_name             = NULL_IF_CONFIG_SMALL("libyami VP8 decoder"),
-    .type                  = AVMEDIA_TYPE_VIDEO,
-    .id                    = AV_CODEC_ID_VP8,
-    .capabilities          = CODEC_CAP_DELAY, // it is not necessary to support multi-threads
-    .supported_framerates  = NULL,
-    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI ,
-                                                            AV_PIX_FMT_NV12 ,
-                                                            AV_PIX_FMT_YUV420P,
-                                                            AV_PIX_FMT_NONE},
-    .supported_samplerates = NULL,
-    .sample_fmts           = NULL,
-    .channel_layouts       = NULL,
-#if FF_API_LOWRES
-    .max_lowres            = 0,
-#endif
-    .priv_class            = NULL,
-    .profiles              = NULL,
-    .priv_data_size        = sizeof(YamiDecContext),
-    .next                  = NULL,
-    .init_thread_copy      = NULL,
-    .update_thread_context = NULL,
-    .defaults              = NULL,
-    .init_static_data      = NULL,
-    .init                  = yami_dec_init,
-    .encode_sub            = NULL,
-    .encode2               = NULL,
-    .decode                = yami_dec_frame,
-    .close                 = yami_dec_close,
-    .flush                 = NULL, // TODO, add it
-    .caps_internal         = FF_CODEC_CAP_SETS_PKT_DTS
-};
+YAMI_DEC(vp8, AV_CODEC_ID_VP8)
 #endif
