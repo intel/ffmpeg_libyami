@@ -21,9 +21,9 @@
  */
 #ifndef LIBAVCODEC_FAST_COPY_H_
 #define LIBAVCODEC_FAST_COPY_H_
-
 #include <stdio.h>
-void *fast_copy( void *dst, void *src, size_t size );
+
+void *ff_copy_from_uswc(void *dst, void *src, size_t size);
 
 #endif /* LIBAVCODEC_FAST_COPY_H_ */
 

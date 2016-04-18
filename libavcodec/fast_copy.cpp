@@ -57,7 +57,7 @@
         store " %%xmm8,   112(%[dst])\n" \
         : : [dst]"r"(dstp), [src]"r"(srcp) : "memory", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8")
 
-void *fast_copy(void *dst, void *src, size_t size)
+void *ff_copy_from_uswc(void *dst, void *src, size_t size)
 {
     char aligned;
     int remain;

@@ -235,7 +235,7 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
     if (!plane_buf)
         return false;
 #if HAVE_SSE4
-    fast_copy((void *)plane_buf, (void *)buf, plane_size);
+    ff_copy_from_uswc((void *)plane_buf, (void *)buf, plane_size);
 #else
     memcpy(plane_buf, buf, plane_size);
 #endif
