@@ -540,6 +540,7 @@ extern AVIOContext *progress_avio;
 extern float max_error_rate;
 extern int vdpau_api_ver;
 extern char *videotoolbox_pixfmt;
+extern int force_yami_pipeline;
 
 extern const AVIOInterruptCB int_cb;
 
