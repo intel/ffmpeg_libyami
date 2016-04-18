@@ -196,9 +196,9 @@ static int yami_enc_init(AVCodecContext *avctx)
     Encode_Status status;
     enum AVPixelFormat pix_fmts[4] =
         {
-            AV_PIX_FMT_YAMI,
             AV_PIX_FMT_NV12,
             AV_PIX_FMT_YUV420P,
+            AV_PIX_FMT_YAMI,
             AV_PIX_FMT_NONE
         };
     if (avctx->pix_fmt == AV_PIX_FMT_NONE) {
