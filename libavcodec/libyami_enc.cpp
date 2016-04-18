@@ -456,7 +456,7 @@ AVCodec ff_libyami_##NAME##_encoder = { \
     .long_name             = NULL_IF_CONFIG_SMALL(#NAME " (libyami)"),  \
     .type                  = AVMEDIA_TYPE_VIDEO,    \
     .id                    = ID,    \
-    .capabilities          = CODEC_CAP_DELAY,   \ 
+    .capabilities          = CODEC_CAP_DELAY,   \
     .supported_framerates  = NULL,  \
     .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI,    \
                                                             AV_PIX_FMT_NV12,    \

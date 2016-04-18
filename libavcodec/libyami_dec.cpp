@@ -416,7 +416,7 @@ AVCodec ff_libyami_##NAME##_decoder = { \
     .close                 = yami_dec_close,   \
     .flush                 = NULL,  \
     .caps_internal         = FF_CODEC_CAP_SETS_PKT_DTS  \
-}; 
+};
 
 #if CONFIG_LIBYAMI_H264_DECODER
 YAMI_DEC(h264, AV_CODEC_ID_H264)
