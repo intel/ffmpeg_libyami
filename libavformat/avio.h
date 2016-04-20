@@ -249,6 +249,16 @@ typedef struct AVIOContext {
      * This is current internal only, do not use from outside.
      */
     int short_seek_threshold;
+
+    /**
+     * ',' separated list of allowed protocols.
+     */
+    const char *protocol_whitelist;
+
+    /**
+     * ',' separated list of disallowed protocols.
+     */
+    const char *protocol_blacklist;
 } AVIOContext;
 
 /* unbuffered I/O */

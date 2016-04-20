@@ -219,8 +219,9 @@ static int http_open_cnx_internal(URLContext *h, AVDictionary **options)
     ff_url_join(buf, sizeof(buf), lower_proto, NULL, hostname, port, NULL);
 
     if (!s->hd) {
-        err = ffurl_open(&s->hd, buf, AVIO_FLAG_READ_WRITE,
-                         &h->interrupt_callback, options);
+        err = ffurl_open_whitelist(&s->hd, buf, AVIO_FLAG_READ_WRITE,
+                                   &h->interrupt_callback, options,
+                                   h->protocol_whitelist, h->protocol_blacklist);
         if (err < 0)
             return err;
     }
@@ -369,7 +370,7 @@ static int http_write_reply(URLContext* h, int status_code)
         message_len = snprintf(message, sizeof(message),
                  "HTTP/1.1 %03d %s\r\n"
                  "Content-Type: %s\r\n"
-                 "Content-Length: %zu\r\n"
+                 "Content-Length: %"SIZE_SPECIFIER"\r\n"
                  "\r\n"
                  "%03d %s\r\n",
                  reply_code,
@@ -453,8 +454,10 @@ static int http_listen(URLContext *h, const char *uri, int flags,
                 NULL);
     if ((ret = av_dict_set_int(options, "listen", s->listen, 0)) < 0)
         goto fail;
-    if ((ret = ffurl_open(&s->hd, lower_url, AVIO_FLAG_READ_WRITE,
-                          &h->interrupt_callback, options)) < 0)
+    if ((ret = ffurl_open_whitelist(&s->hd, lower_url, AVIO_FLAG_READ_WRITE,
+                                    &h->interrupt_callback, options,
+                                    h->protocol_whitelist, h->protocol_blacklist
+                                   )) < 0)
         goto fail;
     s->handshake_step = LOWER_PROTO;
     if (s->listen == HTTP_SINGLE) { /* single client */
@@ -1505,7 +1508,7 @@ static const AVClass flavor ## _context_class = {   \
 #if CONFIG_HTTP_PROTOCOL
 HTTP_CLASS(http);
 
-URLProtocol ff_http_protocol = {
+const URLProtocol ff_http_protocol = {
     .name                = "http",
     .url_open2           = http_open,
     .url_accept          = http_accept,
@@ -1519,13 +1522,14 @@ URLProtocol ff_http_protocol = {
     .priv_data_size      = sizeof(HTTPContext),
     .priv_data_class     = &http_context_class,
     .flags               = URL_PROTOCOL_FLAG_NETWORK,
+    .default_whitelist   = "http,https,tls,rtp,tcp,udp,crypto,httpproxy"
 };
 #endif /* CONFIG_HTTP_PROTOCOL */
 
 #if CONFIG_HTTPS_PROTOCOL
 HTTP_CLASS(https);
 
-URLProtocol ff_https_protocol = {
+const URLProtocol ff_https_protocol = {
     .name                = "https",
     .url_open2           = http_open,
     .url_read            = http_read,
@@ -1537,6 +1541,7 @@ URLProtocol ff_https_protocol = {
     .priv_data_size      = sizeof(HTTPContext),
     .priv_data_class     = &https_context_class,
     .flags               = URL_PROTOCOL_FLAG_NETWORK,
+    .default_whitelist   = "http,https,tls,rtp,tcp,udp,crypto,httpproxy"
 };
 #endif /* CONFIG_HTTPS_PROTOCOL */
 
@@ -1575,8 +1580,9 @@ static int http_proxy_open(URLContext *h, const char *uri, int flags)
     ff_url_join(lower_url, sizeof(lower_url), "tcp", NULL, hostname, port,
                 NULL);
 redo:
-    ret = ffurl_open(&s->hd, lower_url, AVIO_FLAG_READ_WRITE,
-                     &h->interrupt_callback, NULL);
+    ret = ffurl_open_whitelist(&s->hd, lower_url, AVIO_FLAG_READ_WRITE,
+                               &h->interrupt_callback, NULL,
+                               h->protocol_whitelist, h->protocol_blacklist);
     if (ret < 0)
         return ret;
 
@@ -1638,7 +1644,7 @@ static int http_proxy_write(URLContext *h, const uint8_t *buf, int size)
     return ffurl_write(s->hd, buf, size);
 }
 
-URLProtocol ff_httpproxy_protocol = {
+const URLProtocol ff_httpproxy_protocol = {
     .name                = "httpproxy",
     .url_open            = http_proxy_open,
     .url_read            = http_buf_read,

@@ -85,7 +85,7 @@ static int libopenh264_to_ffmpeg_log_level(int libopenh264_log_level)
 //
 //        typedef void (*WelsTraceCallback) (void* ctx, int level, const char* string);
 
-static void libopenh264_trace_callback(void *ctx, int level, char const *msg)
+static void libopenh264_trace_callback(void *ctx, int level, const char *msg)
 {
     // The message will be logged only if the requested EQUIVALENT ffmpeg log level is
     // less than or equal to the current ffmpeg log level.
@@ -203,14 +203,9 @@ FF_ENABLE_DEPRECATION_WARNINGS
             param.uiMaxNalSize = s->max_nal_size;
             param.sSpatialLayers[0].sSliceCfg.sSliceArgument.uiSliceSizeConstraint = s->max_nal_size;
         } else {
-            if (avctx->rtp_payload_size) {
-                av_log(avctx,AV_LOG_DEBUG,"Using RTP Payload size for uiMaxNalSize");
-                param.uiMaxNalSize = avctx->rtp_payload_size;
-                param.sSpatialLayers[0].sSliceCfg.sSliceArgument.uiSliceSizeConstraint = avctx->rtp_payload_size;
-            } else {
-                av_log(avctx,AV_LOG_ERROR,"Invalid -max_nal_size, specify a valid max_nal_size to use -slice_mode dyn\n");
-                goto fail;
-            }
+            av_log(avctx, AV_LOG_ERROR, "Invalid -max_nal_size, "
+                   "specify a valid max_nal_size to use -slice_mode dyn\n");
+            goto fail;
         }
     }
 

@@ -177,6 +177,9 @@ typedef struct MOVStreamContext {
         uint8_t* auxiliary_info;
         uint8_t* auxiliary_info_end;
         uint8_t* auxiliary_info_pos;
+        uint8_t auxiliary_info_default_size;
+        uint8_t* auxiliary_info_sizes;
+        size_t auxiliary_info_sizes_count;
         struct AVAESCTR* aes_ctr;
     } cenc;
 } MOVStreamContext;
@@ -227,6 +230,7 @@ typedef struct MOVContext {
     struct AVAES *aes_decrypt;
     uint8_t *decryption_key;
     int decryption_key_len;
+    int enable_drefs;
 } MOVContext;
 
 int ff_mp4_read_descr_len(AVIOContext *pb);

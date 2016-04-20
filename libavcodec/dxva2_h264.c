@@ -20,6 +20,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include "libavutil/avassert.h"
+
 #include "h264.h"
 #include "h264data.h"
 #include "mpegutils.h"
@@ -252,7 +254,7 @@ static void fill_slice_long(AVCodecContext *avctx, DXVA_Slice_H264_Long *slice,
                 else
                     index = get_refpic_index(pp, ff_dxva2_get_surface_index(avctx, ctx, r->f));
                 fill_picture_entry(&slice->RefPicList[list][i], index,
-                                   r->reference == PICT_BOTTOM_FIELD);
+                                   sl->ref_list[list][i].reference == PICT_BOTTOM_FIELD);
                 for (plane = 0; plane < 3; plane++) {
                     int w, o;
                     if (plane == 0 && sl->luma_weight_flag[list]) {
@@ -405,6 +407,8 @@ static int commit_bitstream_and_slice_buffer(AVCodecContext *avctx,
         dsc11->NumMBsInBuffer       = mb_count;
 
         type = D3D11_VIDEO_DECODER_BUFFER_SLICE_CONTROL;
+
+        av_assert0((dsc11->DataSize & 127) == 0);
     }
 #endif
 #if CONFIG_DXVA2
@@ -416,6 +420,8 @@ static int commit_bitstream_and_slice_buffer(AVCodecContext *avctx,
         dsc2->NumMBsInBuffer       = mb_count;
 
         type = DXVA2_SliceControlBufferType;
+
+        av_assert0((dsc2->DataSize & 127) == 0);
     }
 #endif
 
@@ -426,7 +432,6 @@ static int commit_bitstream_and_slice_buffer(AVCodecContext *avctx,
         slice_data = ctx_pic->slice_long;
         slice_size = ctx_pic->slice_count * sizeof(*ctx_pic->slice_long);
     }
-    assert((bs->DataSize & 127) == 0);
     return ff_dxva2_commit_buffer(avctx, ctx, sc,
                                   type,
                                   slice_data, slice_size, mb_count);

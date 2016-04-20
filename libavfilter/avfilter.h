@@ -37,6 +37,7 @@
 
 #include "libavutil/attributes.h"
 #include "libavutil/avutil.h"
+#include "libavutil/buffer.h"
 #include "libavutil/dict.h"
 #include "libavutil/frame.h"
 #include "libavutil/log.h"
@@ -343,6 +344,15 @@ struct AVFilterContext {
      */
     AVFilterInternal *internal;
 
+    /**
+     * For filters which will create hardware frames, sets the device the
+     * filter should create them in.  All other filters will ignore this field:
+     * in particular, a filter which consumes or processes hardware frames will
+     * instead use the hw_frames_ctx field in AVFilterLink to carry the
+     * hardware context information.
+     */
+    AVBufferRef *hw_device_ctx;
+
     struct AVFilterCommand *command_queue;
 
     char *enable_str;               ///< enable expression string
@@ -464,6 +474,12 @@ struct AVFilterLink {
     AVRational frame_rate;
 
     /**
+     * For hwaccel pixel formats, this should be a reference to the
+     * AVHWFramesContext describing the frames.
+     */
+    AVBufferRef *hw_frames_ctx;
+
+    /**
      * Buffer partially filled with samples to achieve a fixed/minimum size.
      */
     AVFrame *partial_buf;
@@ -491,7 +507,7 @@ struct AVFilterLink {
 
     /**
      * Link status.
-     * If not zero, all attempts of start_frame, filter_frame or request_frame
+     * If not zero, all attempts of filter_frame or request_frame
      * will fail with the corresponding code, and if necessary the reference
      * will be destroyed.
      * If request_frame returns an error, the status is set on the

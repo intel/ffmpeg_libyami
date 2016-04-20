@@ -23,7 +23,9 @@
 #include "libavutil/avutil.h"
 #include "libavutil/avstring.h"
 #include "libavutil/opt.h"
+#include "internal.h"
 #include "avformat.h"
+#include "avio_internal.h"
 
 #define MAX_SLAVES 16
 
@@ -133,6 +135,38 @@ end:
     return ret;
 }
 
+static void close_slave(TeeSlave *tee_slave)
+{
+    AVFormatContext *avf;
+    unsigned i;
+
+    avf = tee_slave->avf;
+    for (i = 0; i < avf->nb_streams; ++i) {
+        AVBitStreamFilterContext *bsf_next, *bsf = tee_slave->bsfs[i];
+        while (bsf) {
+            bsf_next = bsf->next;
+            av_bitstream_filter_close(bsf);
+            bsf = bsf_next;
+        }
+    }
+    av_freep(&tee_slave->stream_map);
+    av_freep(&tee_slave->bsfs);
+
+    ff_format_io_close(avf, &avf->pb);
+    avformat_free_context(avf);
+    tee_slave->avf = NULL;
+}
+
+static void close_slaves(AVFormatContext *avf)
+{
+    TeeContext *tee = avf->priv_data;
+    unsigned i;
+
+    for (i = 0; i < tee->nb_slaves; i++) {
+        close_slave(&tee->slaves[i]);
+    }
+}
+
 static int open_slave(AVFormatContext *avf, char *slave, TeeSlave *tee_slave)
 {
     int i, ret;
@@ -164,6 +198,9 @@ static int open_slave(AVFormatContext *avf, char *slave, TeeSlave *tee_slave)
     if (ret < 0)
         goto end;
     av_dict_copy(&avf2->metadata, avf->metadata, 0);
+    avf2->opaque   = avf->opaque;
+    avf2->io_open  = avf->io_open;
+    avf2->io_close = avf->io_close;
 
     tee_slave->stream_map = av_calloc(avf->nb_streams, sizeof(*tee_slave->stream_map));
     if (!tee_slave->stream_map) {
@@ -221,12 +258,12 @@ static int open_slave(AVFormatContext *avf, char *slave, TeeSlave *tee_slave)
         st2->sample_aspect_ratio = st->sample_aspect_ratio;
         st2->avg_frame_rate      = st->avg_frame_rate;
         av_dict_copy(&st2->metadata, st->metadata, 0);
-        if ((ret = avcodec_copy_context(st2->codec, st->codec)) < 0)
+        if ((ret = avcodec_parameters_copy(st2->codecpar, st->codecpar)) < 0)
             goto end;
     }
 
     if (!(avf2->oformat->flags & AVFMT_NOFILE)) {
-        if ((ret = avio_open(&avf2->pb, filename, AVIO_FLAG_WRITE)) < 0) {
+        if ((ret = avf2->io_open(avf2, &avf2->pb, filename, AVIO_FLAG_WRITE, NULL)) < 0) {
             av_log(avf, AV_LOG_ERROR, "Slave '%s': error opening: %s\n",
                    slave, av_err2str(ret));
             goto end;
@@ -306,32 +343,6 @@ end:
     return ret;
 }
 
-static void close_slaves(AVFormatContext *avf)
-{
-    TeeContext *tee = avf->priv_data;
-    AVFormatContext *avf2;
-    unsigned i, j;
-
-    for (i = 0; i < tee->nb_slaves; i++) {
-        avf2 = tee->slaves[i].avf;
-
-        for (j = 0; j < avf2->nb_streams; j++) {
-            AVBitStreamFilterContext *bsf_next, *bsf = tee->slaves[i].bsfs[j];
-            while (bsf) {
-                bsf_next = bsf->next;
-                av_bitstream_filter_close(bsf);
-                bsf = bsf_next;
-            }
-        }
-        av_freep(&tee->slaves[i].stream_map);
-        av_freep(&tee->slaves[i].bsfs);
-
-        avio_closep(&avf2->pb);
-        avformat_free_context(avf2);
-        tee->slaves[i].avf = NULL;
-    }
-}
-
 static void log_slave(TeeSlave *slave, void *log_ctx, int log_level)
 {
     int i;
@@ -342,8 +353,8 @@ static void log_slave(TeeSlave *slave, void *log_ctx, int log_level)
         AVBitStreamFilterContext *bsf = slave->bsfs[i];
 
         av_log(log_ctx, log_level, "    stream:%d codec:%s type:%s",
-               i, avcodec_get_name(st->codec->codec_id),
-               av_get_media_type_string(st->codec->codec_type));
+               i, avcodec_get_name(st->codecpar->codec_id),
+               av_get_media_type_string(st->codecpar->codec_type));
         if (bsf) {
             av_log(log_ctx, log_level, " bsfs:");
             while (bsf) {
@@ -417,11 +428,8 @@ static int tee_write_trailer(AVFormatContext *avf)
         if ((ret = av_write_trailer(avf2)) < 0)
             if (!ret_all)
                 ret_all = ret;
-        if (!(avf2->oformat->flags & AVFMT_NOFILE)) {
-            if ((ret = avio_closep(&avf2->pb)) < 0)
-                if (!ret_all)
-                    ret_all = ret;
-        }
+        if (!(avf2->oformat->flags & AVFMT_NOFILE))
+            ff_format_io_close(avf2, &avf2->pb);
     }
     close_slaves(avf);
     return ret_all;
