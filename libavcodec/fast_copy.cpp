@@ -32,13 +32,13 @@
  */
 
 #define COPY16(dstp, srcp, load, store) \
-    asm volatile (                      \
+    __asm__ volatile (                  \
         load "  0(%[src]), %%xmm1\n"    \
         store " %%xmm1,    0(%[dst])\n" \
         : : [dst]"r"(dstp), [src]"r"(srcp) : "memory", "xmm1")
 
 #define COPY128(dstp, srcp, load, store) \
-    asm volatile (                       \
+    __asm__ volatile (                   \
         load "  0(%[src]), %%xmm1\n"     \
         load " 16(%[src]), %%xmm2\n"     \
         load " 32(%[src]), %%xmm3\n"     \
