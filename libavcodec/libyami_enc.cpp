@@ -282,7 +282,7 @@ static int yami_enc_init(AVCodecContext *avctx)
         VideoConfigAVCStreamFormat streamFormat;
         streamFormat.size = sizeof(VideoConfigAVCStreamFormat);
         streamFormat.streamFormat =
-                (avctx->flags | AV_CODEC_FLAG_GLOBAL_HEADER) ?
+                (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER) ?
                         AVC_STREAM_FORMAT_AVCC : AVC_STREAM_FORMAT_ANNEXB;
         s->encoder->setParameters(VideoConfigTypeAVCStreamFormat, &streamFormat);
     }
