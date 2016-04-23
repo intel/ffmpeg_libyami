@@ -143,7 +143,7 @@ void *ff_copy_from_uswc(void *dst, void *src, size_t size)
     remain = size & 0x7F;
     round = size >> 7;
 
-    asm volatile ("mfence");
+    __asm__ volatile ("mfence");
 
     for (i = 0; i < round; i++) {
         COPY128(pDst, pSrc, "movntdqa", "movdqa");
@@ -171,9 +171,14 @@ void *ff_copy_from_uswc(void *dst, void *src, size_t size)
             pd[i] = ps[i];
         }
     }
-    asm volatile ("mfence");
+    __asm__ volatile ("mfence");
 
     return dst;
+}
+#else
+void *ff_copy_from_uswc(void *dst, void *src, size_t size)
+{
+    return memcpy(dst, src, size);
 }
 #endif
 
@@ -319,11 +324,8 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
     uint8_t *plane_buf = (uint8_t *)av_malloc(image.width * image.height * 3);
     if (!plane_buf)
         return false;
-#if HAVE_SSE4
+
     ff_copy_from_uswc((void *)plane_buf, (void *)buf, plane_size);
-#else
-    memcpy(plane_buf, buf, plane_size);
-#endif
 
     src_data[0] = plane_buf + image.offsets[0];
     src_data[1] = plane_buf + image.offsets[1];
