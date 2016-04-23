@@ -387,7 +387,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
         AVFrame *qframe = s->out_queue->front();
         if (qframe) {
             pkt->pts = s->enc_out_buf.timeStamp;
-            pkt->dts = qframe->pts - s->ip_period;/*FIX ME DTS must be smaller than PTS*/
+            pkt->dts = qframe->pts - s->ip_period; /* XXX: DTS must be smaller than PTS, used ip_period as offset */
             if (qframe->format != AV_PIX_FMT_YAMI) {
                 YamiImage *yami_image = (YamiImage *)qframe->data[3];
                 ff_vaapi_destory_surface(yami_image->output_frame);
@@ -400,12 +400,12 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     }
     pthread_mutex_unlock(&s->out_mutex);
     s->render_count++;
-    /*set extradata*/
+    /* get extradata when build the first frame */
     if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER && !avctx->extradata) {
-        /*find start code*/
+        /* find start code */
         int offset = 0;
         uint8_t *ptr = s->enc_out_buf.data;
-        for (int i = 0; i < s->enc_out_buf.dataSize; i++) {
+        for (uint32_t i = 0; i < s->enc_out_buf.dataSize; i++) {
             if (*(ptr + i) == 0x0 && *(ptr + i + 1) == 0x0
                     && *(ptr + i + 2) == 0x0 && *(ptr + i + 3) == 0x1) {
                 offset = i;
