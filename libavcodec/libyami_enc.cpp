@@ -38,7 +38,7 @@ extern "C" {
 #include "VideoEncoderHost.h"
 
 #include "libyami_enc.h"
-#include "libyami_utils.h"
+#include "libyami.h"
 using namespace YamiMediaCodec;
 
 static int ff_yami_encode_thread_init(YamiEncContext *s)

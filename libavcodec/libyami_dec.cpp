@@ -35,7 +35,7 @@ extern "C" {
 }
 #include "VideoDecoderHost.h"
 #include "libyami_dec.h"
-#include "libyami_utils.h"
+#include "libyami.h"
 
 using namespace YamiMediaCodec;
 

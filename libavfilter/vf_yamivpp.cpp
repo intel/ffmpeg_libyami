@@ -42,7 +42,7 @@ extern "C" {
 #include "video.h"
 }
 #include "VideoPostProcessHost.h"
-#include "libavcodec/libyami_utils.h"
+#include "libavcodec/libyami.h"
 
 using namespace YamiMediaCodec;
 
