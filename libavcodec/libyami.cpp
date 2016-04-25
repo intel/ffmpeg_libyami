@@ -31,7 +31,7 @@ extern "C" {
 }
 
 #include "VideoCommonDefs.h"
-#include "libyami_utils.h"
+#include "libyami.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -40,10 +40,6 @@ extern "C" {
 
 #if HAVE_VAAPI_X11
 #include <X11/Xlib.h>
-#endif
-
-#if HAVE_SSE4
-#include "fast_copy.h"
 #endif
 
 VADisplay ff_vaapi_create_display(void)
@@ -91,6 +87,100 @@ VADisplay ff_vaapi_create_display(void)
         return display;
     }
 }
+
+/*
+ * Used SSE4 MOVNTDQA instruction improving performance of data copies from
+ * Uncacheable Speculative Write Combining (USWC) memory to ordinary write back (WB)
+ * system memory.
+ * https://software.intel.com/en-us/articles/copying-accelerated-video-decode-frame-buffers/
+ */
+#if HAVE_SSE4
+#define COPY16(dstp, srcp, load, store) \
+    __asm__ volatile (                  \
+        load "  0(%[src]), %%xmm1\n"    \
+        store " %%xmm1,    0(%[dst])\n" \
+        : : [dst]"r"(dstp), [src]"r"(srcp) : "memory", "xmm1")
+
+#define COPY128(dstp, srcp, load, store) \
+    __asm__ volatile (                   \
+        load "  0(%[src]), %%xmm1\n"     \
+        load " 16(%[src]), %%xmm2\n"     \
+        load " 32(%[src]), %%xmm3\n"     \
+        load " 48(%[src]), %%xmm4\n"     \
+        load " 64(%[src]), %%xmm5\n"     \
+        load " 80(%[src]), %%xmm6\n"     \
+        load " 96(%[src]), %%xmm7\n"     \
+        load " 112(%[src]), %%xmm8\n"    \
+        store " %%xmm1,    0(%[dst])\n"  \
+        store " %%xmm2,   16(%[dst])\n"  \
+        store " %%xmm3,   32(%[dst])\n"  \
+        store " %%xmm4,   48(%[dst])\n"  \
+        store " %%xmm5,   64(%[dst])\n"  \
+        store " %%xmm6,   80(%[dst])\n"  \
+        store " %%xmm7,   96(%[dst])\n"  \
+        store " %%xmm8,   112(%[dst])\n" \
+        : : [dst]"r"(dstp), [src]"r"(srcp) : "memory", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5", "xmm6", "xmm7", "xmm8")
+
+void *ff_copy_from_uswc(void *dst, void *src, size_t size)
+{
+    char aligned;
+    int remain;
+    int i, round;
+    uint8_t *pDst, *pSrc;
+
+    if (dst == NULL || src == NULL) {
+        return NULL;
+    }
+
+    aligned = (((size_t) dst) | ((size_t) src)) & 0x0F;
+
+    if (aligned != 0) {
+        return NULL;
+    }
+
+    pDst = (uint8_t *) dst;
+    pSrc = (uint8_t *) src;
+    remain = size & 0x7F;
+    round = size >> 7;
+
+    __asm__ volatile ("mfence");
+
+    for (i = 0; i < round; i++) {
+        COPY128(pDst, pSrc, "movntdqa", "movdqa");
+        pSrc += 128;
+        pDst += 128;
+    }
+
+    if (remain >= 16) {
+        size = remain;
+        remain = size & 0xF;
+        round = size >> 4;
+
+        for (i = 0; i < round; i++) {
+            COPY16(pDst, pSrc, "movntdqa", "movdqa");
+            pSrc += 16;
+            pDst += 16;
+        }
+    }
+
+    if (remain > 0) {
+        char *ps = (char *)(pSrc);
+        char *pd = (char *)(pDst);
+
+        for (i = 0; i < remain; i++) {
+            pd[i] = ps[i];
+        }
+    }
+    __asm__ volatile ("mfence");
+
+    return dst;
+}
+#else
+void *ff_copy_from_uswc(void *dst, void *src, size_t size)
+{
+    return memcpy(dst, src, size);
+}
+#endif
 
 bool ff_check_vaapi_status(VAStatus status, const char *msg)
 {
@@ -234,11 +324,8 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
     uint8_t *plane_buf = (uint8_t *)av_malloc(image.width * image.height * 3);
     if (!plane_buf)
         return false;
-#if HAVE_SSE4
+
     ff_copy_from_uswc((void *)plane_buf, (void *)buf, plane_size);
-#else
-    memcpy(plane_buf, buf, plane_size);
-#endif
 
     src_data[0] = plane_buf + image.offsets[0];
     src_data[1] = plane_buf + image.offsets[1];
