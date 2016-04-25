@@ -281,9 +281,7 @@ static int yami_enc_init(AVCodecContext *avctx)
     if (avctx->codec_id == AV_CODEC_ID_H264) {
         VideoConfigAVCStreamFormat streamFormat;
         streamFormat.size = sizeof(VideoConfigAVCStreamFormat);
-        streamFormat.streamFormat =
-                (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER) ?
-                        AVC_STREAM_FORMAT_AVCC : AVC_STREAM_FORMAT_ANNEXB;
+        streamFormat.streamFormat = AVC_STREAM_FORMAT_ANNEXB;
         s->encoder->setParameters(VideoConfigTypeAVCStreamFormat, &streamFormat);
     }
 
@@ -407,7 +405,8 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
         uint8_t *ptr = s->enc_out_buf.data;
         for (uint32_t i = 0; i < s->enc_out_buf.dataSize; i++) {
             if (*(ptr + i) == 0x0 && *(ptr + i + 1) == 0x0
-                    && *(ptr + i + 2) == 0x0 && *(ptr + i + 3) == 0x1) {
+                    && *(ptr + i + 2) == 0x0 && *(ptr + i + 3) == 0x1
+                    && (*(ptr + i + 4) & 0x1f) == 5) {
                 offset = i;
                 break;
             }
