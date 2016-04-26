@@ -399,7 +399,8 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     pthread_mutex_unlock(&s->out_mutex);
     s->render_count++;
     /* get extradata when build the first frame */
-    if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER && !avctx->extradata) {
+    if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER && !avctx->extradata
+            && avctx->codec_id == AV_CODEC_ID_H264) {
         /* find start code */
         int offset = 0;
         uint8_t *ptr = s->enc_out_buf.data;
