@@ -399,28 +399,29 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     pthread_mutex_unlock(&s->out_mutex);
     s->render_count++;
     /* get extradata when build the first frame */
-    if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER && !avctx->extradata) {
-        /* find start code */
-        int offset = 0;
-        uint8_t *ptr = s->enc_out_buf.data;
-        for (uint32_t i = 0; i < s->enc_out_buf.dataSize; i++) {
-            if (*(ptr + i) == 0x0 && *(ptr + i + 1) == 0x0
-                    && *(ptr + i + 2) == 0x0 && *(ptr + i + 3) == 0x1
-                    && (*(ptr + i + 4) & 0x1f) == 5) {
-                offset = i;
-                break;
+    int offset = 0;
+    if (avctx->codec_id == AV_CODEC_ID_H264) {
+        if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER && !avctx->extradata) {
+            /* find start code */
+            uint8_t *ptr = s->enc_out_buf.data;
+            for (uint32_t i = 0; i < s->enc_out_buf.dataSize; i++) {
+                if (*(ptr + i) == 0x0 && *(ptr + i + 1) == 0x0
+                        && *(ptr + i + 2) == 0x0 && *(ptr + i + 3) == 0x1
+                        && (*(ptr + i + 4) & 0x1f) == 5) {
+                    offset = i;
+                    break;
+                }
             }
+            avctx->extradata = (uint8_t *) av_mallocz(
+                    offset + AV_INPUT_BUFFER_PADDING_SIZE);
+            memcpy(avctx->extradata, s->enc_out_buf.data, offset);
+            avctx->extradata_size = offset;
         }
-        avctx->extradata = (uint8_t *)av_mallocz(offset + AV_INPUT_BUFFER_PADDING_SIZE);
-        memcpy(avctx->extradata, s->enc_out_buf.data , offset);
-        avctx->extradata_size = offset;
-        void *p = pkt->data;
-        memcpy(p, s->enc_out_buf.data + offset, s->enc_out_buf.dataSize - offset);
-        pkt->size = s->enc_out_buf.dataSize - offset;
-    } else {
-        void *p = pkt->data;
-        memcpy(p, s->enc_out_buf.data, s->enc_out_buf.dataSize);
     }
+    void *p = pkt->data;
+    memcpy(p, s->enc_out_buf.data + offset,
+            s->enc_out_buf.dataSize - offset);
+    pkt->size = s->enc_out_buf.dataSize - offset;
 
     if (s->enc_out_buf.flag & ENCODE_BUFFERFLAG_SYNCFRAME)
         pkt->flags |= AV_PKT_FLAG_KEY;
