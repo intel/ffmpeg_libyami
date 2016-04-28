@@ -392,3 +392,17 @@ fate-libyami-h264-interlace-crop:                         CMD = framecrc -c:v li
 fate-libyami-h264-direct-bff:                             CMD = framecrc -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/direct-bff.mkv -pix_fmt yuv420p
 
 #fate-libyami-h264-reinit-%:                               CMD = framecrc -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/$(@:fate-libyami-h264-%=%).h264 -vf format=yuv444p10le,scale=w=352:h=288
+
+
+fate-libyami-h264-enc%: CMD = framemd5 -f rawvideo -s 352x288  -i $(TARGET_PATH)/tests/data/vsynth2.yuv -vcodec libyami_h264 ${OPTS}
+
+FATE_YAMI_H264_ENC += fate-yami-h264-enc_yuv420
+fate-yami-h264-enc_yuv420: OPTS =
+
+$(FATE_YAMI_H264_ENC): $(VREF)
+
+FATE_AVCONV-$(call ENCMUX, LIBYAMI_H264, AVI) += $(FATE_YAMI_H264_ENC)
+fate-yami-h264-enc: $(FATE_YAMI_H264_ENC)
+
+
+
