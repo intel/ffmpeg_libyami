@@ -396,13 +396,21 @@ fate-libyami-h264-direct-bff:                             CMD = framecrc -c:v li
 
 fate-libyami-h264-enc%: CMD = framemd5 -f rawvideo -s 352x288  -i $(TARGET_PATH)/tests/data/vsynth2.yuv -vcodec libyami_h264 ${OPTS}
 
-FATE_YAMI_H264_ENC += fate-yami-h264-enc_yuv420
-fate-yami-h264-enc_yuv420: OPTS =
+FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420
+fate-libyami-h264-enc_yuv420: OPTS =
 
-$(FATE_YAMI_H264_ENC): $(VREF)
+$(FATE_LIBYAMI_H264_ENC): $(VREF)
 
-FATE_AVCONV-$(call ENCMUX, LIBYAMI_H264, AVI) += $(FATE_YAMI_H264_ENC)
-fate-yami-h264-enc: $(FATE_YAMI_H264_ENC)
+FATE_AVCONV-$(call ENCMUX, LIBYAMI_H264, AVI) += $(FATE_LIBYAMI_H264_ENC)
+fate-libyami-h264-enc: $(FATE_LIBYAMI_H264_ENC)
 
+fate-libyami-h264-tran%: CMD = framemd5 -vcodec libyami_h264 -i $(TARGET_SAMPLES)/h264/interlaced_crop.mp4 -vcodec libyami_h264 ${OPTS}
 
+FATE_LIBYAMI_H264_TRAN += fate-libyami-h264-tran_mkv
+fate-libyami-h264-tran_mkv: OPTS = -force_yami_pipeline
+
+$(FATE_LIBYAMI_H264_TRAN): $(VREF)
+
+FATE_AVCONV-$(call ALLYES,  LIBYAMI_H264_DECODER LIBYAMI_H264_ENCODER MOV_DEMUXER AVI_MUXER) += $(FATE_LIBYAMI_H264_TRAN)
+fate-libyami-h264-tran: $(FATE_LIBYAMI_H264_TRAN)
 
