@@ -320,8 +320,8 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
     dest_data[1] = out->data[1];
     dest_data[2] = out->data[2];
 
-    int plane_size = image.offsets[1] / 2 + image.offsets[1];
-    uint8_t *plane_buf = (uint8_t *)av_malloc(image.width * image.height * 3);
+    int plane_size = image.data_size;
+    uint8_t *plane_buf = (uint8_t *)av_malloc(FFMAX(image.width * image.height * 3, plane_size));
     if (!plane_buf)
         return false;
 
