@@ -1,4 +1,4 @@
-TE_LIBYAMI_H264 = aud_mw_e                                                    \
+FATE_LIBYAMI_H264 = aud_mw_e                                                    \
             ba1_ft_c                                                    \
             ba1_sony_d                                                  \
             ba2_sony_f                                                  \
