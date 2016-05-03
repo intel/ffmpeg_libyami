@@ -596,4 +596,53 @@ FATE_SAMPLES_AVCONV += $(FATE_LIBYAMI_HEVC-yes)
 
 fate-libyami-hevc: $(FATE_LIBYAMI_HEVC-yes)
 
+FATE_LIBYAMI_VP8-$(call DEMDEC, FLV, LIBYAMI_VP8) += fate-libyami-vp8-alpha
+fate-libyami-vp8-alpha: CMD = framecrc -c:v libyami_vp8 -i $(TARGET_SAMPLES)/vp8_alpha/vp8_video_with_alpha.webm -vcodec copy
+fate-libyami-vp8-alpha: REF = $(SRC_PATH)/tests/ref/fate/vp8-alpha
 
+FATE_LIBYAMI_VP8-$(call DEMDEC, WEBM_DASH_MANIFEST, LIBYAMI_VP8) += fate-libyami-webm-dash-manifest
+fate-libyami-webm-dash-manifest: CMD = run $(FFMPEG) -f webm_dash_manifest -c:v libyami_vp8 -i $(TARGET_SAMPLES)/vp8/dash_video1.webm -f webm_dash_manifest -i $(TARGET_SAMPLES)/vp8/dash_video2.webm -f webm_dash_manifest -i $(TARGET_SAMPLES)/vp8/dash_audio1.webm -f webm_dash_manifest -i $(TARGET_SAMPLES)/vp8/dash_audio2.webm -c copy -map 0 -map 1 -map 2 -map 3 -f webm_dash_manifest -adaptation_sets "id=0,streams=0,1 id=1,streams=2,3" -
+fate-libyami-webm-dash-manifest: REF = $(SRC_PATH)/tests/ref/fate/webm-dash-manifest
+
+FATE_LIBYAMI_VP8-$(call DEMDEC, WEBM_DASH_MANIFEST, LIBYAMI_VP8) += fate-libyami-webm-dash-manifest-unaligned-video-streams
+fate-libyami-webm-dash-manifest-unaligned-video-streams: CMD = run $(FFMPEG) -f webm_dash_manifest -c:v libyami_vp8 -i $(TARGET_SAMPLES)/vp8/dash_video1.webm -f webm_dash_manifest -i $(TARGET_SAMPLES)/vp8/dash_video3.webm -c copy -map 0 -map 1 -f webm_dash_manifest -adaptation_sets "id=0,streams=0,1" -
+fate-libyami-webm-dash-manifest-unaligned-video-streams: REF = $(SRC_PATH)/tests/ref/fate/webm-dash-manifest-unaligned-video-streams
+
+FATE_LIBYAMI_VP8-$(call DEMDEC, WEBM_DASH_MANIFEST, LIBYAMI_VP8) += fate-libyami-webm-dash-manifest-unaligned-audio-streams
+fate-libyami-webm-dash-manifest-unaligned-audio-streams: CMD = run $(FFMPEG) -f webm_dash_manifest -c:v libyami_vp8 -i $(TARGET_SAMPLES)/vp8/dash_audio1.webm -f webm_dash_manifest -i $(TARGET_SAMPLES)/vp8/dash_audio3.webm -c copy -map 0 -map 1 -f webm_dash_manifest -adaptation_sets "id=0,streams=0,1" -
+fate-libyami-webm-dash-manifest-unaligned-audio-streams: REF = $(SRC_PATH)/tests/ref/fate/webm-dash-manifest-unaligned-audio-streams
+
+FATE_LIBYAMI_VP8-$(call DEMDEC, WEBM_DASH_MANIFEST, LIBYAMI_VP8) += fate-libyami-webm-dash-manifest-representations
+fate-libyami-webm-dash-manifest-representations: CMD = run $(FFMPEG) -f webm_dash_manifest -c:v libyami_vp8 -i $(TARGET_SAMPLES)/vp8/dash_video1.webm -f webm_dash_manifest -i $(TARGET_SAMPLES)/vp8/dash_video4.webm -c copy -map 0 -map 1 -f webm_dash_manifest -adaptation_sets "id=0,streams=0,1" -
+fate-libyami-webm-dash-manifest-representations: REF = $(SRC_PATH)/tests/ref/fate/webm-dash-manifest-representations
+
+FATE_LIBYAMI_VP8-$(call DEMDEC, WEBM_DASH_MANIFEST, LIBYAMI_VP8) += fate-libyami-webm-dash-manifest-live
+fate-libyami-webm-dash-manifest-live: CMD = run $(FFMPEG) -f webm_dash_manifest -live 1 -c:v libyami_vp8 -i $(TARGET_SAMPLES)/vp8/dash_live_video_360.hdr -f webm_dash_manifest -live 1 -i $(TARGET_SAMPLES)/vp8/dash_live_audio_171.hdr -c copy -map 0 -map 1 -f webm_dash_manifest -live 1 -adaptation_sets "id=0,streams=0 id=1,streams=1" -chunk_start_index 1 -chunk_duration_ms 5000 -time_shift_buffer_depth 7200 -minimum_update_period 60 -debug_mode 1 -
+fate-libyami-webm-dash-manifest-live: REF = $(SRC_PATH)/tests/ref/fate/webm-dash-manifest-live
+
+LIBYAMI_VP8_SUITE = 001 002 003 004 005 006 007 008 009 010 011 012 013 014 015 016 017
+
+define FATE_LIBYAMI_VP8_SUITE
+FATE_LIBYAMI_VP8-$(CONFIG_IVF_DEMUXER) += fate-libyami-vp8-test-vector$(2)-$(1)
+fate-libyami-vp8-test-vector$(2)-$(1): CMD = framemd5 $(3) -c:v libyami_vp8 -i $(TARGET_SAMPLES)/vp8-test-vectors-r1/vp80-00-comprehensive-$(1).ivf
+fate-libyami-vp8-test-vector$(2)-$(1): REF = $(SRC_PATH)/tests/ref/fate/vp8-test-vector-$(1)
+endef
+
+define FATE_LIBYAMI_VP8_FULL
+$(foreach N,$(VP8_SUITE),$(eval $(call FATE_VP8_SUITE,$(N),$(1),$(2))))
+
+# FIXME this file contains two frames with identical timestamps,
+# so ffmpeg drops one of them
+FATE_LIBYAMI_VP8-$(CONFIG_IVF_DEMUXER) += fate-libyami-vp8-sign-bias$(1)
+fate-libyami-vp8-sign-bias$(1): CMD = framemd5 $(2) -c:v libyami_vp8 -i $(TARGET_SAMPLES)/vp8/sintel-signbias.ivf
+fate-libyami-vp8-sign-bias$(1): REF = $(SRC_PATH)/tests/ref/fate/vp8-sign-bias
+
+FATE_LIBYAMI_VP8-$(CONFIG_MATROSKA_DEMUXER) += fate-libyami-vp8-size-change$(1)
+fate-libyami-vp8-size-change$(1): CMD = framemd5 $(2) -flags +bitexact -c:v libyami_vp8 -i $(TARGET_SAMPLES)/vp8/frame_size_change.webm -frames:v 30 -sws_flags bitexact+bilinear
+fate-libyami-vp8-size-change$(1): REF = $(SRC_PATH)/tests/ref/fate/vp8-size-change
+endef
+
+$(eval $(call FATE_LIBYAMI_VP8_FULL))
+
+FATE_SAMPLES_AVCONV-$(CONFIG_LIBYAMI_VP8_DECODER) += $(FATE_LIBYAMI_VP8-yes)
+fate-libyami-vp8: $(FATE_LIBYAMI_VP8-yes)
