@@ -1,4 +1,4 @@
-TE_LIBYAMI_H264 = aud_mw_e                                                    \
+FATE_LIBYAMI_H264 = aud_mw_e                                                    \
             ba1_ft_c                                                    \
             ba1_sony_d                                                  \
             ba2_sony_f                                                  \
@@ -166,6 +166,8 @@ TE_LIBYAMI_H264 = aud_mw_e                                                    \
             sva_nl2_e                                                   \
 
 FATE_LIBYAMI_H264_REINIT_TESTS :=  
+
+FATE_LIBYAMI_H264_REF  := $(FATE_LIBYAMI_H264:%=h264-conformance-%) 
 
 FATE_LIBYAMI_H264  := $(FATE_LIBYAMI_H264:%=fate-libyami-h264-conformance-%)                    \
               $(FATE_LIBYAMI_H264_REINIT_TESTS:%=fate-libyami-h264-reinit-%)            \
@@ -341,10 +343,19 @@ fate-libyami-h264-conformance-sva_fm1_e:                  CMD = framecrc -vsync 
 fate-libyami-h264-conformance-sva_nl1_b:                  CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/SVA_NL1_B.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-sva_nl2_e:                  CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/SVA_NL2_E.264 -pix_fmt yuv420p
 
-fate-libyami-h264-bsf-mp4toannexb:                        CMD = md5 -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/interlaced_crop.mp4 -vcodec copy -bsf h264_mp4toannexb -f h264
-fate-libyami-h264-interlace-crop:                         CMD = framecrc -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/interlaced_crop.mp4 -vframes 3 -pix_fmt yuv420p
-fate-libyami-h264-direct-bff:                             CMD = framecrc -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/direct-bff.mkv -pix_fmt yuv420p
+define FATE_LIBYAMI_H264_TEST
+#FATE_LIBYAMI_HEVC += fate-libyami-hevc-conformance-$(1)
+fate-libyami-$(1): REF = $(SRC_PATH)/tests/ref/fate/$(1)
+endef
 
+$(foreach N,$(FATE_LIBYAMI_H264_REF),$(eval $(call FATE_LIBYAMI_H264_TEST,$(N))))
+
+fate-libyami-h264-bsf-mp4toannexb:                        CMD = md5 -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/interlaced_crop.mp4 -vcodec copy -bsf h264_mp4toannexb -f h264
+fate-libyami-h264-bsf-mp4toannexb:                        REF = $(SRC_PATH)/tests/ref/fate/h264-bsf-mp4toannexb
+fate-libyami-h264-interlace-crop:                         CMD = framecrc -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/interlaced_crop.mp4 -vframes 3 -pix_fmt yuv420p
+fate-libyami-h264-interlace-crop:                         REF = $(SRC_PATH)/tests/ref/fate/h264-interlace-crop
+fate-libyami-h264-direct-bff:                             CMD = framecrc -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/direct-bff.mkv -pix_fmt yuv420p
+fate-libyami-h264-direct-bff:                             REF = $(SRC_PATH)/tests/ref/fate/h264-direct-bff
 
 LIBYAMI_HEVC_SAMPLES =                  \
     AMP_A_Samsung_4             \
