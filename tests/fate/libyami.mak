@@ -547,31 +547,37 @@ LIBYAMI_HEVC_SAMPLES_444_12BIT =        \
 define FATE_HEVC_TEST
 FATE_LIBYAMI_HEVC += fate-libyami-hevc-conformance-$(1)
 fate-libyami-hevc-conformance-$(1): CMD = framecrc -flags unaligned -vsync drop -c:v libyami_hevc -i $(TARGET_SAMPLES)/hevc-conformance/$(1).bit
+fate-libyami-hevc-conformance-$(1): REF = $(SRC_PATH)/tests/ref/fate/hevc-conformance-$(1)
 endef
 
 define FATE_LIBYAMI_HEVC_TEST_10BIT
 FATE_LIBYAMI_HEVC += fate-libyami-hevc-conformance-$(1)
 fate-libyami-hevc-conformance-$(1): CMD = framecrc -flags unaligned -vsync drop -c:v libyami_hevc -i $(TARGET_SAMPLES)/hevc-conformance/$(1).bit -pix_fmt yuv420p10le
+fate-libyami-hevc-conformance-$(1): REF = $(SRC_PATH)/tests/ref/fate/hevc-conformance-$(1)
 endef
 
 define FATE_LIBYAMI_HEVC_TEST_422_10BIT
 FATE_LIBYAMI_HEVC += fate-libyami-hevc-conformance-$(1)
 fate-libyami-hevc-conformance-$(1): CMD = framecrc -flags unaligned -vsync drop -c:v libyami_hevc -i $(TARGET_SAMPLES)/hevc-conformance/$(1).bit -pix_fmt yuv422p10le
+fate-libyami-hevc-conformance-$(1): REF = $(SRC_PATH)/tests/ref/fate/hevc-conformance-$(1)
 endef
 
 define FATE_LIBYAMI_HEVC_TEST_422_10BIN
 FATE_LIBYAMI_HEVC += fate-libyami-hevc-conformance-$(1)
 fate-libyami-hevc-conformance-$(1): CMD = framecrc -flags unaligned -vsync drop -c:v libyami_hevc -i $(TARGET_SAMPLES)/hevc-conformance/$(1).bin -pix_fmt yuv422p10le
+fate-libyami-hevc-conformance-$(1): REF = $(SRC_PATH)/tests/ref/fate/hevc-conformance-$(1)
 endef
 
 define FATE_LIBYAMI_HEVC_TEST_444_8BIT
 FATE_LIBYAMI_HEVC += fate-libyami-hevc-conformance-$(1)
 fate-libyami-hevc-conformance-$(1): CMD = framecrc -flags unaligned -vsync drop -c:v libyami_hevc -i $(TARGET_SAMPLES)/hevc-conformance/$(1).bit
+fate-libyami-hevc-conformance-$(1): REF = $(SRC_PATH)/tests/ref/fate/hevc-conformance-$(1)
 endef
 
 define FATE_LIBYAMI_HEVC_TEST_444_12BIT
 FATE_LIBYAMI_HEVC += fate-libyami-hevc-conformance-$(1)
 fate-libyami-hevc-conformance-$(1): CMD = framecrc -flags unaligned -vsync drop -c:v libyami_hevc -i $(TARGET_SAMPLES)/hevc-conformance/$(1).bit -pix_fmt yuv444p12le
+fate-libyami-hevc-conformance-$(1): REF = $(SRC_PATH)/tests/ref/fate/hevc-conformance-$(1)
 endef
 
 $(foreach N,$(LIBYAMI_HEVC_SAMPLES),$(eval $(call FATE_LIBYAMI_HEVC_TEST,$(N))))
