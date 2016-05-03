@@ -2,7 +2,6 @@ FATE_LIBYAMI_H264 = aud_mw_e                                                    
             ba1_ft_c                                                    \
             ba1_sony_d                                                  \
             ba2_sony_f                                                  \
-#            ba3_sva_c                                                   \
             ba_mw_d                                                     \
             bamq1_jvc_c                                                 \
             bamq2_jvc_c                                                 \
@@ -64,7 +63,6 @@ FATE_LIBYAMI_H264 = aud_mw_e                                                    
             ci_mw_d                                                     \
             cvbs3_sony_c                                                \
             cvcanlma2_sony_c                                            \
-#            cvfc1_sony_c                                                \
             cvfi1_sony_d                                                \
             cvfi1_sva_c                                                 \
             cvfi2_sony_h                                                \
@@ -89,7 +87,6 @@ FATE_LIBYAMI_H264 = aud_mw_e                                                    
             cvwp5_toshiba_e                                             \
             fi1_sony_e                                                  \
             frext-alphaconformanceg                                     \
-#            frext-bcrm_freh10                                           \
             frext-brcm_freh11                                           \
             frext-brcm_freh3                                            \
             frext-brcm_freh4                                            \
@@ -114,10 +111,6 @@ FATE_LIBYAMI_H264 = aud_mw_e                                                    
             frext-hcafr3_hhi_a                                          \
             frext-hcafr4_hhi_a                                          \
             frext-hcamff1_hhi_b                                         \
-#            frext-hi422fr10_sony_b                                      \
-#            frext-hi422fr13_sony_b                                      \
-#            frext-hi422fr1_sony_a                                       \
-#            frext-hi422fr6_sony_a                                       \
             frext-hpca_brcm_c                                           \
             frext-hpcadq_brcm_b                                         \
             frext-hpcafl_bcrm_c                                         \
@@ -132,13 +125,6 @@ FATE_LIBYAMI_H264 = aud_mw_e                                                    
             frext-hpcvflnl_bcrm_a                                       \
             frext-hpcvmolq_brcm_b                                       \
             frext-hpcvnl_brcm_a                                         \
-#            frext-pph10i1_panasonic_a                                  # \
-#            frext-pph10i2_panasonic_a                                   \
-#            frext-pph10i3_panasonic_a                                   \
-#            frext-pph10i4_panasonic_a                                   \
-#            frext-pph10i5_panasonic_a                                   \
-#            frext-pph10i6_panasonic_a                                   \
-#            frext-pph10i7_panasonic_a                                   \
             frext-pph422i1_panasonic_a                                  \
             frext-pph422i2_panasonic_a                                  \
             frext-pph422i3_panasonic_a                                  \
@@ -158,10 +144,6 @@ FATE_LIBYAMI_H264 = aud_mw_e                                                    
             mr3_tandberg_b                                              \
             mr4_tandberg_c                                              \
             mr5_tandberg_c                                              \
-#            mr6_bt_b                                                    \#
-#            mr7_bt_b                                                    \
-#            mr8_bt_b                                                    \
-#            mr9_bt_b                                                    \
             mv1_brcm_d                                                  \
             nl1_sony_d                                                  \
             nl2_sony_h                                                  \
@@ -203,7 +185,6 @@ fate-libyami-h264-conformance-aud_mw_e:                   CMD = framecrc -vsync 
 fate-libyami-h264-conformance-ba1_ft_c:                   CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/BA1_FT_C.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-ba1_sony_d:                 CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/BA1_Sony_D.jsv -pix_fmt yuv420p
 fate-libyami-h264-conformance-ba2_sony_f:                 CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/BA2_Sony_F.jsv -pix_fmt yuv420p
-#fate-libyami-h264-conformance-ba3_sva_c:                  CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/BA3_SVA_C.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-ba_mw_d:                    CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/BA_MW_D.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-bamq1_jvc_c:                CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/BAMQ1_JVC_C.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-bamq2_jvc_c:                CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/BAMQ2_JVC_C.264 -pix_fmt yuv420p
@@ -265,7 +246,6 @@ fate-libyami-h264-conformance-ci1_ft_b:                   CMD = framecrc -vsync 
 fate-libyami-h264-conformance-ci_mw_d:                    CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/CI_MW_D.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-cvbs3_sony_c:               CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/CVBS3_Sony_C.jsv -pix_fmt yuv420p
 fate-libyami-h264-conformance-cvcanlma2_sony_c:           CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/CVCANLMA2_Sony_C.jsv -pix_fmt yuv420p
-#fate-libyami-h264-conformance-cvfc1_sony_c:               CMD = framecrc -flags unaligned -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/CVFC1_Sony_C.jsv -pix_fmt yuv420p
 fate-libyami-h264-conformance-cvfi1_sony_d:               CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/CVFI1_Sony_D.jsv -pix_fmt yuv420p
 fate-libyami-h264-conformance-cvfi1_sva_c:                CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/CVFI1_SVA_C.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-cvfi2_sony_h:               CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/CVFI2_Sony_H.jsv -pix_fmt yuv420p
@@ -290,7 +270,6 @@ fate-libyami-h264-conformance-cvwp3_toshiba_e:            CMD = framecrc -vsync 
 fate-libyami-h264-conformance-cvwp5_toshiba_e:            CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/CVWP5_TOSHIBA_E.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-fi1_sony_e:                 CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FI1_Sony_E.jsv -pix_fmt yuv420p
 fate-libyami-h264-conformance-frext-alphaconformanceg:    CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/test8b43.264 -pix_fmt yuv420p
-#fate-libyami-h264-conformance-frext-bcrm_freh10:          CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/freh10.264 -vsync drop -pix_fmt yuv420p
 fate-libyami-h264-conformance-frext-brcm_freh11:          CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/freh11.264 -vsync drop -pix_fmt yuv420p
 fate-libyami-h264-conformance-frext-brcm_freh3:           CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/freh3.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-frext-brcm_freh4:           CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/freh4.264 -vsync drop -pix_fmt yuv420p
@@ -315,10 +294,6 @@ fate-libyami-h264-conformance-frext-hcafr2_hhi_a:         CMD = framecrc -vsync 
 fate-libyami-h264-conformance-frext-hcafr3_hhi_a:         CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/HCAFR3_HHI.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-frext-hcafr4_hhi_a:         CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/HCAFR4_HHI.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-frext-hcamff1_hhi_b:        CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/HCAMFF1_HHI.264 -pix_fmt yuv420p
-#fate-libyami-h264-conformance-frext-hi422fr10_sony_b:     CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/Hi422FR10_SONY_B.264 -pix_fmt yuv420p
-#fate-libyami-h264-conformance-frext-hi422fr13_sony_b:     CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/Hi422FR13_SONY_B.264 -pix_fmt yuv422p10le
-#fate-libyami-h264-conformance-frext-hi422fr1_sony_a:      CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/Hi422FR1_SONY_A.jsv -pix_fmt yuv420p
-#fate-libyami-h264-conformance-frext-hi422fr6_sony_a:      CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/Hi422FR6_SONY_A.jsv -pix_fmt yuv422p10le
 fate-libyami-h264-conformance-frext-hpca_brcm_c:          CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/HPCA_BRCM_C.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-frext-hpcadq_brcm_b:        CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/HPCADQ_BRCM_B.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-frext-hpcafl_bcrm_c:        CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/HPCAFL_BRCM_C.264 -vsync drop -pix_fmt yuv420p
@@ -333,20 +308,6 @@ fate-libyami-h264-conformance-frext-hpcvfl_bcrm_a:        CMD = framecrc -vsync 
 fate-libyami-h264-conformance-frext-hpcvflnl_bcrm_a:      CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/HPCVFLNL_BRCM_A.264 -vsync drop -pix_fmt yuv420p
 fate-libyami-h264-conformance-frext-hpcvmolq_brcm_b:      CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/HPCVMOLQ_BRCM_B.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-frext-hpcvnl_brcm_a:        CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/HPCVNL_BRCM_A.264 -pix_fmt yuv420p
-#fate-libyami-h264-conformance-frext-pph10i1_panasonic_a:  CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH10I1_Panasonic_A.264 -pix_fmt yuv420p10le
-#fate-libyami-h264-conformance-frext-pph10i2_panasonic_a:  CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH10I2_Panasonic_A.264 -pix_fmt yuv420p10le
-#fate-libyami-h264-conformance-frext-pph10i3_panasonic_a:  CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH10I3_Panasonic_A.264 -pix_fmt yuv420p10le
-#fate-libyami-h264-conformance-frext-pph10i4_panasonic_a:  CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH10I4_Panasonic_A.264 -pix_fmt yuv420p10le
-#fate-libyami-h264-conformance-frext-pph10i5_panasonic_a:  CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH10I5_Panasonic_A.264 -pix_fmt yuv420p10le
-#fate-libyami-h264-conformance-frext-pph10i6_panasonic_a:  CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH10I6_Panasonic_A.264 -pix_fmt yuv420p10le
-#fate-libyami-h264-conformance-frext-pph10i7_panasonic_a:  CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH10I7_Panasonic_A.264 -pix_fmt yuv420p10le
-#fate-libyami-h264-conformance-frext-pph422i1_panasonic_a: CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH422I1_Panasonic_A.264 -pix_fmt yuv422p10le
-#fate-libyami-h264-conformance-frext-pph422i2_panasonic_a: CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH422I2_Panasonic_A.264 -pix_fmt yuv422p10le
-#fate-libyami-h264-conformance-frext-pph422i3_panasonic_a: CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH422I3_Panasonic_A.264 -pix_fmt yuv422p10le
-#fate-libyami-h264-conformance-frext-pph422i4_panasonic_a: CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH422I4_Panasonic_A.264 -pix_fmt yuv422p10le
-#fate-libyami-h264-conformance-frext-pph422i5_panasonic_a: CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH422I5_Panasonic_A.264 -pix_fmt yuv422p10le
-#fate-libyami-h264-conformance-frext-pph422i6_panasonic_a: CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH422I6_Panasonic_A.264 -pix_fmt yuv422p10le
-#fate-libyami-h264-conformance-frext-pph422i7_panasonic_a: CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/FRext/PPH422I7_Panasonic_A.264 -pix_fmt yuv422p10le
 fate-libyami-h264-conformance-hcbp2_hhi_a:                CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/HCBP2_HHI_A.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-hcmp1_hhi_a:                CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/HCMP1_HHI_A.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-ls_sva_d:                   CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/LS_SVA_D.264 -pix_fmt yuv420p
@@ -359,10 +320,6 @@ fate-libyami-h264-conformance-mr2_tandberg_e:             CMD = framecrc -vsync 
 fate-libyami-h264-conformance-mr3_tandberg_b:             CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/MR3_TANDBERG_B.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-mr4_tandberg_c:             CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/MR4_TANDBERG_C.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-mr5_tandberg_c:             CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/MR5_TANDBERG_C.264 -pix_fmt yuv420p
-#fate-libyami-h264-conformance-mr6_bt_b:                   CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/MR6_BT_B.h264 -pix_fmt yuv420p
-#fate-libyami-h264-conformance-mr7_bt_b:                   CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/MR7_BT_B.h264 -pix_fmt yuv420p
-#fate-libyami-h264-conformance-mr8_bt_b:                   CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/MR8_BT_B.h264 -pix_fmt yuv420p
-#fate-libyami-h264-conformance-mr9_bt_b:                   CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/MR9_BT_B.h264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-mv1_brcm_d:                 CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/src19td.IBP.264 -pix_fmt yuv420p
 fate-libyami-h264-conformance-nl1_sony_d:                 CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/NL1_Sony_D.jsv -pix_fmt yuv420p
 fate-libyami-h264-conformance-nl2_sony_h:                 CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/NL2_Sony_H.jsv -pix_fmt yuv420p
@@ -385,13 +342,9 @@ fate-libyami-h264-conformance-sva_nl1_b:                  CMD = framecrc -vsync 
 fate-libyami-h264-conformance-sva_nl2_e:                  CMD = framecrc -vsync drop -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264-conformance/SVA_NL2_E.264 -pix_fmt yuv420p
 
 fate-libyami-h264-bsf-mp4toannexb:                        CMD = md5 -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/interlaced_crop.mp4 -vcodec copy -bsf h264_mp4toannexb -f h264
-#fate-libyami-h264-crop-to-container:                      CMD = framemd5 -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/crop-to-container-dims-canon.mov -pix_fmt yuv420p
-#fate-libyami-h264-extreme-plane-pred:                     CMD = framemd5 -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/extreme-plane-pred.h264
 fate-libyami-h264-interlace-crop:                         CMD = framecrc -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/interlaced_crop.mp4 -vframes 3 -pix_fmt yuv420p
-#fate-libyami-h264-lossless:                               CMD = framecrc -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/lossless.h264
 fate-libyami-h264-direct-bff:                             CMD = framecrc -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/direct-bff.mkv -pix_fmt yuv420p
 
-#fate-libyami-h264-reinit-%:                               CMD = framecrc -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/$(@:fate-libyami-h264-%=%).h264 -vf format=yuv444p10le,scale=w=352:h=288
 
 
 fate-libyami-h264-enc%: CMD = framemd5 -f rawvideo -s 352x288  -i $(TARGET_PATH)/tests/data/vsynth2.yuv -vcodec libyami_h264 ${OPTS}
