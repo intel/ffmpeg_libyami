@@ -27,7 +27,9 @@
 
 
 #include <va/va_drm.h>
+#if HAVE_VAAPI_X11
 #include <va/va_x11.h>
+#endif
 
 #ifndef VA_FOURCC_I420
 #define VA_FOURCC_I420 VA_FOURCC('I','4','2','0')
