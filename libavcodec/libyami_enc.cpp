@@ -81,9 +81,6 @@ static int ff_yami_encode_thread_close(YamiEncContext *s)
 static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *to)
 {
     int pix_fmt = VA_FOURCC_NV12;
-    if (from->pict_type == AV_PICTURE_TYPE_I)
-        to->output_frame->flags |= VIDEO_FRAME_FLAGS_KEY;
-
     if (avctx->pix_fmt == AV_PIX_FMT_YUV420P) {
         pix_fmt =  VA_FOURCC_I420;
     } else if (avctx->pix_fmt == AV_PIX_FMT_NV12) {
@@ -93,6 +90,8 @@ static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *t
     }
     to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, pix_fmt, avctx->width, avctx->height);
     ff_vaapi_load_image(to->output_frame, from);
+    if (from->key_frame)
+        to->output_frame->flags |= VIDEO_FRAME_FLAGS_KEY;
     to->va_display = ff_vaapi_create_display();
     from->data[3] = reinterpret_cast<uint8_t *>(to);
     return 0;
@@ -475,40 +474,34 @@ static const AVClass yami_enc_##NAME##_class = { \
     .version    = LIBAVUTIL_VERSION_INT, \
 }; \
 AVCodec ff_libyami_##NAME##_encoder = { \
-    .name                  = "libyami_" #NAME,  \
-    .long_name             = NULL_IF_CONFIG_SMALL(#NAME " (libyami)"),  \
-    .type                  = AVMEDIA_TYPE_VIDEO,    \
-    .id                    = ID,    \
-    .capabilities          = CODEC_CAP_DELAY,   \
-    .supported_framerates  = NULL,  \
-    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI,    \
-                                                            AV_PIX_FMT_NV12,    \
+    /* name */                  "libyami_" #NAME, \
+    /* long_name */             NULL_IF_CONFIG_SMALL(#NAME " (libyami)"), \
+    /* type */                  AVMEDIA_TYPE_VIDEO, \
+    /* id */                    ID, \
+    /* capabilities */          CODEC_CAP_DELAY, \
+    /* supported_framerates */  NULL, \
+    /* pix_fmts */              (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI, \
+                                                            AV_PIX_FMT_NV12, \
                                                             AV_PIX_FMT_YUV420P, \
-                                                            AV_PIX_FMT_NONE},   \
-    .supported_samplerates = NULL,  \
-    .sample_fmts           = NULL,  \
-    .channel_layouts       = NULL,  \
-    .max_lowres            = 0,     \
-    .priv_class            = &yami_enc_##NAME##_class,\
-    .profiles              = NULL,  \
-    .priv_data_size        = sizeof(YamiEncContext),    \
-    .next                  = NULL,  \
-    .init_thread_copy      = NULL,  \
-    .update_thread_context = NULL,  \
-    .defaults              = NULL,  \
-    .init_static_data      = NULL,  \
-    .init                  = yami_enc_init, \
-    .encode_sub            = NULL,  \
-    .encode2               = yami_enc_frame,    \
-    .decode                = NULL,  \
-    .close                 = yami_enc_close,    \
-    .flush                 = NULL,  \
+                                                            AV_PIX_FMT_NONE}, \
+    /* supported_samplerates */ NULL, \
+    /* sample_fmts */           NULL, \
+    /* channel_layouts */       NULL, \
+    /* max_lowres */            0, \
+    /* priv_class */            &yami_enc_##NAME##_class, \
+    /* profiles */              NULL, \
+    /* priv_data_size */        sizeof(YamiEncContext), \
+    /* next */                  NULL, \
+    /* init_thread_copy */      NULL, \
+    /* update_thread_context */ NULL, \
+    /* defaults */              NULL, \
+    /* init_static_data */      NULL, \
+    /* init */                  yami_enc_init, \
+    /* encode_sub */            NULL, \
+    /* encode2 */               yami_enc_frame, \
+    /* decode */                NULL, \
+    /* close */                 yami_enc_close, \
 };
 
-#if CONFIG_LIBYAMI_H264_ENCODER
 YAMI_ENC(h264, AV_CODEC_ID_H264)
-#endif
-
-#if CONFIG_LIBYAMI_VP8_ENCODER
 YAMI_ENC(vp8, AV_CODEC_ID_VP8)
-#endif

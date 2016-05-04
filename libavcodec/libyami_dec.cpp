@@ -387,45 +387,37 @@ static int yami_dec_close(AVCodecContext *avctx)
 
 #define YAMI_DEC(NAME, ID) \
 AVCodec ff_libyami_##NAME##_decoder = { \
-    .name                   = "libyami_" #NAME, \
-    .long_name              = NULL_IF_CONFIG_SMALL(#NAME " (libyami)"), \
-    .type                   = AVMEDIA_TYPE_VIDEO, \
-    .id                     = ID, \
-    .capabilities          = CODEC_CAP_DELAY, \
-    .supported_framerates  = NULL,  \
-    .pix_fmts              = (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI ,\
-                                                            AV_PIX_FMT_NV12 ,\
-                                                            AV_PIX_FMT_YUV420P,\
-                                                            AV_PIX_FMT_NONE},\
-    .supported_samplerates = NULL,  \
-    .sample_fmts           = NULL,  \
-    .channel_layouts       = NULL,  \
-    .max_lowres            = 0,     \
-    .priv_class            = NULL,  \
-    .profiles              = NULL,  \
-    .priv_data_size        = sizeof(YamiDecContext),    \
-    .next                  = NULL,  \
-    .init_thread_copy      = NULL,  \
-    .update_thread_context = NULL,  \
-    .defaults              = NULL,  \
-    .init_static_data      = NULL,  \
-    .init                  = yami_dec_init,    \
-    .encode_sub            = NULL,  \
-    .encode2               = NULL,  \
-    .decode                = yami_dec_frame,   \
-    .close                 = yami_dec_close,   \
-    .flush                 = NULL,  \
-    .caps_internal         = FF_CODEC_CAP_SETS_PKT_DTS  \
+    /* name */                  "libyami_" #NAME, \
+    /* long_name */             NULL_IF_CONFIG_SMALL(#NAME " (libyami)"), \
+    /* type */                  AVMEDIA_TYPE_VIDEO, \
+    /* id */                    ID, \
+    /* capabilities */          CODEC_CAP_DELAY, \
+    /* supported_framerates */  NULL, \
+    /* pix_fmts */              (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI, \
+                                                               AV_PIX_FMT_NV12, \
+                                                               AV_PIX_FMT_YUV420P, \
+                                                               AV_PIX_FMT_NONE}, \
+    /* supported_samplerates */ NULL, \
+    /* sample_fmts */           NULL, \
+    /* channel_layouts */       NULL, \
+    /* max_lowres */            0, \
+    /* priv_class */            NULL, \
+    /* profiles */              NULL, \
+    /* priv_data_size */        sizeof(YamiDecContext), \
+    /* next */                  NULL, \
+    /* init_thread_copy */      NULL, \
+    /* update_thread_context */ NULL, \
+    /* defaults */              NULL, \
+    /* init_static_data */      NULL, \
+    /* init */                  yami_dec_init, \
+    /* encode_sub */            NULL, \
+    /* encode2 */               NULL, \
+    /* decode */                yami_dec_frame, \
+    /* close */                 yami_dec_close, \
+    /* flush */                 NULL, \
+    /* caps_internal */         FF_CODEC_CAP_SETS_PKT_DTS, \
 };
 
-#if CONFIG_LIBYAMI_H264_DECODER
 YAMI_DEC(h264, AV_CODEC_ID_H264)
-#endif
-
-#if CONFIG_LIBYAMI_HEVC_DECODER
 YAMI_DEC(hevc, AV_CODEC_ID_HEVC)
-#endif
-
-#if CONFIG_LIBYAMI_VP8_DECODER
 YAMI_DEC(vp8, AV_CODEC_ID_VP8)
-#endif
