@@ -60,12 +60,19 @@ VADisplay ff_vaapi_create_display(void)
             }
         }
 #else
-        const char *device = "/dev/dri/card0";/*FIXME*/
+        const char *devices[] = {
+            "/dev/dri/renderD128",
+            "/dev/dri/card0",
+            NULL
+        };
         // Try to open the device as a DRM path.
-        int drm_fd = open(device, O_RDWR);
-        if (drm_fd < 0) {
-            return NULL;
-        } else {
+        int i;
+        int drm_fd;
+        for (i = 0; !display && devices[i]; i++) {
+            drm_fd = open(devices[i], O_RDWR);
+            if (drm_fd < 0)
+                continue;
+
             display = vaGetDisplayDRM(drm_fd);
             if (!display)
                 close(drm_fd);
