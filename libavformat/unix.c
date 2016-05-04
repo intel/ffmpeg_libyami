@@ -23,7 +23,6 @@
  * @file
  *
  * Unix socket url_protocol
- *
  */
 
 #include "libavutil/avstring.h"
@@ -141,7 +140,7 @@ static int unix_get_file_handle(URLContext *h)
     return s->fd;
 }
 
-URLProtocol ff_unix_protocol = {
+const URLProtocol ff_unix_protocol = {
     .name                = "unix",
     .url_open            = unix_open,
     .url_read            = unix_read,

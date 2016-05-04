@@ -101,7 +101,7 @@ typedef struct MOVTrack {
     int         track_id;
     int         tag; ///< stsd fourcc
     AVStream        *st;
-    AVCodecContext *enc;
+    AVCodecParameters *par;
     int multichannel_as_mono;
 
     int         vos_len;
@@ -152,6 +152,11 @@ typedef struct MOVTrack {
     void       *eac3_priv;
 
     MOVMuxCencContext cenc;
+
+    uint32_t palette[AVPALETTE_COUNT];
+    int pal_done;
+
+    int is_unaligned_qt_rgb;
 } MOVTrack;
 
 typedef enum {

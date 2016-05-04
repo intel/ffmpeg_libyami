@@ -527,6 +527,8 @@ static void ffmpeg_cleanup(int ret)
         av_freep(&ost->audio_channels_map);
         ost->audio_channels_mapped = 0;
 
+        av_dict_free(&ost->sws_dict);
+
         avcodec_free_context(&ost->enc_ctx);
 
         av_freep(&output_streams[i]);
@@ -692,6 +694,17 @@ static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
         if (exit_on_error)
             exit_program(1);
     }
+    if (pkt->size == 0 && pkt->side_data_elems == 0)
+        return;
+    if (!ost->st->codecpar->extradata && avctx->extradata) {
+        ost->st->codecpar->extradata = av_malloc(avctx->extradata_size + FF_INPUT_BUFFER_PADDING_SIZE);
+        if (!ost->st->codecpar->extradata) {
+            av_log(NULL, AV_LOG_ERROR, "Could not allocate extradata buffer to copy parser data.\n");
+            exit_program(1);
+        }
+        ost->st->codecpar->extradata_size = avctx->extradata_size;
+        memcpy(ost->st->codecpar->extradata, avctx->extradata, avctx->extradata_size);
+    }
 
     if (!(s->oformat->flags & AVFMT_NOTIMESTAMPS)) {
         if (pkt->dts != AV_NOPTS_VALUE &&
@@ -708,6 +721,7 @@ static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
      if(
         (avctx->codec_type == AVMEDIA_TYPE_AUDIO || avctx->codec_type == AVMEDIA_TYPE_VIDEO) &&
         pkt->dts != AV_NOPTS_VALUE &&
+        !(avctx->codec_id == AV_CODEC_ID_VP9 && ost->stream_copy) &&
         ost->last_mux_dts != AV_NOPTS_VALUE) {
       int64_t max = ost->last_mux_dts + !(s->oformat->flags & AVFMT_TS_NONSTRICT);
       if (pkt->dts < max) {
@@ -1709,11 +1723,11 @@ static void flush_encoders(void)
             switch (enc->codec_type) {
             case AVMEDIA_TYPE_AUDIO:
                 encode = avcodec_encode_audio2;
-                desc   = "Audio";
+                desc   = "audio";
                 break;
             case AVMEDIA_TYPE_VIDEO:
                 encode = avcodec_encode_video2;
-                desc   = "Video";
+                desc   = "video";
                 break;
             default:
                 stop_encoding = 1;
@@ -1729,7 +1743,7 @@ static void flush_encoders(void)
 
                 update_benchmark(NULL);
                 ret = encode(enc, &pkt, NULL, &got_packet);
-                update_benchmark("flush %s %d.%d", desc, ost->file_index, ost->index);
+                update_benchmark("flush_%s %d.%d", desc, ost->file_index, ost->index);
                 if (ret < 0) {
                     av_log(NULL, AV_LOG_FATAL, "%s encoding failed: %s\n",
                            desc,
@@ -2121,8 +2135,12 @@ static int decode_video(InputStream *ist, AVPacket *pkt, int *got_output)
     ist->hwaccel_retrieved_pix_fmt = decoded_frame->format;
 
     best_effort_timestamp= av_frame_get_best_effort_timestamp(decoded_frame);
-    if(best_effort_timestamp != AV_NOPTS_VALUE)
-        ist->next_pts = ist->pts = av_rescale_q(decoded_frame->pts = best_effort_timestamp, ist->st->time_base, AV_TIME_BASE_Q);
+    if(best_effort_timestamp != AV_NOPTS_VALUE) {
+        int64_t ts = av_rescale_q(decoded_frame->pts = best_effort_timestamp, ist->st->time_base, AV_TIME_BASE_Q);
+
+        if (ts != AV_NOPTS_VALUE)
+            ist->next_pts = ist->pts = ts;
+    }
 
     if (debug_ts) {
         av_log(NULL, AV_LOG_INFO, "decoder -> ist_index:%d type:video "
@@ -2541,6 +2559,8 @@ static int init_input_stream(int ist_index, char *error, int error_len)
                 av_log(NULL, AV_LOG_WARNING, "Warning using DVB subtitles for filtering and output at the same time is not fully supported, also see -compute_edt [0|1]\n");
         }
 
+        av_dict_set(&ist->decoder_opts, "sub_text_format", "ass", AV_DICT_DONT_OVERWRITE);
+
         if (!av_dict_get(ist->decoder_opts, "threads", NULL, 0))
             av_dict_set(&ist->decoder_opts, "threads", "auto", 0);
         if ((ret = avcodec_open2(ist->dec_ctx, codec, &ist->decoder_opts)) < 0) {
@@ -2600,6 +2620,12 @@ static int init_output_stream(OutputStream *ost, char *error, int error_len)
             !av_dict_get(ost->encoder_opts, "b", NULL, 0) &&
             !av_dict_get(ost->encoder_opts, "ab", NULL, 0))
             av_dict_set(&ost->encoder_opts, "b", "128000", 0);
+
+        if (ost->filter && ost->filter->filter->inputs[0]->hw_frames_ctx) {
+            ost->enc_ctx->hw_frames_ctx = av_buffer_ref(ost->filter->filter->inputs[0]->hw_frames_ctx);
+            if (!ost->enc_ctx->hw_frames_ctx)
+                return AVERROR(ENOMEM);
+        }
 
         if ((ret = avcodec_open2(ost->enc_ctx, codec, &ost->encoder_opts)) < 0) {
             if (ret == AVERROR_EXPERIMENTAL)
@@ -3196,13 +3222,6 @@ static int transcode_init(void)
         }
     }
 
-    /* open each encoder */
-    for (i = 0; i < nb_output_streams; i++) {
-        ret = init_output_stream(output_streams[i], error, sizeof(error));
-        if (ret < 0)
-            goto dump_format;
-    }
-
     /* init input streams */
     for (i = 0; i < nb_input_streams; i++)
         if ((ret = init_input_stream(i, error, sizeof(error))) < 0) {
@@ -3212,6 +3231,13 @@ static int transcode_init(void)
             }
             goto dump_format;
         }
+
+    /* open each encoder */
+    for (i = 0; i < nb_output_streams; i++) {
+        ret = init_output_stream(output_streams[i], error, sizeof(error));
+        if (ret < 0)
+            goto dump_format;
+    }
 
     /* discard unused programs */
     for (i = 0; i < nb_input_files; i++) {
@@ -4128,16 +4154,12 @@ static int transcode(void)
         }
 
         ret = transcode_step();
-        if (ret < 0) {
-            if (ret == AVERROR_EOF || ret == AVERROR(EAGAIN)) {
-                continue;
-            } else {
-                char errbuf[128];
-                av_strerror(ret, errbuf, sizeof(errbuf));
+        if (ret < 0 && ret != AVERROR_EOF) {
+            char errbuf[128];
+            av_strerror(ret, errbuf, sizeof(errbuf));
 
-                av_log(NULL, AV_LOG_ERROR, "Error while filtering: %s\n", errbuf);
-                break;
-            }
+            av_log(NULL, AV_LOG_ERROR, "Error while filtering: %s\n", errbuf);
+            break;
         }
 
         /* dump report by using the output first video and audio streams */

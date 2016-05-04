@@ -27,7 +27,6 @@
  *  A mdct based codec using a 256 points large transform
  *  divided into 32 bands with some mix of scale factors.
  *  Only mono is supported.
- *
  */
 
 
@@ -36,9 +35,9 @@
 #include <stdio.h>
 
 #include "libavutil/channel_layout.h"
+#include "libavutil/ffmath.h"
 #include "libavutil/float_dsp.h"
 #include "libavutil/internal.h"
-#include "libavutil/libm.h"
 #include "avcodec.h"
 #include "bswapdsp.h"
 #include "get_bits.h"

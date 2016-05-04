@@ -40,7 +40,6 @@
 #include "libavutil/parseutils.h"
 #include "libavutil/pixdesc.h"
 #include "libavutil/pixfmt.h"
-#include "libavutil/time_internal.h"
 
 #define DEFAULT_PASS_LOGFILENAME_PREFIX "ffmpeg2pass"
 
@@ -2359,66 +2358,6 @@ loop_end:
             }
         }
 
-    /* process manually set metadata */
-    for (i = 0; i < o->nb_metadata; i++) {
-        AVDictionary **m;
-        char type, *val;
-        const char *stream_spec;
-        int index = 0, j, ret = 0;
-        char now_time[256];
-
-        val = strchr(o->metadata[i].u.str, '=');
-        if (!val) {
-            av_log(NULL, AV_LOG_FATAL, "No '=' character in metadata string %s.\n",
-                   o->metadata[i].u.str);
-            exit_program(1);
-        }
-        *val++ = 0;
-
-        if (!strcmp(o->metadata[i].u.str, "creation_time") &&
-            !strcmp(val, "now")) {
-            time_t now = time(0);
-            struct tm *ptm, tmbuf;
-            ptm = localtime_r(&now, &tmbuf);
-            if (ptm) {
-                if (strftime(now_time, sizeof(now_time), "%Y-%m-%d %H:%M:%S", ptm))
-                    val = now_time;
-            }
-        }
-
-        parse_meta_type(o->metadata[i].specifier, &type, &index, &stream_spec);
-        if (type == 's') {
-            for (j = 0; j < oc->nb_streams; j++) {
-                ost = output_streams[nb_output_streams - oc->nb_streams + j];
-                if ((ret = check_stream_specifier(oc, oc->streams[j], stream_spec)) > 0) {
-                    av_dict_set(&oc->streams[j]->metadata, o->metadata[i].u.str, *val ? val : NULL, 0);
-                    if (!strcmp(o->metadata[i].u.str, "rotate")) {
-                        ost->rotate_overridden = 1;
-                    }
-                } else if (ret < 0)
-                    exit_program(1);
-            }
-        }
-        else {
-            switch (type) {
-            case 'g':
-                m = &oc->metadata;
-                break;
-            case 'c':
-                if (index < 0 || index >= oc->nb_chapters) {
-                    av_log(NULL, AV_LOG_FATAL, "Invalid chapter index %d in metadata specifier.\n", index);
-                    exit_program(1);
-                }
-                m = &oc->chapters[index]->metadata;
-                break;
-            default:
-                av_log(NULL, AV_LOG_FATAL, "Invalid metadata specifier %s.\n", o->metadata[i].specifier);
-                exit_program(1);
-            }
-            av_dict_set(m, o->metadata[i].u.str, *val ? val : NULL, 0);
-        }
-    }
-
     /* process manually set programs */
     for (i = 0; i < o->nb_program; i++) {
         const char *p = o->program[i].u.str;
@@ -2427,18 +2366,25 @@ loop_end:
 
         while(*p) {
             const char *p2 = av_get_token(&p, ":");
+            const char *to_dealloc = p2;
             char *key;
             if (!p2)
                 break;
+
             if(*p) p++;
 
             key = av_get_token(&p2, "=");
-            if (!key || !*p2)
+            if (!key || !*p2) {
+                av_freep(&to_dealloc);
+                av_freep(&key);
                 break;
+            }
             p2++;
 
             if (!strcmp(key, "program_num"))
                 progid = strtol(p2, NULL, 0);
+            av_freep(&to_dealloc);
+            av_freep(&key);
         }
 
         program = av_new_program(oc, progid);
@@ -2446,6 +2392,7 @@ loop_end:
         p = o->program[i].u.str;
         while(*p) {
             const char *p2 = av_get_token(&p, ":");
+            const char *to_dealloc = p2;
             char *key;
             if (!p2)
                 break;
@@ -2472,6 +2419,63 @@ loop_end:
                 av_log(NULL, AV_LOG_FATAL, "Unknown program key %s.\n", key);
                 exit_program(1);
             }
+            av_freep(&to_dealloc);
+            av_freep(&key);
+        }
+    }
+
+    /* process manually set metadata */
+    for (i = 0; i < o->nb_metadata; i++) {
+        AVDictionary **m;
+        char type, *val;
+        const char *stream_spec;
+        int index = 0, j, ret = 0;
+
+        val = strchr(o->metadata[i].u.str, '=');
+        if (!val) {
+            av_log(NULL, AV_LOG_FATAL, "No '=' character in metadata string %s.\n",
+                   o->metadata[i].u.str);
+            exit_program(1);
+        }
+        *val++ = 0;
+
+        parse_meta_type(o->metadata[i].specifier, &type, &index, &stream_spec);
+        if (type == 's') {
+            for (j = 0; j < oc->nb_streams; j++) {
+                ost = output_streams[nb_output_streams - oc->nb_streams + j];
+                if ((ret = check_stream_specifier(oc, oc->streams[j], stream_spec)) > 0) {
+                    av_dict_set(&oc->streams[j]->metadata, o->metadata[i].u.str, *val ? val : NULL, 0);
+                    if (!strcmp(o->metadata[i].u.str, "rotate")) {
+                        ost->rotate_overridden = 1;
+                    }
+                } else if (ret < 0)
+                    exit_program(1);
+            }
+        }
+        else {
+            switch (type) {
+            case 'g':
+                m = &oc->metadata;
+                break;
+            case 'c':
+                if (index < 0 || index >= oc->nb_chapters) {
+                    av_log(NULL, AV_LOG_FATAL, "Invalid chapter index %d in metadata specifier.\n", index);
+                    exit_program(1);
+                }
+                m = &oc->chapters[index]->metadata;
+                break;
+            case 'p':
+                if (index < 0 || index >= oc->nb_programs) {
+                    av_log(NULL, AV_LOG_FATAL, "Invalid program index %d in metadata specifier.\n", index);
+                    exit_program(1);
+                }
+                m = &oc->programs[index]->metadata;
+                break;
+            default:
+                av_log(NULL, AV_LOG_FATAL, "Invalid metadata specifier %s.\n", o->metadata[i].specifier);
+                exit_program(1);
+            }
+            av_dict_set(m, o->metadata[i].u.str, *val ? val : NULL, 0);
         }
     }
 
@@ -3345,9 +3349,6 @@ const OptionDef options[] = {
     { "hwaccel_device",   OPT_VIDEO | OPT_STRING | HAS_ARG | OPT_EXPERT |
                           OPT_SPEC | OPT_INPUT,                                  { .off = OFFSET(hwaccel_devices) },
         "select a device for HW acceleration", "devicename" },
-#if HAVE_VDPAU_X11
-    { "vdpau_api_ver", HAS_ARG | OPT_INT | OPT_EXPERT, { &vdpau_api_ver }, "" },
-#endif
 #if CONFIG_VDA || CONFIG_VIDEOTOOLBOX
     { "videotoolbox_pixfmt", HAS_ARG | OPT_STRING | OPT_EXPERT, { &videotoolbox_pixfmt}, "" },
 #endif
