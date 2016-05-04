@@ -79,7 +79,9 @@ typedef struct {
 #include <unistd.h>
 
 #include <va/va_drm.h>
+#if HAVE_VAAPI_X11
 #include <va/va_x11.h>
+#endif
 #define HAVE_VAAPI_DRM 1
 
 #if HAVE_VAAPI_X11
