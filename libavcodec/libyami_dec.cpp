@@ -274,10 +274,12 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     if (!in_buffer)
         return AVERROR(ENOMEM);
     /* avoid avpkt free and data is pointer */
-    in_buffer->data = (uint8_t *)av_mallocz(avpkt->size);
-    if (!in_buffer->data)
-        return AVERROR(ENOMEM);
-    memcpy(in_buffer->data, avpkt->data, avpkt->size);
+    if (avpkt->data && avpkt->size) {
+        in_buffer->data = (uint8_t *)av_mallocz(avpkt->size);
+        if (!in_buffer->data)
+            return AVERROR(ENOMEM);
+        memcpy(in_buffer->data, avpkt->data, avpkt->size);
+    }
     in_buffer->size = avpkt->size;
     in_buffer->timeStamp = avpkt->pts;
     while (s->decode_status < DECODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
@@ -330,6 +332,9 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
             goto fail;
         }
         do{
+            //flush the decoder and sync the decoder thread if avpkt->data is null
+            if (!avpkt->data && s->in_queue->size() == 0)
+                s->decoder->decode(in_buffer);
             yami_image->output_frame = s->decoder->getOutput();
             av_log(avctx, AV_LOG_DEBUG, "getoutput() status=%d\n", status);
         } while (!avpkt->data && !yami_image->output_frame && s->in_queue->size() > 0);
