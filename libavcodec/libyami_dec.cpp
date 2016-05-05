@@ -419,6 +419,10 @@ AVCodec ff_libyami_##NAME##_decoder = { \
     /* encode2 */               NULL, \
     /* decode */                yami_dec_frame, \
     /* close */                 yami_dec_close, \
+    /* send_frame */            NULL, \
+    /* send_packet */           NULL, \
+    /* receive_frame */         NULL, \
+    /* receive_packet */        NULL, \
     /* flush */                 NULL, \
     /* caps_internal */         FF_CODEC_CAP_SETS_PKT_DTS, \
 };
