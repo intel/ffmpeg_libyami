@@ -261,18 +261,23 @@ static int yami_enc_init(AVCodecContext *avctx)
         encVideoParams.rcParams.initQP = av_clip(quant, 1, 52);
 
         rc_desc = "constant quantization parameter (CQP)";
-    } else if (avctx->rc_max_rate == avctx->bit_rate) {
-        encVideoParams.rcMode = RATE_CONTROL_CBR;
-        encVideoParams.rcParams.bitRate = avctx->bit_rate;
-        encVideoParams.rcParams.targetPercentage = 100;
-
-        rc_desc = "constant bitrate (CBR)";
     } else if (avctx->rc_max_rate > avctx->bit_rate) {
         encVideoParams.rcMode = RATE_CONTROL_VBR;
         encVideoParams.rcParams.bitRate = avctx->rc_max_rate;
 
         encVideoParams.rcParams.targetPercentage = (100 * avctx->bit_rate)/avctx->rc_max_rate;
         rc_desc = "variable bitrate (VBR)";
+    } else if (avctx->rc_max_rate == avctx->bit_rate) {
+        encVideoParams.rcMode = RATE_CONTROL_CBR;
+        encVideoParams.rcParams.bitRate = avctx->bit_rate;
+        encVideoParams.rcParams.targetPercentage = 100;
+
+        rc_desc = "constant bitrate (CBR)";
+    } else {
+        encVideoParams.rcMode = RATE_CONTROL_CQP;
+        encVideoParams.rcParams.initQP = 26;
+
+        rc_desc = "constant quantization parameter (CQP) as default";
     }
 
     av_log(avctx, AV_LOG_VERBOSE, "Using the %s ratecontrol method\n", rc_desc);
