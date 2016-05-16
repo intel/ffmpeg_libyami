@@ -267,6 +267,8 @@ static int yami_enc_init(AVCodecContext *avctx)
 
         encVideoParams.rcParams.targetPercentage = (100 * avctx->bit_rate)/avctx->rc_max_rate;
         rc_desc = "variable bitrate (VBR)";
+
+        av_log(avctx, AV_LOG_WARNING, "Using the %s ratecontrol method, but driver not support it.\n", rc_desc);
     } else if (avctx->rc_max_rate == avctx->bit_rate) {
         encVideoParams.rcMode = RATE_CONTROL_CBR;
         encVideoParams.rcParams.bitRate = avctx->bit_rate;
