@@ -230,6 +230,16 @@ static int yami_dec_init(AVCodecContext *avctx)
     native_display.type = NATIVE_DISPLAY_VA;
     native_display.handle = (intptr_t)va_display;
     s->decoder->setNativeDisplay(&native_display);
+    //fellow h264.c style
+    if (avctx->codec_id == AV_CODEC_ID_H264) {
+        if (avctx->ticks_per_frame == 1) {
+            if (avctx->time_base.den < INT_MAX / 2) {
+                avctx->time_base.den *= 2;
+            } else
+                avctx->time_base.num /= 2;
+        }
+        avctx->ticks_per_frame = 2;
+    }
     VideoConfigBuffer config_buffer;
     memset(&config_buffer, 0, sizeof(VideoConfigBuffer));
     if (avctx->extradata && avctx->extradata_size && avctx->extradata[0] == 1) {
@@ -281,7 +291,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         memcpy(in_buffer->data, avpkt->data, avpkt->size);
     }
     in_buffer->size = avpkt->size;
-    in_buffer->timeStamp = avpkt->pts;
+    in_buffer->timeStamp = avpkt->pts == AV_NOPTS_VALUE ? avpkt->dts : avpkt->pts;
     while (s->decode_status < DECODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
         pthread_mutex_lock(&s->in_mutex);
         if (s->in_queue->size() < DECODE_QUEUE_SIZE) {
