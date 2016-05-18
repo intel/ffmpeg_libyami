@@ -48,6 +48,8 @@ struct YamiDecContext {
     pthread_cond_t in_cond;   // decode thread condition wait
     DecodeThreadStatus decode_status;
 
+    //the pts is no value use this value
+    int duration;
     // debug use
     int decode_count;
     int decode_count_yami;
