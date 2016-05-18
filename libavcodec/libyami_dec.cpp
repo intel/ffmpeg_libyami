@@ -265,6 +265,14 @@ static int yami_dec_init(AVCodecContext *avctx)
     return 0;
 }
 
+static int ff_get_best_pkt_dts(AVFrame *frame, YamiDecContext *s)
+{
+    if (frame->pkt_dts == AV_NOPTS_VALUE) {
+        frame->pkt_dts = s->render_count * s->duration;
+    }
+    return 1;
+}
+
 static int yami_dec_frame(AVCodecContext *avctx, void *data,
                    int *got_frame, AVPacket *avpkt)
 {
@@ -289,7 +297,9 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         memcpy(in_buffer->data, avpkt->data, avpkt->size);
     }
     in_buffer->size = avpkt->size;
-    in_buffer->timeStamp = avpkt->pts == AV_NOPTS_VALUE ? avpkt->dts : avpkt->pts;
+    in_buffer->timeStamp = avpkt->pts;
+    if (avpkt->duration != 0)
+        s->duration = avpkt->duration;
     while (s->decode_status < DECODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
         pthread_mutex_lock(&s->in_mutex);
         if (s->in_queue->size() < DECODE_QUEUE_SIZE) {
@@ -362,6 +372,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     // process the output frame
     if (ff_convert_to_frame(avctx, yami_image, frame) < 0)
         av_log(avctx, AV_LOG_VERBOSE, "yami frame convert av_frame failed\n");
+    ff_get_best_pkt_dts(frame, s);
     *got_frame = 1;
     s->render_count++;
     av_log(avctx, AV_LOG_VERBOSE,
