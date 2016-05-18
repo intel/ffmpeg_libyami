@@ -154,7 +154,6 @@ static int ff_convert_to_frame(AVCodecContext *avctx, YamiImage *from, AVFrame *
         to->width = avctx->width;
         to->height = avctx->height;
         to->format = AV_PIX_FMT_YAMI;
-        to->extended_data = NULL;
         to->extended_data = to->data;
         /* XXX: put the surface id to data[3] */
         to->data[3] = reinterpret_cast<uint8_t *>(from);
@@ -170,7 +169,6 @@ static int ff_convert_to_frame(AVCodecContext *avctx, YamiImage *from, AVFrame *
         to->width = avctx->width;
         to->height = avctx->height;
         to->format = avctx->pix_fmt;
-        to->extended_data = NULL;
         to->extended_data = to->data;
         ff_vaapi_get_image(from->output_frame, to);
         to->buf[3] = av_buffer_create((uint8_t *) from,
