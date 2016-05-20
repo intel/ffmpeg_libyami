@@ -425,9 +425,6 @@ LIBYAMI_HEVC_SAMPLES =                  \
     OPFLAG_A_Qualcomm_1         \
     OPFLAG_B_Qualcomm_1         \
     OPFLAG_C_Qualcomm_1         \
-    PICSIZE_B_Bossen_1          \
-    PICSIZE_C_Bossen_1          \
-    PICSIZE_D_Bossen_1          \
     PMERGE_A_TI_3               \
     PMERGE_B_TI_3               \
     PMERGE_C_TI_3               \
@@ -443,7 +440,6 @@ LIBYAMI_HEVC_SAMPLES =                  \
     RPLM_B_qualcomm_4           \
     RPS_A_docomo_4              \
     RPS_B_qualcomm_5            \
-    RPS_C_ericsson_5            \
     RPS_D_ericsson_6            \
     RPS_E_qualcomm_5            \
     RPS_F_docomo_1              \
@@ -468,7 +464,6 @@ LIBYAMI_HEVC_SAMPLES =                  \
     SLIST_A_Sony_4              \
     SLIST_B_Sony_8              \
     SLIST_C_Sony_3              \
-    SLIST_D_Sony_9              \
     SLPPLP_A_VIDYO_1            \
     SLPPLP_A_VIDYO_2            \
     STRUCT_A_Samsung_5          \
