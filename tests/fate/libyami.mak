@@ -160,7 +160,6 @@ FATE_LIBYAMI_H264 = aud_mw_e                                                    
             sva_nl1_b                                                   \
             sva_nl2_e                                                   \
 
-FATE_LIBYAMI_H264_REINIT_TESTS := large_420_8-to-small_420_8                    \
 
 
 FATE_LIBYAMI_H264_REF  := $(FATE_LIBYAMI_H264:%=h264-conformance-%) 
@@ -353,10 +352,6 @@ fate-libyami-h264-extreme-plane-pred:                     CMD = framemd5 -c:v li
 fate-libyami-h264-extreme-plane-pred:                     REF = $(SRC_PATH)/tests/ref/fate/h264-extreme-plane-pred
 fate-libyami-h264-direct-bff:                             CMD = framecrc -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/direct-bff.mkv -pix_fmt yuv420p
 fate-libyami-h264-direct-bff:                             REF = $(SRC_PATH)/tests/ref/fate/h264-direct-bff
-
-fate-libyami-h264-reinit-large_420_8-to-small_420_8:      CMD = framecrc -c:v libyami_h264 -i $(TARGET_SAMPLES)/h264/reinit-large_420_8-to-small_420_8.h264 -vf format=yuv444p10le,scale=w=352:h=288
-fate-libyami-h264-reinit-large_420_8-to-small_420_8:      REF = $(SRC_PATH)/tests/ref/fate/h264-reinit-large_420_8-to-small_420_8
-
 
 
 LIBYAMI_HEVC_SAMPLES =                  \
