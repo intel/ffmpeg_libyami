@@ -43,23 +43,6 @@
 #include "rectangle.h"
 #include "thread.h"
 
-
-static const uint8_t rem6[QP_MAX_NUM + 1] = {
-    0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2,
-    3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5,
-    0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2,
-    3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5,
-    0, 1, 2, 3,
-};
-
-static const uint8_t div6[QP_MAX_NUM + 1] = {
-    0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3,  3,  3,
-    3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6,  6,  6,
-    7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 10, 10, 10,
-   10,10,10,11,11,11,11,11,11,12,12,12,12,12,12,13,13,13, 13, 13, 13,
-   14,14,14,14,
-};
-
 static const uint8_t field_scan[16+1] = {
     0 + 0 * 4, 0 + 1 * 4, 1 + 0 * 4, 0 + 2 * 4,
     0 + 3 * 4, 1 + 1 * 4, 1 + 2 * 4, 1 + 3 * 4,
@@ -124,29 +107,6 @@ static const uint8_t zigzag_scan8x8_cavlc[64+1] = {
     0 + 7 * 8, 4 + 4 * 8, 7 + 2 * 8, 3 + 6 * 8,
     5 + 5 * 8, 6 + 5 * 8, 6 + 6 * 8, 7 + 7 * 8,
 };
-
-static const uint8_t dequant4_coeff_init[6][3] = {
-    { 10, 13, 16 },
-    { 11, 14, 18 },
-    { 13, 16, 20 },
-    { 14, 18, 23 },
-    { 16, 20, 25 },
-    { 18, 23, 29 },
-};
-
-static const uint8_t dequant8_coeff_init_scan[16] = {
-    0, 3, 4, 3, 3, 1, 5, 1, 4, 5, 2, 5, 3, 1, 5, 1
-};
-
-static const uint8_t dequant8_coeff_init[6][6] = {
-    { 20, 18, 32, 19, 25, 24 },
-    { 22, 19, 35, 21, 28, 26 },
-    { 26, 23, 42, 24, 33, 31 },
-    { 28, 25, 45, 26, 35, 33 },
-    { 32, 28, 51, 30, 40, 38 },
-    { 36, 32, 58, 34, 46, 43 },
-};
-
 
 static void release_unused_pictures(H264Context *h, int remove_current)
 {
@@ -328,11 +288,11 @@ static void init_dequant8_coeff_table(H264Context *h)
             continue;
 
         for (q = 0; q < max_qp + 1; q++) {
-            int shift = div6[q];
-            int idx   = rem6[q];
+            int shift = ff_h264_quant_div6[q];
+            int idx   = ff_h264_quant_rem6[q];
             for (x = 0; x < 64; x++)
                 h->dequant8_coeff[i][q][(x >> 3) | ((x & 7) << 3)] =
-                    ((uint32_t)dequant8_coeff_init[idx][dequant8_coeff_init_scan[((x >> 1) & 12) | (x & 3)]] *
+                    ((uint32_t)ff_h264_dequant8_coeff_init[idx][ff_h264_dequant8_coeff_init_scan[((x >> 1) & 12) | (x & 3)]] *
                      h->pps.scaling_matrix8[i][x]) << shift;
         }
     }
@@ -354,11 +314,11 @@ static void init_dequant4_coeff_table(H264Context *h)
             continue;
 
         for (q = 0; q < max_qp + 1; q++) {
-            int shift = div6[q] + 2;
-            int idx   = rem6[q];
+            int shift = ff_h264_quant_div6[q] + 2;
+            int idx   = ff_h264_quant_rem6[q];
             for (x = 0; x < 16; x++)
                 h->dequant4_coeff[i][q][(x >> 2) | ((x << 2) & 0xF)] =
-                    ((uint32_t)dequant4_coeff_init[idx][(x & 1) + ((x >> 2) & 1)] *
+                    ((uint32_t)ff_h264_dequant4_coeff_init[idx][(x & 1) + ((x >> 2) & 1)] *
                      h->pps.scaling_matrix4[i][x]) << shift;
         }
     }
@@ -770,8 +730,8 @@ static void implicit_weight_table(const H264Context *h, H264SliceContext *sl, in
     int ref0, ref1, i, cur_poc, ref_start, ref_count0, ref_count1;
 
     for (i = 0; i < 2; i++) {
-        sl->luma_weight_flag[i]   = 0;
-        sl->chroma_weight_flag[i] = 0;
+        sl->pwt.luma_weight_flag[i]   = 0;
+        sl->pwt.chroma_weight_flag[i] = 0;
     }
 
     if (field < 0) {
@@ -782,8 +742,8 @@ static void implicit_weight_table(const H264Context *h, H264SliceContext *sl, in
         }
         if (sl->ref_count[0] == 1 && sl->ref_count[1] == 1 && !FRAME_MBAFF(h) &&
             sl->ref_list[0][0].poc + (int64_t)sl->ref_list[1][0].poc == 2 * cur_poc) {
-            sl->use_weight        = 0;
-            sl->use_weight_chroma = 0;
+            sl->pwt.use_weight        = 0;
+            sl->pwt.use_weight_chroma = 0;
             return;
         }
         ref_start  = 0;
@@ -796,10 +756,10 @@ static void implicit_weight_table(const H264Context *h, H264SliceContext *sl, in
         ref_count1 = 16 + 2 * sl->ref_count[1];
     }
 
-    sl->use_weight               = 2;
-    sl->use_weight_chroma        = 2;
-    sl->luma_log2_weight_denom   = 5;
-    sl->chroma_log2_weight_denom = 5;
+    sl->pwt.use_weight               = 2;
+    sl->pwt.use_weight_chroma        = 2;
+    sl->pwt.luma_log2_weight_denom   = 5;
+    sl->pwt.chroma_log2_weight_denom = 5;
 
     for (ref0 = ref_start; ref0 < ref_count0; ref0++) {
         int64_t poc0 = sl->ref_list[0][ref0].poc;
@@ -817,10 +777,10 @@ static void implicit_weight_table(const H264Context *h, H264SliceContext *sl, in
                 }
             }
             if (field < 0) {
-                sl->implicit_weight[ref0][ref1][0] =
-                sl->implicit_weight[ref0][ref1][1] = w;
+                sl->pwt.implicit_weight[ref0][ref1][0] =
+                sl->pwt.implicit_weight[ref0][ref1][1] = w;
             } else {
-                sl->implicit_weight[ref0][ref1][field] = w;
+                sl->pwt.implicit_weight[ref0][ref1][field] = w;
             }
         }
     }
@@ -834,7 +794,7 @@ static void init_scan_tables(H264Context *h)
     int i;
     for (i = 0; i < 16; i++) {
 #define TRANSPOSE(x) ((x) >> 2) | (((x) << 2) & 0xF)
-        h->zigzag_scan[i] = TRANSPOSE(zigzag_scan[i]);
+        h->zigzag_scan[i] = TRANSPOSE(ff_zigzag_scan[i]);
         h->field_scan[i]  = TRANSPOSE(field_scan[i]);
 #undef TRANSPOSE
     }
@@ -847,7 +807,7 @@ static void init_scan_tables(H264Context *h)
 #undef TRANSPOSE
     }
     if (h->sps.transform_bypass) { // FIXME same ugly
-        memcpy(h->zigzag_scan_q0          , zigzag_scan             , sizeof(h->zigzag_scan_q0         ));
+        memcpy(h->zigzag_scan_q0          , ff_zigzag_scan          , sizeof(h->zigzag_scan_q0         ));
         memcpy(h->zigzag_scan8x8_q0       , ff_zigzag_direct        , sizeof(h->zigzag_scan8x8_q0      ));
         memcpy(h->zigzag_scan8x8_cavlc_q0 , zigzag_scan8x8_cavlc    , sizeof(h->zigzag_scan8x8_cavlc_q0));
         memcpy(h->field_scan_q0           , field_scan              , sizeof(h->field_scan_q0          ));
@@ -1228,7 +1188,7 @@ int ff_h264_decode_slice_header(H264Context *h, H264SliceContext *sl)
     } else
         sl->slice_type_fixed = 0;
 
-    slice_type = golomb_to_pict_type[slice_type];
+    slice_type         = ff_h264_golomb_to_pict_type[slice_type];
     sl->slice_type     = slice_type;
     sl->slice_type_nos = slice_type & 3;
 
@@ -1744,15 +1704,16 @@ int ff_h264_decode_slice_header(H264Context *h, H264SliceContext *sl)
     if ((h->pps.weighted_pred && sl->slice_type_nos == AV_PICTURE_TYPE_P) ||
         (h->pps.weighted_bipred_idc == 1 &&
          sl->slice_type_nos == AV_PICTURE_TYPE_B))
-        ff_pred_weight_table(h, sl);
+        ff_h264_pred_weight_table(&sl->gb, &h->sps, sl->ref_count,
+                                  sl->slice_type_nos, &sl->pwt);
     else if (h->pps.weighted_bipred_idc == 2 &&
              sl->slice_type_nos == AV_PICTURE_TYPE_B) {
         implicit_weight_table(h, sl, -1);
     } else {
-        sl->use_weight = 0;
+        sl->pwt.use_weight = 0;
         for (i = 0; i < 2; i++) {
-            sl->luma_weight_flag[i]   = 0;
-            sl->chroma_weight_flag[i] = 0;
+            sl->pwt.luma_weight_flag[i]   = 0;
+            sl->pwt.chroma_weight_flag[i] = 0;
         }
     }
 
@@ -1941,8 +1902,8 @@ int ff_h264_decode_slice_header(H264Context *h, H264SliceContext *sl)
                sl->qscale,
                sl->deblocking_filter,
                sl->slice_alpha_c0_offset, sl->slice_beta_offset,
-               sl->use_weight,
-               sl->use_weight == 1 && sl->use_weight_chroma ? "c" : "",
+               sl->pwt.use_weight,
+               sl->pwt.use_weight == 1 && sl->pwt.use_weight_chroma ? "c" : "",
                sl->slice_type == AV_PICTURE_TYPE_B ? (sl->direct_spatial_mv_pred ? "SPAT" : "TEMP") : "");
     }
 

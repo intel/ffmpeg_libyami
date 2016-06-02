@@ -22,8 +22,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef LIBAVCODEC_LIBYAMI_UTILS_H_
-#define LIBAVCODEC_LIBYAMI_UTILS_H_
+#ifndef LIBAVCODEC_LIBYAMI_H_
+#define LIBAVCODEC_LIBYAMI_H_
 
 
 #include <va/va_drm.h>
@@ -52,4 +52,4 @@ bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in);
 bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out);
 bool ff_check_vaapi_status(VAStatus status, const char *msg);
 
-#endif /* LIBAVCODEC_LIBYAMI_UTILS_H_ */
+#endif /* LIBAVCODEC_LIBYAMI_H_ */

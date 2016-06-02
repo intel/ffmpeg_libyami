@@ -34,6 +34,7 @@
 #include "libavutil/stereo3d.h"
 #include "libavutil/timer.h"
 #include "internal.h"
+#include "bytestream.h"
 #include "cabac.h"
 #include "cabac_functions.h"
 #include "error_resilience.h"
@@ -48,7 +49,6 @@
 #include "mpegutils.h"
 #include "profiles.h"
 #include "rectangle.h"
-#include "svq3.h"
 #include "thread.h"
 #include "vdpau_compat.h"
 
@@ -131,99 +131,6 @@ void ff_h264_draw_horiz_band(const H264Context *h, H264SliceContext *sl,
         avctx->draw_horiz_band(avctx, src, offset,
                                y, h->picture_structure, height);
     }
-}
-
-/**
- * Check if the top & left blocks are available if needed and
- * change the dc mode so it only uses the available blocks.
- */
-int ff_h264_check_intra4x4_pred_mode(const H264Context *h, H264SliceContext *sl)
-{
-    static const int8_t top[12] = {
-        -1, 0, LEFT_DC_PRED, -1, -1, -1, -1, -1, 0
-    };
-    static const int8_t left[12] = {
-        0, -1, TOP_DC_PRED, 0, -1, -1, -1, 0, -1, DC_128_PRED
-    };
-    int i;
-
-    if (!(sl->top_samples_available & 0x8000)) {
-        for (i = 0; i < 4; i++) {
-            int status = top[sl->intra4x4_pred_mode_cache[scan8[0] + i]];
-            if (status < 0) {
-                av_log(h->avctx, AV_LOG_ERROR,
-                       "top block unavailable for requested intra4x4 mode %d at %d %d\n",
-                       status, sl->mb_x, sl->mb_y);
-                return AVERROR_INVALIDDATA;
-            } else if (status) {
-                sl->intra4x4_pred_mode_cache[scan8[0] + i] = status;
-            }
-        }
-    }
-
-    if ((sl->left_samples_available & 0x8888) != 0x8888) {
-        static const int mask[4] = { 0x8000, 0x2000, 0x80, 0x20 };
-        for (i = 0; i < 4; i++)
-            if (!(sl->left_samples_available & mask[i])) {
-                int status = left[sl->intra4x4_pred_mode_cache[scan8[0] + 8 * i]];
-                if (status < 0) {
-                    av_log(h->avctx, AV_LOG_ERROR,
-                           "left block unavailable for requested intra4x4 mode %d at %d %d\n",
-                           status, sl->mb_x, sl->mb_y);
-                    return AVERROR_INVALIDDATA;
-                } else if (status) {
-                    sl->intra4x4_pred_mode_cache[scan8[0] + 8 * i] = status;
-                }
-            }
-    }
-
-    return 0;
-} // FIXME cleanup like ff_h264_check_intra_pred_mode
-
-/**
- * Check if the top & left blocks are available if needed and
- * change the dc mode so it only uses the available blocks.
- */
-int ff_h264_check_intra_pred_mode(const H264Context *h, H264SliceContext *sl,
-                                  int mode, int is_chroma)
-{
-    static const int8_t top[4]  = { LEFT_DC_PRED8x8, 1, -1, -1 };
-    static const int8_t left[5] = { TOP_DC_PRED8x8, -1,  2, -1, DC_128_PRED8x8 };
-
-    if (mode > 3U) {
-        av_log(h->avctx, AV_LOG_ERROR,
-               "out of range intra chroma pred mode at %d %d\n",
-               sl->mb_x, sl->mb_y);
-        return AVERROR_INVALIDDATA;
-    }
-
-    if (!(sl->top_samples_available & 0x8000)) {
-        mode = top[mode];
-        if (mode < 0) {
-            av_log(h->avctx, AV_LOG_ERROR,
-                   "top block unavailable for requested intra mode at %d %d\n",
-                   sl->mb_x, sl->mb_y);
-            return AVERROR_INVALIDDATA;
-        }
-    }
-
-    if ((sl->left_samples_available & 0x8080) != 0x8080) {
-        mode = left[mode];
-        if (mode < 0) {
-            av_log(h->avctx, AV_LOG_ERROR,
-                   "left block unavailable for requested intra mode at %d %d\n",
-                   sl->mb_x, sl->mb_y);
-            return AVERROR_INVALIDDATA;
-        }
-        if (is_chroma && (sl->left_samples_available & 0x8080)) {
-            // mad cow disease mode, aka MBAFF + constrained_intra_pred
-            mode = ALZHEIMER_DC_L0T_PRED8x8 +
-                   (!(sl->left_samples_available & 0x8000)) +
-                   2 * (mode == DC_128_PRED8x8);
-        }
-    }
-
-    return mode;
 }
 
 const uint8_t *ff_h264_decode_nal(H264Context *h, H264SliceContext *sl,
@@ -527,6 +434,55 @@ fail:
 static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size,
                             int parse_extradata);
 
+/* There are (invalid) samples in the wild with mp4-style extradata, where the
+ * parameter sets are stored unescaped (i.e. as RBSP).
+ * This function catches the parameter set decoding failure and tries again
+ * after escaping it */
+static int decode_extradata_ps_mp4(H264Context *h, const uint8_t *buf, int buf_size)
+{
+    int ret;
+
+    ret = decode_nal_units(h, buf, buf_size, 1);
+    if (ret < 0 && !(h->avctx->err_recognition & AV_EF_EXPLODE)) {
+        GetByteContext gbc;
+        PutByteContext pbc;
+        uint8_t *escaped_buf;
+        int escaped_buf_size;
+
+        av_log(h->avctx, AV_LOG_WARNING,
+               "SPS decoding failure, trying again after escaping the NAL\n");
+
+        if (buf_size / 2 >= (INT16_MAX - AV_INPUT_BUFFER_PADDING_SIZE) / 3)
+            return AVERROR(ERANGE);
+        escaped_buf_size = buf_size * 3 / 2 + AV_INPUT_BUFFER_PADDING_SIZE;
+        escaped_buf = av_mallocz(escaped_buf_size);
+        if (!escaped_buf)
+            return AVERROR(ENOMEM);
+
+        bytestream2_init(&gbc, buf, buf_size);
+        bytestream2_init_writer(&pbc, escaped_buf, escaped_buf_size);
+
+        while (bytestream2_get_bytes_left(&gbc)) {
+            if (bytestream2_get_bytes_left(&gbc) >= 3 &&
+                bytestream2_peek_be24(&gbc) <= 3) {
+                bytestream2_put_be24(&pbc, 3);
+                bytestream2_skip(&gbc, 2);
+            } else
+                bytestream2_put_byte(&pbc, bytestream2_get_byte(&gbc));
+        }
+
+        escaped_buf_size = bytestream2_tell_p(&pbc);
+        AV_WB16(escaped_buf, escaped_buf_size - 2);
+
+        ret = decode_nal_units(h, escaped_buf, escaped_buf_size, 1);
+        av_freep(&escaped_buf);
+        if (ret < 0)
+            return ret;
+    }
+
+    return 0;
+}
+
 int ff_h264_decode_extradata(H264Context *h, const uint8_t *buf, int size)
 {
     AVCodecContext *avctx = h->avctx;
@@ -556,7 +512,7 @@ int ff_h264_decode_extradata(H264Context *h, const uint8_t *buf, int size)
             nalsize = AV_RB16(p) + 2;
             if(nalsize > size - (p-buf))
                 return AVERROR_INVALIDDATA;
-            ret = decode_nal_units(h, p, nalsize, 1);
+            ret = decode_extradata_ps_mp4(h, p, nalsize);
             if (ret < 0) {
                 av_log(avctx, AV_LOG_ERROR,
                        "Decoding sps %d from avcC failed\n", i);
@@ -570,7 +526,7 @@ int ff_h264_decode_extradata(H264Context *h, const uint8_t *buf, int size)
             nalsize = AV_RB16(p) + 2;
             if(nalsize > size - (p-buf))
                 return AVERROR_INVALIDDATA;
-            ret = decode_nal_units(h, p, nalsize, 1);
+            ret = decode_extradata_ps_mp4(h, p, nalsize);
             if (ret < 0) {
                 av_log(avctx, AV_LOG_ERROR,
                        "Decoding pps %d from avcC failed\n", i);
@@ -997,78 +953,6 @@ static void decode_postinit(H264Context *h, int setup_finished)
         if (h->avctx->active_thread_type & FF_THREAD_FRAME)
             h->setup_finished = 1;
     }
-}
-
-int ff_pred_weight_table(H264Context *h, H264SliceContext *sl)
-{
-    int list, i;
-    int luma_def, chroma_def;
-
-    sl->use_weight             = 0;
-    sl->use_weight_chroma      = 0;
-    sl->luma_log2_weight_denom = get_ue_golomb(&sl->gb);
-    if (h->sps.chroma_format_idc)
-        sl->chroma_log2_weight_denom = get_ue_golomb(&sl->gb);
-
-    if (sl->luma_log2_weight_denom > 7U) {
-        av_log(h->avctx, AV_LOG_ERROR, "luma_log2_weight_denom %d is out of range\n", sl->luma_log2_weight_denom);
-        sl->luma_log2_weight_denom = 0;
-    }
-    if (sl->chroma_log2_weight_denom > 7U) {
-        av_log(h->avctx, AV_LOG_ERROR, "chroma_log2_weight_denom %d is out of range\n", sl->chroma_log2_weight_denom);
-        sl->chroma_log2_weight_denom = 0;
-    }
-
-    luma_def   = 1 << sl->luma_log2_weight_denom;
-    chroma_def = 1 << sl->chroma_log2_weight_denom;
-
-    for (list = 0; list < 2; list++) {
-        sl->luma_weight_flag[list]   = 0;
-        sl->chroma_weight_flag[list] = 0;
-        for (i = 0; i < sl->ref_count[list]; i++) {
-            int luma_weight_flag, chroma_weight_flag;
-
-            luma_weight_flag = get_bits1(&sl->gb);
-            if (luma_weight_flag) {
-                sl->luma_weight[i][list][0] = get_se_golomb(&sl->gb);
-                sl->luma_weight[i][list][1] = get_se_golomb(&sl->gb);
-                if (sl->luma_weight[i][list][0] != luma_def ||
-                    sl->luma_weight[i][list][1] != 0) {
-                    sl->use_weight             = 1;
-                    sl->luma_weight_flag[list] = 1;
-                }
-            } else {
-                sl->luma_weight[i][list][0] = luma_def;
-                sl->luma_weight[i][list][1] = 0;
-            }
-
-            if (h->sps.chroma_format_idc) {
-                chroma_weight_flag = get_bits1(&sl->gb);
-                if (chroma_weight_flag) {
-                    int j;
-                    for (j = 0; j < 2; j++) {
-                        sl->chroma_weight[i][list][j][0] = get_se_golomb(&sl->gb);
-                        sl->chroma_weight[i][list][j][1] = get_se_golomb(&sl->gb);
-                        if (sl->chroma_weight[i][list][j][0] != chroma_def ||
-                            sl->chroma_weight[i][list][j][1] != 0) {
-                            sl->use_weight_chroma        = 1;
-                            sl->chroma_weight_flag[list] = 1;
-                        }
-                    }
-                } else {
-                    int j;
-                    for (j = 0; j < 2; j++) {
-                        sl->chroma_weight[i][list][j][0] = chroma_def;
-                        sl->chroma_weight[i][list][j][1] = 0;
-                    }
-                }
-            }
-        }
-        if (sl->slice_type_nos != AV_PICTURE_TYPE_B)
-            break;
-    }
-    sl->use_weight = sl->use_weight || sl->use_weight_chroma;
-    return 0;
 }
 
 /**
@@ -1544,7 +1428,7 @@ again:
                     (h->nal_unit_type == NAL_IDR_SLICE);
 
                 if (h->nal_unit_type == NAL_IDR_SLICE ||
-                    h->recovery_frame == h->frame_num) {
+                    (h->recovery_frame == h->frame_num && h->nal_ref_idc)) {
                     h->recovery_frame         = -1;
                     h->cur_pic_ptr->recovered = 1;
                 }

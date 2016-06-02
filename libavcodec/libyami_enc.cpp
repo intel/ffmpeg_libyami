@@ -243,20 +243,47 @@ static int yami_enc_init(AVCodecContext *avctx)
     encVideoParams.intraPeriod = av_clip(avctx->gop_size, 1, 250);
     s->ip_period = encVideoParams.ipPeriod = avctx->max_b_frames < 2 ? 1 : 3;
     s->max_inqueue_size = FFMAX(encVideoParams.ipPeriod, ENCODE_QUEUE_SIZE);
-    if (s->rcmod){
-        if (!strcmp(s->rcmod, "CQP"))
-            encVideoParams.rcMode = RATE_CONTROL_CQP;
-        else if (!strcmp(s->rcmod, "VBR")){
-            encVideoParams.rcMode = RATE_CONTROL_VBR;
-            encVideoParams.rcParams.bitRate = avctx->bit_rate;
-        } else {
-            encVideoParams.rcMode = RATE_CONTROL_CBR;
-            encVideoParams.rcParams.bitRate = avctx->bit_rate;
-        }
+
+    /* ratecontrol method selected
+    When ‘global_quality’ is specified, a quality-based mode is used. Specifically this means either
+        - CQP - constant quantizer scale, when the ‘qscale’ codec flag is also set (the ‘-qscale’ avconv option).
+    Otherwise, a bitrate-based mode is used. For all of those, you should specify at least the desired average bitrate with the ‘b’ option.
+        - CBR - constant bitrate, when ‘maxrate’ is specified and equal to the average bitrate.
+        - VBR - variable bitrate, when ‘maxrate’ is specified, but is higher than the average bitrate.
+     */
+    const char *rc_desc;
+    float quant;
+    int want_qscale = !!(avctx->flags & AV_CODEC_FLAG_QSCALE);
+
+    if (want_qscale) {
+        encVideoParams.rcMode = RATE_CONTROL_CQP;
+        quant = avctx->global_quality / FF_QP2LAMBDA;
+        encVideoParams.rcParams.initQP = av_clip(quant, 1, 52);
+
+        rc_desc = "constant quantization parameter (CQP)";
+    } else if (avctx->rc_max_rate > avctx->bit_rate) {
+        encVideoParams.rcMode = RATE_CONTROL_VBR;
+        encVideoParams.rcParams.bitRate = avctx->rc_max_rate;
+
+        encVideoParams.rcParams.targetPercentage = (100 * avctx->bit_rate)/avctx->rc_max_rate;
+        rc_desc = "variable bitrate (VBR)";
+
+        av_log(avctx, AV_LOG_WARNING, "Using the %s ratecontrol method, but driver not support it.\n", rc_desc);
+    } else if (avctx->rc_max_rate == avctx->bit_rate) {
+        encVideoParams.rcMode = RATE_CONTROL_CBR;
+        encVideoParams.rcParams.bitRate = avctx->bit_rate;
+        encVideoParams.rcParams.targetPercentage = 100;
+
+        rc_desc = "constant bitrate (CBR)";
     } else {
         encVideoParams.rcMode = RATE_CONTROL_CQP;
+        encVideoParams.rcParams.initQP = 26;
+
+        rc_desc = "constant quantization parameter (CQP) as default";
     }
-    encVideoParams.rcParams.initQP = av_clip(s->cqp,1,52);
+
+    av_log(avctx, AV_LOG_VERBOSE, "Using the %s ratecontrol method\n", rc_desc);
+
     if (s->level){
         encVideoParams.level = atoi(s->level);
     } else {
@@ -461,8 +488,6 @@ static int yami_enc_close(AVCodecContext *avctx)
 static const AVOption options[] = {
     { "profile",       "Set profile restrictions ", OFFSET(profile),       AV_OPT_TYPE_STRING, { 0 }, 0, 0, VE},
     { "level",         "Specify level (as defined by Annex A)", OFFSET(level), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
-    { "rcmode",        "rate control mode", OFFSET(rcmod), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, VE},
-    { "qp",            "Constant quantization parameter rate control method",OFFSET(cqp),        AV_OPT_TYPE_INT,    { .i64 = 26 }, 1, 52, VE },
     { NULL },
 };
 

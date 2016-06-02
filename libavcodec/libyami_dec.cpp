@@ -154,7 +154,6 @@ static int ff_convert_to_frame(AVCodecContext *avctx, YamiImage *from, AVFrame *
         to->width = avctx->width;
         to->height = avctx->height;
         to->format = AV_PIX_FMT_YAMI;
-        to->extended_data = NULL;
         to->extended_data = to->data;
         /* XXX: put the surface id to data[3] */
         to->data[3] = reinterpret_cast<uint8_t *>(from);
@@ -170,7 +169,6 @@ static int ff_convert_to_frame(AVCodecContext *avctx, YamiImage *from, AVFrame *
         to->width = avctx->width;
         to->height = avctx->height;
         to->format = avctx->pix_fmt;
-        to->extended_data = NULL;
         to->extended_data = to->data;
         ff_vaapi_get_image(from->output_frame, to);
         to->buf[3] = av_buffer_create((uint8_t *) from,
@@ -230,6 +228,16 @@ static int yami_dec_init(AVCodecContext *avctx)
     native_display.type = NATIVE_DISPLAY_VA;
     native_display.handle = (intptr_t)va_display;
     s->decoder->setNativeDisplay(&native_display);
+    //fellow h264.c style
+    if (avctx->codec_id == AV_CODEC_ID_H264) {
+        if (avctx->ticks_per_frame == 1) {
+            if (avctx->time_base.den < INT_MAX / 2) {
+                avctx->time_base.den *= 2;
+            } else
+                avctx->time_base.num /= 2;
+        }
+        avctx->ticks_per_frame = 2;
+    }
     VideoConfigBuffer config_buffer;
     memset(&config_buffer, 0, sizeof(VideoConfigBuffer));
     if (avctx->extradata && avctx->extradata_size && avctx->extradata[0] == 1) {
@@ -257,6 +265,14 @@ static int yami_dec_init(AVCodecContext *avctx)
     return 0;
 }
 
+static int ff_get_best_pkt_dts(AVFrame *frame, YamiDecContext *s)
+{
+    if (frame->pkt_dts == AV_NOPTS_VALUE) {
+        frame->pkt_dts = s->render_count * s->duration;
+    }
+    return 1;
+}
+
 static int yami_dec_frame(AVCodecContext *avctx, void *data,
                    int *got_frame, AVPacket *avpkt)
 {
@@ -274,12 +290,16 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     if (!in_buffer)
         return AVERROR(ENOMEM);
     /* avoid avpkt free and data is pointer */
-    in_buffer->data = (uint8_t *)av_mallocz(avpkt->size);
-    if (!in_buffer->data)
-        return AVERROR(ENOMEM);
-    memcpy(in_buffer->data, avpkt->data, avpkt->size);
+    if (avpkt->data && avpkt->size) {
+        in_buffer->data = (uint8_t *)av_mallocz(avpkt->size);
+        if (!in_buffer->data)
+            return AVERROR(ENOMEM);
+        memcpy(in_buffer->data, avpkt->data, avpkt->size);
+    }
     in_buffer->size = avpkt->size;
     in_buffer->timeStamp = avpkt->pts;
+    if (avpkt->duration != 0)
+        s->duration = avpkt->duration;
     while (s->decode_status < DECODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
         pthread_mutex_lock(&s->in_mutex);
         if (s->in_queue->size() < DECODE_QUEUE_SIZE) {
@@ -330,6 +350,9 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
             goto fail;
         }
         do{
+            //flush the decoder and sync the decoder thread if avpkt->data is null
+            if (!avpkt->data && s->in_queue->size() == 0)
+                s->decoder->decode(in_buffer);
             yami_image->output_frame = s->decoder->getOutput();
             av_log(avctx, AV_LOG_DEBUG, "getoutput() status=%d\n", status);
         } while (!avpkt->data && !yami_image->output_frame && s->in_queue->size() > 0);
@@ -349,6 +372,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     // process the output frame
     if (ff_convert_to_frame(avctx, yami_image, frame) < 0)
         av_log(avctx, AV_LOG_VERBOSE, "yami frame convert av_frame failed\n");
+    ff_get_best_pkt_dts(frame, s);
     *got_frame = 1;
     s->render_count++;
     av_log(avctx, AV_LOG_VERBOSE,
@@ -414,6 +438,10 @@ AVCodec ff_libyami_##NAME##_decoder = { \
     /* encode2 */               NULL, \
     /* decode */                yami_dec_frame, \
     /* close */                 yami_dec_close, \
+    /* send_frame */            NULL, \
+    /* send_packet */           NULL, \
+    /* receive_frame */         NULL, \
+    /* receive_packet */        NULL, \
     /* flush */                 NULL, \
     /* caps_internal */         FF_CODEC_CAP_SETS_PKT_DTS, \
 };
