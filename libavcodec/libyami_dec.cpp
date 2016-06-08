@@ -267,7 +267,7 @@ static int yami_dec_init(AVCodecContext *avctx)
 
 static int ff_get_best_pkt_dts(AVFrame *frame, YamiDecContext *s)
 {
-    if (frame->pkt_dts == AV_NOPTS_VALUE) {
+    if (frame->pkt_dts == AV_NOPTS_VALUE && frame->pts == AV_NOPTS_VALUE) {
         frame->pkt_dts = s->render_count * s->duration;
     }
     return 1;
