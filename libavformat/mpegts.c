@@ -542,13 +542,16 @@ static int analyze(const uint8_t *buf, int size, int packet_size,
     memset(stat, 0, packet_size * sizeof(*stat));
 
     for (i = 0; i < size - 3; i++) {
-        if (buf[i] == 0x47 &&
-            (!probe || (buf[i + 3] & 0x30))) {
-            int x = i % packet_size;
-            stat[x]++;
-            stat_all++;
-            if (stat[x] > best_score) {
-                best_score = stat[x];
+        if (buf[i] == 0x47) {
+            int pid = AV_RB16(buf+1) & 0x1FFF;
+            int asc = buf[i + 3] & 0x30;
+            if (!probe || pid == 0x1FFF || asc) {
+                int x = i % packet_size;
+                stat[x]++;
+                stat_all++;
+                if (stat[x] > best_score) {
+                    best_score = stat[x];
+                }
             }
         }
     }
@@ -738,6 +741,7 @@ static const StreamType REGD_types[] = {
     { MKTAG('E', 'A', 'C', '3'), AVMEDIA_TYPE_AUDIO, AV_CODEC_ID_EAC3  },
     { MKTAG('H', 'E', 'V', 'C'), AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_HEVC  },
     { MKTAG('K', 'L', 'V', 'A'), AVMEDIA_TYPE_DATA,  AV_CODEC_ID_SMPTE_KLV },
+    { MKTAG('I', 'D', '3', ' '), AVMEDIA_TYPE_DATA,  AV_CODEC_ID_TIMED_ID3 },
     { MKTAG('V', 'C', '-', '1'), AVMEDIA_TYPE_VIDEO, AV_CODEC_ID_VC1   },
     { MKTAG('O', 'p', 'u', 's'), AVMEDIA_TYPE_AUDIO, AV_CODEC_ID_OPUS  },
     { 0 },
@@ -1803,8 +1807,11 @@ int ff_parse_mpeg2_descriptor(AVFormatContext *fc, AVStream *st, int stream_type
     case 0x05: /* registration descriptor */
         st->codecpar->codec_tag = bytestream_get_le32(pp);
         av_log(fc, AV_LOG_TRACE, "reg_desc=%.4s\n", (char *)&st->codecpar->codec_tag);
-        if (st->codecpar->codec_id == AV_CODEC_ID_NONE || st->request_probe > 0)
+        if (st->codecpar->codec_id == AV_CODEC_ID_NONE || st->request_probe > 0) {
             mpegts_find_stream_type(st, st->codecpar->codec_tag, REGD_types);
+            if (st->codecpar->codec_tag == MKTAG('B', 'S', 'S', 'D'))
+                st->request_probe = 50;
+        }
         break;
     case 0x52: /* stream identifier descriptor */
         st->stream_identifier = 1 + get8(pp, desc_end);

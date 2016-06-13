@@ -789,6 +789,44 @@ static int mkv_write_video_color(AVIOContext *pb, AVCodecParameters *par, AVStre
     return 0;
 }
 
+static void mkv_write_field_order(AVIOContext *pb,
+                                  enum AVFieldOrder field_order)
+{
+    switch (field_order) {
+    case AV_FIELD_UNKNOWN:
+        put_ebml_uint(pb, MATROSKA_ID_VIDEOFLAGINTERLACED,
+                      MATROSKA_VIDEO_INTERLACE_FLAG_UNDETERMINED);
+        break;
+    case AV_FIELD_PROGRESSIVE:
+        put_ebml_uint(pb, MATROSKA_ID_VIDEOFLAGINTERLACED,
+                      MATROSKA_VIDEO_INTERLACE_FLAG_PROGRESSIVE);
+        break;
+    case AV_FIELD_TT:
+    case AV_FIELD_BB:
+    case AV_FIELD_TB:
+    case AV_FIELD_BT:
+        put_ebml_uint(pb, MATROSKA_ID_VIDEOFLAGINTERLACED,
+                      MATROSKA_VIDEO_INTERLACE_FLAG_INTERLACED);
+        switch (field_order) {
+        case AV_FIELD_TT:
+            put_ebml_uint(pb, MATROSKA_ID_VIDEOFIELDORDER,
+                          MATROSKA_VIDEO_FIELDORDER_TT);
+            break;
+        case AV_FIELD_BB:
+             put_ebml_uint(pb, MATROSKA_ID_VIDEOFIELDORDER,
+                          MATROSKA_VIDEO_FIELDORDER_BB);
+            break;
+        case AV_FIELD_TB:
+            put_ebml_uint(pb, MATROSKA_ID_VIDEOFIELDORDER,
+                          MATROSKA_VIDEO_FIELDORDER_TB);
+            break;
+        case AV_FIELD_BT:
+            put_ebml_uint(pb, MATROSKA_ID_VIDEOFIELDORDER,
+                          MATROSKA_VIDEO_FIELDORDER_BT);
+            break;
+        }
+    }
+}
 
 static int mkv_write_stereo_mode(AVFormatContext *s, AVIOContext *pb,
                                  AVStream *st, int mode, int *h_width, int *h_height)
@@ -909,14 +947,16 @@ static int mkv_write_track(AVFormatContext *s, MatroskaMuxContext *mkv,
         return 0;
     }
 
-    if (!bit_depth && par->codec_id != AV_CODEC_ID_ADPCM_G726) {
-        if (par->bits_per_raw_sample)
-            bit_depth = par->bits_per_raw_sample;
-        else
-            bit_depth = av_get_bytes_per_sample(par->format) << 3;
+    if (par->codec_type == AVMEDIA_TYPE_AUDIO) {
+        if (!bit_depth && par->codec_id != AV_CODEC_ID_ADPCM_G726) {
+            if (par->bits_per_raw_sample)
+                bit_depth = par->bits_per_raw_sample;
+            else
+                bit_depth = av_get_bytes_per_sample(par->format) << 3;
+        }
+        if (!bit_depth)
+            bit_depth = par->bits_per_coded_sample;
     }
-    if (!bit_depth)
-        bit_depth = par->bits_per_coded_sample;
 
     if (par->codec_id == AV_CODEC_ID_AAC) {
         ret = get_aac_sample_rates(s, par, &sample_rate, &output_sample_rate);
@@ -1041,9 +1081,12 @@ static int mkv_write_track(AVFormatContext *s, MatroskaMuxContext *mkv,
         }
 
         subinfo = start_ebml_master(pb, MATROSKA_ID_TRACKVIDEO, 0);
-        // XXX: interlace flag?
+
         put_ebml_uint (pb, MATROSKA_ID_VIDEOPIXELWIDTH , par->width);
         put_ebml_uint (pb, MATROSKA_ID_VIDEOPIXELHEIGHT, par->height);
+
+        if (mkv->mode != MODE_WEBM)
+            mkv_write_field_order(pb, par->field_order);
 
         // check both side data and metadata for stereo information,
         // write the result to the bitstream if any is found

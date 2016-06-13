@@ -244,9 +244,21 @@ static void reconfig_encoder(AVCodecContext *ctx, const AVFrame *frame)
         case AV_STEREO3D_FRAMESEQUENCE:
             fpa_type = 5;
             break;
+#if X264_BUILD >= 145
+        case AV_STEREO3D_2D:
+            fpa_type = 6;
+            break;
+#endif
         default:
             fpa_type = -1;
             break;
+        }
+
+        /* Inverted mode is not supported by x264 */
+        if (stereo->flags & AV_STEREO3D_FLAG_INVERT) {
+            av_log(ctx, AV_LOG_WARNING,
+                   "Ignoring unsupported inverted stereo value %d\n", fpa_type);
+            fpa_type = -1;
         }
 
         if (fpa_type != x4->params.i_frame_packing) {
@@ -430,7 +442,7 @@ static int convert_pix_fmt(enum AVPixelFormat pix_fmt)
     case AV_PIX_FMT_YUVJ444P:
     case AV_PIX_FMT_YUV444P9:
     case AV_PIX_FMT_YUV444P10: return X264_CSP_I444;
-#ifdef X264_CSP_BGR
+#if CONFIG_LIBX264RGB_ENCODER
     case AV_PIX_FMT_BGR0:
         return X264_CSP_BGRA;
     case AV_PIX_FMT_BGR24:
@@ -884,14 +896,14 @@ static const enum AVPixelFormat pix_fmts_10bit[] = {
     AV_PIX_FMT_NV20,
     AV_PIX_FMT_NONE
 };
+#if CONFIG_LIBX264RGB_ENCODER
 static const enum AVPixelFormat pix_fmts_8bit_rgb[] = {
-#ifdef X264_CSP_BGR
     AV_PIX_FMT_BGR0,
     AV_PIX_FMT_BGR24,
     AV_PIX_FMT_RGB24,
-#endif
     AV_PIX_FMT_NONE
 };
+#endif
 
 static av_cold void X264_init_static(AVCodec *codec)
 {
@@ -1035,13 +1047,6 @@ static const AVClass x264_class = {
     .version    = LIBAVUTIL_VERSION_INT,
 };
 
-static const AVClass rgbclass = {
-    .class_name = "libx264rgb",
-    .item_name  = av_default_item_name,
-    .option     = options,
-    .version    = LIBAVUTIL_VERSION_INT,
-};
-
 AVCodec ff_libx264_encoder = {
     .name             = "libx264",
     .long_name        = NULL_IF_CONFIG_SMALL("libx264 H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10"),
@@ -1057,6 +1062,15 @@ AVCodec ff_libx264_encoder = {
     .init_static_data = X264_init_static,
     .caps_internal    = FF_CODEC_CAP_INIT_THREADSAFE |
                         FF_CODEC_CAP_INIT_CLEANUP,
+};
+#endif
+
+#if CONFIG_LIBX264RGB_ENCODER
+static const AVClass rgbclass = {
+    .class_name = "libx264rgb",
+    .item_name  = av_default_item_name,
+    .option     = options,
+    .version    = LIBAVUTIL_VERSION_INT,
 };
 
 AVCodec ff_libx264rgb_encoder = {

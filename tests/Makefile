@@ -97,6 +97,7 @@ include $(SRC_PATH)/$(APITESTSDIR)/Makefile
 
 include $(SRC_PATH)/tests/fate/acodec.mak
 include $(SRC_PATH)/tests/fate/vcodec.mak
+
 include $(SRC_PATH)/tests/fate/avformat.mak
 include $(SRC_PATH)/tests/fate/seek.mak
 
@@ -124,10 +125,10 @@ include $(SRC_PATH)/tests/fate/ea.mak
 include $(SRC_PATH)/tests/fate/exif.mak
 include $(SRC_PATH)/tests/fate/ffmpeg.mak
 include $(SRC_PATH)/tests/fate/ffprobe.mak
+include $(SRC_PATH)/tests/fate/fft.mak
 include $(SRC_PATH)/tests/fate/filter-audio.mak
 include $(SRC_PATH)/tests/fate/filter-video.mak
 include $(SRC_PATH)/tests/fate/flac.mak
-include $(SRC_PATH)/tests/fate/fft.mak
 include $(SRC_PATH)/tests/fate/gapless.mak
 include $(SRC_PATH)/tests/fate/gif.mak
 include $(SRC_PATH)/tests/fate/h264.mak
@@ -143,6 +144,7 @@ include $(SRC_PATH)/tests/fate/libavutil.mak
 include $(SRC_PATH)/tests/fate/libswresample.mak
 include $(SRC_PATH)/tests/fate/lossless-audio.mak
 include $(SRC_PATH)/tests/fate/lossless-video.mak
+include $(SRC_PATH)/tests/fate/matroska.mak
 include $(SRC_PATH)/tests/fate/microsoft.mak
 include $(SRC_PATH)/tests/fate/monkeysaudio.mak
 include $(SRC_PATH)/tests/fate/mp3.mak
@@ -228,7 +230,7 @@ lcov: coverage.info
 
 lcov-reset: TAG = LCOV
 lcov-reset:
-	$(M)lcov -d $(CURDIR) --zerocounters
+	$(M)lcov -q -d $(CURDIR) --zerocounters
 	$(Q)$(RM) -f coverage.info
 
 clean:: testclean

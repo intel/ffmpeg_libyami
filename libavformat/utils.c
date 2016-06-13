@@ -2491,7 +2491,7 @@ static void update_stream_timings(AVFormatContext *ic)
             end_time1 = av_rescale_q_rnd(st->duration, st->time_base,
                                          AV_TIME_BASE_Q,
                                          AV_ROUND_NEAR_INF|AV_ROUND_PASS_MINMAX);
-            if (end_time1 != AV_NOPTS_VALUE) {
+            if (end_time1 != AV_NOPTS_VALUE && start_time1 <= INT64_MAX - end_time1) {
                 end_time1 += start_time1;
                 end_time = FFMAX(end_time, end_time1);
             }
@@ -2529,7 +2529,7 @@ static void update_stream_timings(AVFormatContext *ic)
     if (duration != INT64_MIN && duration > 0 && ic->duration == AV_NOPTS_VALUE) {
         ic->duration = duration;
     }
-    if (ic->pb && (filesize = avio_size(ic->pb)) > 0 && ic->duration != AV_NOPTS_VALUE) {
+    if (ic->pb && (filesize = avio_size(ic->pb)) > 0 && ic->duration > 0) {
         /* compute the bitrate */
         double bitrate = (double) filesize * 8.0 * AV_TIME_BASE /
                          (double) ic->duration;
@@ -2955,6 +2955,9 @@ enum AVCodecID ff_codec_get_id(const AVCodecTag *tags, unsigned int tag)
 
 enum AVCodecID ff_get_pcm_codec_id(int bps, int flt, int be, int sflags)
 {
+    if (bps <= 0 || bps > 64)
+        return AV_CODEC_ID_NONE;
+
     if (flt) {
         switch (bps) {
         case 32:
@@ -3038,7 +3041,7 @@ static void compute_chapters_end(AVFormatContext *s)
     unsigned int i, j;
     int64_t max_time = 0;
 
-    if (s->duration > 0)
+    if (s->duration > 0 && s->start_time < INT64_MAX - s->duration)
         max_time = s->duration +
                        ((s->start_time == AV_NOPTS_VALUE) ? 0 : s->start_time);
 
@@ -3262,7 +3265,7 @@ void ff_rfps_calculate(AVFormatContext *ic)
 
 int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
 {
-    int i, count, ret = 0, j;
+    int i, count = 0, ret = 0, j;
     int64_t read_size;
     AVStream *st;
     AVCodecContext *avctx;
@@ -3381,7 +3384,6 @@ FF_ENABLE_DEPRECATION_WARNINGS
         ic->streams[i]->info->fps_last_dts  = AV_NOPTS_VALUE;
     }
 
-    count     = 0;
     read_size = 0;
     for (;;) {
         int analyzed_all_streams;
@@ -3600,12 +3602,23 @@ FF_ENABLE_DEPRECATION_WARNINGS
         count++;
     }
 
-    if (eof_reached && ic->internal->packet_buffer) {
+    if (eof_reached) {
         int stream_index;
         for (stream_index = 0; stream_index < ic->nb_streams; stream_index++) {
+            st = ic->streams[stream_index];
+            avctx = st->internal->avctx;
+            if (!has_codec_parameters(st, NULL)) {
+                AVCodec *codec = find_decoder(ic, st, st->codecpar->codec_id);
+                if (codec && !avctx->codec) {
+                    if (avcodec_open2(avctx, codec, (options && stream_index < orig_nb_streams) ? &options[stream_index] : NULL) < 0)
+                        av_log(ic, AV_LOG_WARNING,
+                            "Failed to open codec in av_find_stream_info\n");
+                }
+            }
+
             // EOF already reached while reading the stream above.
             // So continue with reoordering DTS with whatever delay we have.
-            if (!has_decode_delay_been_guessed(st)) {
+            if (ic->internal->packet_buffer && !has_decode_delay_been_guessed(st)) {
                 update_dts_from_pts(ic, stream_index, ic->internal->packet_buffer);
             }
         }
@@ -3740,6 +3753,9 @@ FF_ENABLE_DEPRECATION_WARNINGS
 
         /* if no packet was ever seen, update context now for has_codec_parameters */
         if (!st->internal->avctx_inited) {
+            if (st->codecpar->codec_type == AVMEDIA_TYPE_AUDIO &&
+                st->codecpar->format == AV_SAMPLE_FMT_NONE)
+                st->codecpar->format = st->internal->avctx->sample_fmt;
             ret = avcodec_parameters_to_context(st->internal->avctx, st->codecpar);
             if (ret < 0)
                 goto find_stream_info_err;
@@ -3803,6 +3819,9 @@ FF_DISABLE_DEPRECATION_WARNINGS
             memcpy(st->codec->subtitle_header, st->internal->avctx->subtitle_header,
                    st->codec->subtitle_header_size);
         }
+
+        // Fields unavailable in AVCodecParameters
+        st->codec->properties = st->internal->avctx->properties;
 FF_ENABLE_DEPRECATION_WARNINGS
 #endif
 

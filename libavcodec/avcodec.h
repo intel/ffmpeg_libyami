@@ -405,6 +405,9 @@ enum AVCodecID {
     AV_CODEC_ID_DAALA,
     AV_CODEC_ID_CFHD,
     AV_CODEC_ID_TRUEMOTION2RT,
+    AV_CODEC_ID_M101,
+    AV_CODEC_ID_MAGICYUV,
+    AV_CODEC_ID_SHEERVIDEO,
 
     /* various PCM "codecs" */
     AV_CODEC_ID_FIRST_AUDIO = 0x10000,     ///< A dummy id pointing at the start of audio codecs
@@ -488,6 +491,7 @@ enum AVCodecID {
     AV_CODEC_ID_ADPCM_PSX,
     AV_CODEC_ID_ADPCM_AICA,
     AV_CODEC_ID_ADPCM_IMA_DAT4,
+    AV_CODEC_ID_ADPCM_MTAF,
 
     /* AMR */
     AV_CODEC_ID_AMR_NB = 0x12000,
@@ -590,6 +594,7 @@ enum AVCodecID {
     AV_CODEC_ID_INTERPLAY_ACM,
     AV_CODEC_ID_XMA1,
     AV_CODEC_ID_XMA2,
+    AV_CODEC_ID_DST,
 
     /* subtitle codecs */
     AV_CODEC_ID_FIRST_SUBTITLE = 0x17000,          ///< A dummy ID pointing at the start of subtitle codecs.
@@ -1634,6 +1639,10 @@ enum AVFieldOrder {
  * version bump.
  * Please use AVOptions (av_opt* / av_set/get*()) to access these fields from user
  * applications.
+ * The name string for AVOptions options matches the associated command line
+ * parameter name and can be found in libavcodec/options_table.h
+ * The AVOption/command line parameter names differ in some cases from the C
+ * structure field names for historic reasons or brevity.
  * sizeof(AVCodecContext) must not be used outside libav*.
  */
 typedef struct AVCodecContext {
@@ -3322,7 +3331,8 @@ typedef struct AVCodecContext {
      * - decoding: For codecs that store a framerate value in the compressed
      *             bitstream, the decoder may export it here. { 0, 1} when
      *             unknown.
-     * - encoding: unused
+     * - encoding: May be used to signal the framerate of CFR content to an
+     *             encoder.
      */
     AVRational framerate;
 
