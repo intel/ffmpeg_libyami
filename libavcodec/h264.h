@@ -293,20 +293,20 @@ typedef struct FPA {
 } FPA;
 
 /**
- *     Green MetaData Information Type
+ * Green MetaData Information Type
  */
-typedef struct GreenMetaData {
-    uint8_t  green_metadata_type;
-    uint8_t  period_type;
-    uint16_t  num_seconds;
-    uint16_t  num_pictures;
+typedef struct H264SEIGreenMetaData {
+    uint8_t green_metadata_type;
+    uint8_t period_type;
+    uint16_t num_seconds;
+    uint16_t num_pictures;
     uint8_t percent_non_zero_macroblocks;
     uint8_t percent_intra_coded_macroblocks;
     uint8_t percent_six_tap_filtering;
     uint8_t percent_alpha_point_deblocking_instance;
     uint8_t xsd_metric_type;
     uint16_t xsd_metric_value;
-} GreenMetaData;
+} H264SEIGreenMetaData;
 
 /**
  * Memory management control operation opcode.
@@ -831,7 +831,7 @@ typedef struct H264Context {
     qpel_mc_func (*qpel_avg)[16];
 
     /*Green Metadata */
-    GreenMetaData sei_green_metadata;
+    H264SEIGreenMetaData sei_green_metadata;
 
 } H264Context;
 
