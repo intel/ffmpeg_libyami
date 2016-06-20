@@ -292,10 +292,6 @@ static void copy_picture_range(H264Picture **to, H264Picture **from, int count,
     }
 }
 
-#define copy_fields(to, from, start_field, end_field)                   \
-    memcpy(&(to)->start_field, &(from)->start_field,                        \
-           (char *)&(to)->end_field - (char *)&(to)->start_field)
-
 static int h264_slice_header_init(H264Context *h);
 
 int ff_h264_update_thread_context(AVCodecContext *dst,
@@ -418,10 +414,27 @@ int ff_h264_update_thread_context(AVCodecContext *dst,
     // extradata/NAL handling
     h->is_avc = h1->is_avc;
     h->nal_length_size = h1->nal_length_size;
-    h->x264_build      = h1->x264_build;
+    h->sei.unregistered.x264_build = h1->sei.unregistered.x264_build;
 
-    // POC timing
-    copy_fields(h, h1, poc, current_slice);
+    memcpy(&h->poc,        &h1->poc,        sizeof(h->poc));
+
+    h->curr_pic_num      = h1->curr_pic_num;
+    h->max_pic_num       = h1->max_pic_num;
+
+    memcpy(h->default_ref, h1->default_ref, sizeof(h->default_ref));
+    memcpy(h->short_ref,   h1->short_ref,   sizeof(h->short_ref));
+    memcpy(h->long_ref,    h1->long_ref,    sizeof(h->long_ref));
+    memcpy(h->delayed_pic, h1->delayed_pic, sizeof(h->delayed_pic));
+    memcpy(h->last_pocs,   h1->last_pocs,   sizeof(h->last_pocs));
+
+    h->next_output_pic   = h1->next_output_pic;
+    h->next_outputed_poc = h1->next_outputed_poc;
+
+    memcpy(h->mmco, h1->mmco, sizeof(h->mmco));
+    h->mmco_index      = h1->mmco_index;
+    h->mmco_reset      = h1->mmco_reset;
+    h->long_ref_count  = h1->long_ref_count;
+    h->short_ref_count = h1->short_ref_count;
 
     copy_picture_range(h->short_ref, h1->short_ref, 32, h, h1);
     copy_picture_range(h->long_ref, h1->long_ref, 32, h, h1);
@@ -486,7 +499,7 @@ static int h264_frame_start(H264Context *h)
     pic->mmco_reset  = 0;
     pic->recovered   = 0;
     pic->invalid_gap = 0;
-    pic->sei_recovery_frame_cnt = h->sei_recovery_frame_cnt;
+    pic->sei_recovery_frame_cnt = h->sei.recovery_point.recovery_frame_cnt;
 
     if ((ret = alloc_picture(h, pic)) < 0)
         return ret;
@@ -913,7 +926,7 @@ static int h264_slice_header_init(H264Context *h)
 
     if (sps->timing_info_present_flag) {
         int64_t den = sps->time_scale;
-        if (h->x264_build < 44U)
+        if (h->sei.unregistered.x264_build < 44U)
             den *= 2;
         av_reduce(&h->avctx->framerate.den, &h->avctx->framerate.num,
                   sps->num_units_in_tick * h->avctx->ticks_per_frame, den, 1 << 30);
@@ -1126,7 +1139,7 @@ int ff_h264_decode_slice_header(H264Context *h, H264SliceContext *sl)
             (h->avctx->skip_frame >= AVDISCARD_NONREF && !h->nal_ref_idc) ||
             (h->avctx->skip_frame >= AVDISCARD_BIDIR  && sl->slice_type_nos == AV_PICTURE_TYPE_B) ||
             (h->avctx->skip_frame >= AVDISCARD_NONINTRA && sl->slice_type_nos != AV_PICTURE_TYPE_I) ||
-            (h->avctx->skip_frame >= AVDISCARD_NONKEY && h->nal_unit_type != NAL_IDR_SLICE && h->sei_recovery_frame_cnt < 0) ||
+            (h->avctx->skip_frame >= AVDISCARD_NONKEY && h->nal_unit_type != NAL_IDR_SLICE && h->sei.recovery_point.recovery_frame_cnt < 0) ||
             h->avctx->skip_frame >= AVDISCARD_ALL) {
             return SLICE_SKIPED;
         }
@@ -1667,7 +1680,7 @@ int ff_h264_decode_slice_header(H264Context *h, H264SliceContext *sl)
     }
 
     if (FRAME_MBAFF(h)) {
-        ff_h264_fill_mbaff_ref_list(h, sl);
+        ff_h264_fill_mbaff_ref_list(sl);
 
         if (pps->weighted_bipred_idc == 2 && sl->slice_type_nos == AV_PICTURE_TYPE_B) {
             implicit_weight_table(h, sl, 0);

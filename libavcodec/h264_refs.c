@@ -75,7 +75,7 @@ static int split_field_copy(H264Ref *dest, H264Picture *src, int parity, int id_
 }
 
 static int build_def_list(H264Ref *def, int def_len,
-                          H264Picture **in, int len, int is_long, int sel)
+                          H264Picture * const *in, int len, int is_long, int sel)
 {
     int  i[2] = { 0 };
     int index = 0;
@@ -100,7 +100,8 @@ static int build_def_list(H264Ref *def, int def_len,
     return index;
 }
 
-static int add_sorted(H264Picture **sorted, H264Picture **src, int len, int limit, int dir)
+static int add_sorted(H264Picture **sorted, H264Picture * const *src,
+                      int len, int limit, int dir)
 {
     int i, best_poc;
     int out_i = 0;
@@ -122,9 +123,9 @@ static int add_sorted(H264Picture **sorted, H264Picture **src, int len, int limi
     return out_i;
 }
 
-static int mismatches_ref(H264Context *h, H264Picture *pic)
+static int mismatches_ref(const H264Context *h, const H264Picture *pic)
 {
-    AVFrame *f = pic->f;
+    const AVFrame *f = pic->f;
     return (h->cur_pic_ptr->f->width  != f->width ||
             h->cur_pic_ptr->f->height != f->height ||
             h->cur_pic_ptr->f->format != f->format);
@@ -212,8 +213,39 @@ static void h264_initialise_ref_list(H264Context *h, H264SliceContext *sl)
         h->default_ref[i] = sl->ref_list[i][0];
 }
 
-static void print_short_term(H264Context *h);
-static void print_long_term(H264Context *h);
+/**
+ * print short term list
+ */
+static void print_short_term(const H264Context *h)
+{
+    uint32_t i;
+    if (h->avctx->debug & FF_DEBUG_MMCO) {
+        av_log(h->avctx, AV_LOG_DEBUG, "short term list:\n");
+        for (i = 0; i < h->short_ref_count; i++) {
+            H264Picture *pic = h->short_ref[i];
+            av_log(h->avctx, AV_LOG_DEBUG, "%"PRIu32" fn:%d poc:%d %p\n",
+                   i, pic->frame_num, pic->poc, pic->f->data[0]);
+        }
+    }
+}
+
+/**
+ * print long term list
+ */
+static void print_long_term(const H264Context *h)
+{
+    uint32_t i;
+    if (h->avctx->debug & FF_DEBUG_MMCO) {
+        av_log(h->avctx, AV_LOG_DEBUG, "long term list:\n");
+        for (i = 0; i < 16; i++) {
+            H264Picture *pic = h->long_ref[i];
+            if (pic) {
+                av_log(h->avctx, AV_LOG_DEBUG, "%"PRIu32" fn:%d poc:%d %p\n",
+                       i, pic->frame_num, pic->poc, pic->f->data[0]);
+            }
+        }
+    }
+}
 
 /**
  * Extract structure information about the picture described by pic_num in
@@ -225,7 +257,7 @@ static void print_long_term(H264Context *h);
  * @return frame number (short term) or long term index of picture
  *         described by pic_num
  */
-static int pic_num_extract(H264Context *h, int pic_num, int *structure)
+static int pic_num_extract(const H264Context *h, int pic_num, int *structure)
 {
     *structure = h->picture_structure;
     if (FIELD_PICTURE(h)) {
@@ -369,7 +401,7 @@ int ff_h264_decode_ref_pic_list_reordering(H264Context *h, H264SliceContext *sl)
     return 0;
 }
 
-void ff_h264_fill_mbaff_ref_list(H264Context *h, H264SliceContext *sl)
+void ff_h264_fill_mbaff_ref_list(H264SliceContext *sl)
 {
     int list, i, j;
     for (list = 0; list < sl->list_count; list++) {
@@ -534,40 +566,6 @@ void ff_h264_remove_all_refs(H264Context *h)
         H264SliceContext *sl = &h->slice_ctx[i];
         sl->list_count = sl->ref_count[0] = sl->ref_count[1] = 0;
         memset(sl->ref_list, 0, sizeof(sl->ref_list));
-    }
-}
-
-/**
- * print short term list
- */
-static void print_short_term(H264Context *h)
-{
-    uint32_t i;
-    if (h->avctx->debug & FF_DEBUG_MMCO) {
-        av_log(h->avctx, AV_LOG_DEBUG, "short term list:\n");
-        for (i = 0; i < h->short_ref_count; i++) {
-            H264Picture *pic = h->short_ref[i];
-            av_log(h->avctx, AV_LOG_DEBUG, "%"PRIu32" fn:%d poc:%d %p\n",
-                   i, pic->frame_num, pic->poc, pic->f->data[0]);
-        }
-    }
-}
-
-/**
- * print long term list
- */
-static void print_long_term(H264Context *h)
-{
-    uint32_t i;
-    if (h->avctx->debug & FF_DEBUG_MMCO) {
-        av_log(h->avctx, AV_LOG_DEBUG, "long term list:\n");
-        for (i = 0; i < 16; i++) {
-            H264Picture *pic = h->long_ref[i];
-            if (pic) {
-                av_log(h->avctx, AV_LOG_DEBUG, "%"PRIu32" fn:%d poc:%d %p\n",
-                       i, pic->frame_num, pic->poc, pic->f->data[0]);
-            }
-        }
     }
 }
 
