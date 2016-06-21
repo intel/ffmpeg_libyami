@@ -89,7 +89,6 @@ Other:
   rational.c, rational.h                Michael Niedermayer
   rc4                                   Reimar Doeffinger
   ripemd.c, ripemd.h                    James Almer
-  timecode                              Clément Bœsch
 
 
 libavcodec
@@ -146,7 +145,6 @@ Codecs:
   apedec.c                              Kostya Shishkov
   ass*                                  Aurelien Jacobs
   asv*                                  Michael Niedermayer
-  atrac3*                               Benjamin Larsson
   atrac3plus*                           Maxim Poliakovski
   bgmc.c, bgmc.h                        Thilo Borgmann
   bink.c                                Kostya Shishkov
@@ -159,12 +157,11 @@ Codecs:
   cinepakenc.c                          Rl / Aetey G.T. AB
   ccaption_dec.c                        Anshul Maheshwari
   cljr                                  Alex Beregszaszi
-  cook.c, cookdata.h                    Benjamin Larsson
   cpia.c                                Stephan Hilb
   crystalhd.c                           Philip Langdale
   cscd.c                                Reimar Doeffinger
   cuvid.c                               Timo Rothenpieler
-  dca.c                                 Kostya Shishkov, Benjamin Larsson
+  dca.c                                 Kostya Shishkov
   dirac*                                Rostislav Pehlivanov
   dnxhd*                                Baptiste Coudurier
   dpcm.c                                Mike Melanson
@@ -178,7 +175,6 @@ Codecs:
   ffv1*                                 Michael Niedermayer
   ffwavesynth.c                         Nicolas George
   flac*                                 Justin Ruggles
-  flashsv*                              Benjamin Larsson
   flicvideo.c                           Mike Melanson
   g722.c                                Martin Storsjo
   g726.c                                Roman Shaposhnik
@@ -189,12 +185,10 @@ Codecs:
   hap*                                  Tom Butterworth
   huffyuv*                              Michael Niedermayer, Christophe Gisquet
   idcinvideo.c                          Mike Melanson
-  imc*                                  Benjamin Larsson
   indeo2*                               Kostya Shishkov
   indeo5*                               Kostya Shishkov
   interplayvideo.c                      Mike Melanson
   ivi*                                  Kostya Shishkov
-  jacosub*                              Clément Bœsch
   jni*, ffjni*                          Matthieu Bouron
   jpeg2000*                             Nicolas Bertrand
   jpeg_ls.c                             Kostya Shishkov
@@ -230,7 +224,6 @@ Codecs:
   msmpeg4.c, msmpeg4data.h              Michael Niedermayer
   msrle.c                               Mike Melanson
   msvideo1.c                            Mike Melanson
-  nellymoserdec.c                       Benjamin Larsson
   nuv.c                                 Reimar Doeffinger
   nvenc*                                Timo Rothenpieler
   paf.*                                 Paul B Mahol
@@ -238,7 +231,7 @@ Codecs:
   pgssubdec.c                           Reimar Doeffinger
   ptx.c                                 Ivo van Poorten
   qcelp*                                Reynaldo H. Verdejo Pinochet
-  qdm2.c, qdm2data.h                    Roberto Togni, Benjamin Larsson
+  qdm2.c, qdm2data.h                    Roberto Togni
   qdrw.c                                Kostya Shishkov
   qpeg.c                                Kostya Shishkov
   qsv*                                  Ivan Uskov
@@ -285,7 +278,7 @@ Codecs:
   vp5                                   Aurelien Jacobs
   vp6                                   Aurelien Jacobs
   vp8                                   David Conrad, Jason Garrett-Glaser, Ronald Bultje
-  vp9                                   Ronald Bultje, Clément Bœsch
+  vp9                                   Ronald Bultje
   vqavideo.c                            Mike Melanson
   wavpack.c                             Kostya Shishkov
   wmaprodec.c                           Sascha Sommer
@@ -401,6 +394,7 @@ Generic parts:
     libavformat/avformat.h              Michael Niedermayer
   Utility Code:
     libavformat/utils.c                 Michael Niedermayer
+  Text Subtitles                        Clément Bœsch
 
 
 Muxers/Demuxers:
@@ -445,7 +439,6 @@ Muxers/Demuxers:
   ipmovie.c                             Mike Melanson
   ircam*                                Paul B Mahol
   iss.c                                 Stefan Gehrer
-  jacosub*                              Clément Bœsch
   jvdec.c                               Peter Ross
   libmodplug.c                          Clément Bœsch
   libnut.c                              Oded Shimon

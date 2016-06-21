@@ -407,7 +407,6 @@ typedef struct H264SliceContext {
     H264Ref ref_list[2][48];        /**< 0..15: frame refs, 16..47: mbaff field refs.
                                          *   Reordered version of default_ref_list
                                          *   according to picture reordering in slice header */
-    int ref2frm[MAX_SLICES][2][64];     ///< reference to frame number lists, used in the loop filter, the first 2 are for -2,-1
 
     const uint8_t *intra_pcm_ptr;
     int16_t *dc_val_base;
@@ -450,10 +449,6 @@ typedef struct H264SliceContext {
     CABACContext cabac;
     uint8_t cabac_state[1024];
     int cabac_init_idc;
-
-    // rbsp buffer used for this slice
-    uint8_t *rbsp_buffer;
-    unsigned int rbsp_buffer_size;
 } H264SliceContext;
 
 /**
@@ -494,11 +489,15 @@ typedef struct H264Context {
 
     int droppable;
     int coded_picture_number;
-    int low_delay;
 
     int context_initialized;
     int flags;
     int workaround_bugs;
+    /* Set when slice threading is used and at least one slice uses deblocking
+     * mode 1 (i.e. across slice boundaries). Then we disable the loop filter
+     * during normal MB decoding and execute it serially at the end.
+     */
+    int postpone_filter;
 
     int8_t(*intra4x4_pred_mode);
     H264PredContext hpc;
@@ -632,8 +631,6 @@ typedef struct H264Context {
      */
     int single_decode_warning;
 
-    enum AVPictureType pict_type;
-
     /** @} */
 
     /**
@@ -692,14 +689,16 @@ typedef struct H264Context {
     AVBufferPool *mb_type_pool;
     AVBufferPool *motion_val_pool;
     AVBufferPool *ref_index_pool;
-
-    /* Motion Estimation */
-    qpel_mc_func (*qpel_put)[16];
-    qpel_mc_func (*qpel_avg)[16];
-
+    int ref2frm[MAX_SLICES][2][64];     ///< reference to frame number lists, used in the loop filter, the first 2 are for -2,-1
 } H264Context;
 
 extern const uint16_t ff_h264_mb_sizes[4];
+
+/**
+ * Uninit H264 param sets structure.
+ */
+
+void ff_h264_ps_uninit(H264ParamSets *ps);
 
 /**
  * Decode SPS
@@ -712,12 +711,6 @@ int ff_h264_decode_seq_parameter_set(GetBitContext *gb, AVCodecContext *avctx,
  */
 int ff_h264_decode_picture_parameter_set(GetBitContext *gb, AVCodecContext *avctx,
                                          H264ParamSets *ps, int bit_length);
-
-/**
- * Free any data that may have been allocated in the H264 context
- * like SPS, PPS etc.
- */
-void ff_h264_free_context(H264Context *h);
 
 /**
  * Reconstruct bitstream slice_type.

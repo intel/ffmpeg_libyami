@@ -357,6 +357,38 @@ static int h264_init_context(AVCodecContext *avctx, H264Context *h)
     return 0;
 }
 
+static av_cold int h264_decode_end(AVCodecContext *avctx)
+{
+    H264Context *h = avctx->priv_data;
+    int i;
+
+    ff_h264_remove_all_refs(h);
+    ff_h264_free_tables(h);
+
+    for (i = 0; i < H264_MAX_PICTURE_COUNT; i++) {
+        ff_h264_unref_picture(h, &h->DPB[i]);
+        av_frame_free(&h->DPB[i].f);
+    }
+    memset(h->delayed_pic, 0, sizeof(h->delayed_pic));
+
+    h->cur_pic_ptr = NULL;
+
+    av_freep(&h->slice_ctx);
+    h->nb_slice_ctx = 0;
+
+    ff_h264_sei_uninit(&h->sei);
+    ff_h264_ps_uninit(&h->ps);
+
+    ff_h2645_packet_uninit(&h->pkt);
+
+    ff_h264_unref_picture(h, &h->cur_pic);
+    av_frame_free(&h->cur_pic.f);
+    ff_h264_unref_picture(h, &h->last_pic_for_ec);
+    av_frame_free(&h->last_pic_for_ec.f);
+
+    return 0;
+}
+
 static AVOnce h264_vlc_init = AV_ONCE_INIT;
 
 av_cold int ff_h264_decode_init(AVCodecContext *avctx)
@@ -367,10 +399,6 @@ av_cold int ff_h264_decode_init(AVCodecContext *avctx)
     ret = h264_init_context(avctx, h);
     if (ret < 0)
         return ret;
-
-    /* set defaults */
-    if (!avctx->has_b_frames)
-        h->low_delay = 1;
 
     ret = ff_thread_once(&h264_vlc_init, ff_h264_decode_init_vlc);
     if (ret != 0) {
@@ -401,7 +429,6 @@ av_cold int ff_h264_decode_init(AVCodecContext *avctx)
     if (h->ps.sps && h->ps.sps->bitstream_restriction_flag &&
         h->avctx->has_b_frames < h->ps.sps->num_reorder_frames) {
         h->avctx->has_b_frames = h->ps.sps->num_reorder_frames;
-        h->low_delay           = 0;
     }
 
     avctx->internal->allocate_progress = 1;
@@ -455,8 +482,6 @@ static void decode_postinit(H264Context *h, int setup_finished)
     H264Picture *out = h->cur_pic_ptr;
     H264Picture *cur = h->cur_pic_ptr;
     int i, pics, out_of_order, out_idx;
-
-    h->cur_pic_ptr->f->pict_type = h->pict_type;
 
     if (h->next_output_pic)
         return;
@@ -631,7 +656,6 @@ static void decode_postinit(H264Context *h, int setup_finished)
         h->avctx->strict_std_compliance >= FF_COMPLIANCE_STRICT) {
         h->avctx->has_b_frames = FFMAX(h->avctx->has_b_frames, sps->num_reorder_frames);
     }
-    h->low_delay = !h->avctx->has_b_frames;
 
     for (i = 0; 1; i++) {
         if(i == MAX_DELAYED_PIC_COUNT || cur->poc < h->last_pocs[i]){
@@ -655,7 +679,6 @@ static void decode_postinit(H264Context *h, int setup_finished)
     } else if(h->avctx->has_b_frames < out_of_order && !sps->bitstream_restriction_flag){
         av_log(h->avctx, AV_LOG_INFO, "Increasing reorder buffer to %d\n", out_of_order);
         h->avctx->has_b_frames = out_of_order;
-        h->low_delay = 0;
     }
 
     pics = 0;
@@ -1073,9 +1096,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
                     goto end;
                 context_count = 0;
             }
-            /* Slice could not be decoded in parallel mode, restart. Note
-             * that rbsp_buffer is not transferred, but since we no longer
-             * run in parallel mode this should not be an issue. */
+            /* Slice could not be decoded in parallel mode, restart. */
             sl               = &h->slice_ctx[0];
             goto again;
         }
@@ -1353,7 +1374,7 @@ static int h264_decode_frame(AVCodecContext *avctx, void *data,
                                     h->next_output_pic->mb_type,
                                     h->next_output_pic->qscale_table,
                                     h->next_output_pic->motion_val,
-                                    &h->low_delay,
+                                    NULL,
                                     h->mb_width, h->mb_height, h->mb_stride, 1);
             }
         }
@@ -1364,54 +1385,6 @@ static int h264_decode_frame(AVCodecContext *avctx, void *data,
     ff_h264_unref_picture(h, &h->last_pic_for_ec);
 
     return get_consumed_bytes(buf_index, buf_size);
-}
-
-av_cold void ff_h264_free_context(H264Context *h)
-{
-    int i;
-
-    ff_h264_free_tables(h);
-
-    for (i = 0; i < H264_MAX_PICTURE_COUNT; i++) {
-        ff_h264_unref_picture(h, &h->DPB[i]);
-        av_frame_free(&h->DPB[i].f);
-    }
-    memset(h->delayed_pic, 0, sizeof(h->delayed_pic));
-
-    h->cur_pic_ptr = NULL;
-
-    for (i = 0; i < h->nb_slice_ctx; i++)
-        av_freep(&h->slice_ctx[i].rbsp_buffer);
-    av_freep(&h->slice_ctx);
-    h->nb_slice_ctx = 0;
-
-    ff_h264_sei_uninit(&h->sei);
-
-    for (i = 0; i < MAX_SPS_COUNT; i++)
-        av_buffer_unref(&h->ps.sps_list[i]);
-
-    for (i = 0; i < MAX_PPS_COUNT; i++)
-        av_buffer_unref(&h->ps.pps_list[i]);
-
-    av_buffer_unref(&h->ps.sps_ref);
-    av_buffer_unref(&h->ps.pps_ref);
-
-    ff_h2645_packet_uninit(&h->pkt);
-}
-
-static av_cold int h264_decode_end(AVCodecContext *avctx)
-{
-    H264Context *h = avctx->priv_data;
-
-    ff_h264_remove_all_refs(h);
-    ff_h264_free_context(h);
-
-    ff_h264_unref_picture(h, &h->cur_pic);
-    av_frame_free(&h->cur_pic.f);
-    ff_h264_unref_picture(h, &h->last_pic_for_ec);
-    av_frame_free(&h->last_pic_for_ec.f);
-
-    return 0;
 }
 
 #define OFFSET(x) offsetof(H264Context, x)
