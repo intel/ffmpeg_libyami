@@ -152,8 +152,8 @@ int ff_vorbis_comment(AVFormatContext *as, AVDictionary **m,
              * recommended way of embedding cover art within VorbisComments."
              */
             if (!strcmp(tt, "METADATA_BLOCK_PICTURE") && parse_picture) {
-                int ret;
-                char *pict = av_malloc(vl);
+                int ret, len = AV_BASE64_DECODE_SIZE(vl);
+                char *pict = av_malloc(len);
 
                 if (!pict) {
                     av_log(as, AV_LOG_WARNING, "out-of-memory error. Skipping cover art block.\n");
@@ -161,10 +161,11 @@ int ff_vorbis_comment(AVFormatContext *as, AVDictionary **m,
                     av_freep(&ct);
                     continue;
                 }
-                if ((ret = av_base64_decode(pict, ct, vl)) > 0)
-                    ret = ff_flac_parse_picture(as, pict, ret);
+                ret = av_base64_decode(pict, ct, len);
                 av_freep(&tt);
                 av_freep(&ct);
+                if (ret > 0)
+                    ret = ff_flac_parse_picture(as, pict, ret);
                 av_freep(&pict);
                 if (ret < 0) {
                     av_log(as, AV_LOG_WARNING, "Failed to parse cover art block.\n");
