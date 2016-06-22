@@ -21,7 +21,7 @@
 
 /**
  * @file
- * H.264 / AVC / MPEG4 part10 codec.
+ * H.264 / AVC / MPEG-4 part10 codec.
  * @author Michael Niedermayer <michaelni@gmx.at>
  */
 
@@ -128,7 +128,7 @@ static int alloc_scratch_buffers(H264SliceContext *sl, int linesize)
 
     av_fast_malloc(&sl->bipred_scratchpad, &sl->bipred_scratchpad_allocated, 16 * 6 * alloc_size);
     // edge emu needs blocksize + filter length - 1
-    // (= 21x21 for  h264)
+    // (= 21x21 for  H.264)
     av_fast_malloc(&sl->edge_emu_buffer, &sl->edge_emu_buffer_allocated, alloc_size * 2 * 21);
 
     av_fast_mallocz(&sl->top_borders[0], &sl->top_borders_allocated[0],
@@ -917,9 +917,6 @@ static int init_dimensions(H264Context *h)
 static int h264_slice_header_init(H264Context *h)
 {
     const SPS *sps = h->ps.sps;
-    int nb_slices = (HAVE_THREADS &&
-                     h->avctx->active_thread_type & FF_THREAD_SLICE) ?
-                    h->avctx->thread_count : 1;
     int i, ret;
 
     ff_set_sar(h->avctx, sps->sar);
@@ -981,19 +978,6 @@ static int h264_slice_header_init(H264Context *h)
                       sps->chroma_format_idc);
     ff_videodsp_init(&h->vdsp, sps->bit_depth_luma);
 
-    if (nb_slices > H264_MAX_THREADS || (nb_slices > h->mb_height && h->mb_height)) {
-        int max_slices;
-        if (h->mb_height)
-            max_slices = FFMIN(H264_MAX_THREADS, h->mb_height);
-        else
-            max_slices = H264_MAX_THREADS;
-        av_log(h->avctx, AV_LOG_WARNING, "too many threads/slices %d,"
-               " reducing to %d\n", nb_slices, max_slices);
-        nb_slices = max_slices;
-    }
-    h->slice_context_count = nb_slices;
-    h->max_contexts = FFMIN(h->max_contexts, nb_slices);
-
     if (!HAVE_THREADS || !(h->avctx->active_thread_type & FF_THREAD_SLICE)) {
         ret = ff_h264_slice_context_init(h, &h->slice_ctx[0]);
         if (ret < 0) {
@@ -1001,7 +985,7 @@ static int h264_slice_header_init(H264Context *h)
             goto fail;
         }
     } else {
-        for (i = 0; i < h->slice_context_count; i++) {
+        for (i = 0; i < h->nb_slice_ctx; i++) {
             H264SliceContext *sl = &h->slice_ctx[i];
 
             sl->h264               = h;
@@ -1038,7 +1022,7 @@ static enum AVPixelFormat non_j_pixfmt(enum AVPixelFormat a)
 
 /**
  * Decode a slice header.
- * This will (re)intialize the decoder and call h264_frame_start() as needed.
+ * This will (re)initialize the decoder and call h264_frame_start() as needed.
  *
  * @param h h264context
  *
@@ -1858,7 +1842,7 @@ static av_always_inline void fill_filter_caches_inter(const H264Context *h,
         if (USES_LIST(top_type, list)) {
             const int b_xy  = h->mb2b_xy[top_xy] + 3 * b_stride;
             const int b8_xy = 4 * top_xy + 2;
-            int *ref2frm = h->ref2frm[h->slice_table[top_xy] & (MAX_SLICES - 1)][list] + (MB_MBAFF(sl) ? 20 : 2);
+            const int *ref2frm = h->ref2frm[h->slice_table[top_xy] & (MAX_SLICES - 1)][list] + (MB_MBAFF(sl) ? 20 : 2);
             AV_COPY128(mv_dst - 1 * 8, h->cur_pic.motion_val[list][b_xy + 0]);
             ref_cache[0 - 1 * 8] =
             ref_cache[1 - 1 * 8] = ref2frm[h->cur_pic.ref_index[list][b8_xy + 0]];
@@ -1873,7 +1857,7 @@ static av_always_inline void fill_filter_caches_inter(const H264Context *h,
             if (USES_LIST(left_type[LTOP], list)) {
                 const int b_xy  = h->mb2b_xy[left_xy[LTOP]] + 3;
                 const int b8_xy = 4 * left_xy[LTOP] + 1;
-                int *ref2frm = h->ref2frm[h->slice_table[left_xy[LTOP]] & (MAX_SLICES - 1)][list] + (MB_MBAFF(sl) ? 20 : 2);
+                const int *ref2frm = h->ref2frm[h->slice_table[left_xy[LTOP]] & (MAX_SLICES - 1)][list] + (MB_MBAFF(sl) ? 20 : 2);
                 AV_COPY32(mv_dst - 1 +  0, h->cur_pic.motion_val[list][b_xy + b_stride * 0]);
                 AV_COPY32(mv_dst - 1 +  8, h->cur_pic.motion_val[list][b_xy + b_stride * 1]);
                 AV_COPY32(mv_dst - 1 + 16, h->cur_pic.motion_val[list][b_xy + b_stride * 2]);
@@ -1906,7 +1890,7 @@ static av_always_inline void fill_filter_caches_inter(const H264Context *h,
 
     {
         int8_t *ref = &h->cur_pic.ref_index[list][4 * mb_xy];
-        int *ref2frm = h->ref2frm[sl->slice_num & (MAX_SLICES - 1)][list] + (MB_MBAFF(sl) ? 20 : 2);
+        const int *ref2frm = h->ref2frm[sl->slice_num & (MAX_SLICES - 1)][list] + (MB_MBAFF(sl) ? 20 : 2);
         uint32_t ref01 = (pack16to32(ref2frm[ref[0]], ref2frm[ref[1]]) & 0x00FF00FF) * 0x0101;
         uint32_t ref23 = (pack16to32(ref2frm[ref[2]], ref2frm[ref[3]]) & 0x00FF00FF) * 0x0101;
         AV_WN32A(&ref_cache[0 * 8], ref01);
