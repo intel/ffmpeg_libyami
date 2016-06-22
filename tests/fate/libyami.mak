@@ -570,18 +570,18 @@ FATE_SAMPLES_AVCONV-$(CONFIG_LIBYAMI_VP8_DECODER) += $(FATE_LIBYAMI_VP8-yes)
 fate-libyami-vp8: $(FATE_LIBYAMI_VP8-yes)
 
 
-fate-libyami-h264-enc%: CMD = framemd5 -f rawvideo -s 352x288  -i $(TARGET_PATH)/tests/data/vsynth2.yuv -vcodec libyami_h264 ${OPTS}
+fate-libyami-h264-enc%: CMD = framemd5 -f rawvideo -s 352x288 -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth2.yuv -vcodec libyami_h264 ${OPTS}
 FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420
 fate-libyami-h264-enc_yuv420: OPTS =
 
 FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420_vbr
-fate-libyami-h264-enc_yuv420_vbr: OPTS = -rcmode VBR -b 5000k
+fate-libyami-h264-enc_yuv420_vbr: OPTS = -maxrate 550k -b:v 500k
 
 FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420_cbr
-fate-libyami-h264-enc_yuv420_cbr: OPTS = -rcmode CBR -b 5000k
+fate-libyami-h264-enc_yuv420_cbr: OPTS = -maxrate 500k -b:v 500k
 
 FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420_qp
-fate-libyami-h264-enc_yuv420_gop: OPTS = -qp 40
+fate-libyami-h264-enc_yuv420_qp: OPTS = -qp 40
 
 FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420_gop
 fate-libyami-h264-enc_yuv420_gop: OPTS = -g 30 -bf 4
@@ -602,7 +602,7 @@ FATE_AVCONV-$(call ALLYES,  LIBYAMI_H264_DECODER LIBYAMI_H264_ENCODER MOV_DEMUXE
 fate-libyami-h264-tran: $(FATE_LIBYAMI_H264_TRAN)
 
 
-fate-libyami-vp8-enc%: CMD = framemd5 -f rawvideo -s 352x288  -i $(TARGET_PATH)/tests/data/vsynth2.yuv -vcodec libyami_vp8 ${OPTS}
+fate-libyami-vp8-enc%: CMD = framemd5 -f rawvideo -s 352x288  -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth2.yuv -vcodec libyami_vp8 ${OPTS}
 FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420
 fate-libyami-vp8-enc_yuv420: OPTS =
 
