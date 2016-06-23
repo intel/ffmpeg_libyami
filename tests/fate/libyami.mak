@@ -606,6 +606,18 @@ fate-libyami-vp8-enc%: CMD = framecrc -f rawvideo -s 352x288  -pix_fmt yuv420p -
 FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420
 fate-libyami-vp8-enc_yuv420: OPTS =
 
+FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420_vbr
+fate-libyami-vp8-enc_yuv420_vbr: OPTS = -maxrate 550k -b:v 500k
+
+FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420_cbr
+fate-libyami-vp8-enc_yuv420_cbr: OPTS = -maxrate 500k -b:v 500k
+
+FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420_qp
+fate-libyami-vp8-enc_yuv420_qp: OPTS = -qp 40
+
+FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420_gop
+fate-libyami-vp8-enc_yuv420_gop: OPTS = -g 30 -bf 4
+
 $(FATE_LIBYAMI_VP8_ENC): $(VREF)
 
 FATE_AVCONV-$(call ENCMUX, LIBYAMI_VP8, AVI) += $(FATE_LIBYAMI_VP8_ENC)
