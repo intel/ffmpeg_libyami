@@ -26,3 +26,6 @@ compat/avisynth/windowsPorts/basicDataTypeConversions.h
 compat/avisynth/windowsPorts/windows2linux.h
 compat/float/float.h
 compat/float/limits.h
+libavcodec/libyami.h
+libavcodec/libyami_dec.h
+libavcodec/libyami_enc.h
