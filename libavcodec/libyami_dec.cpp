@@ -280,7 +280,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     if (!s || !s->decoder)
         return -1;
     VideoDecodeBuffer *in_buffer = NULL;
-    Decode_Status status = RENDER_NO_AVAILABLE_FRAME;
+    Decode_Status status = DECODE_FAIL;
     YamiImage *yami_image =  NULL;
     int ret = 0;
     AVFrame *frame = (AVFrame *)data;
@@ -358,14 +358,14 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         } while (!avpkt->data && !yami_image->output_frame && s->in_queue->size() > 0);
         if (yami_image->output_frame) {
             yami_image->va_display = ff_vaapi_create_display();
-            status = RENDER_SUCCESS;
+            status = DECODE_SUCCESS;
             break;
         }
         *got_frame = 0;
         av_free(yami_image);
         return avpkt->size;
     } while (s->decode_status == DECODE_THREAD_RUNING);
-    if (status != RENDER_SUCCESS) {
+    if (status != DECODE_SUCCESS) {
         av_log(avctx, AV_LOG_VERBOSE, "after processed EOS, return\n");
         return avpkt->size;
     }
