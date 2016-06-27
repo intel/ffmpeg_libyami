@@ -215,6 +215,7 @@ static int mov_read_covr(MOVContext *c, AVIOContext *pb, int type, int len)
     return 0;
 }
 
+// 3GPP TS 26.244
 static int mov_metadata_loci(MOVContext *c, AVIOContext *pb, unsigned len)
 {
     char language[4] = { 0 };
@@ -242,7 +243,8 @@ static int mov_metadata_loci(MOVContext *c, AVIOContext *pb, unsigned len)
     len -= 1;
 
     if (len < 12) {
-        av_log(c->fc, AV_LOG_ERROR, "no space for coordinates left (%d)\n", len);
+        av_log(c->fc, AV_LOG_ERROR,
+               "loci too short (%u bytes left, need at least %d)\n", len, 12);
         return AVERROR_INVALIDDATA;
     }
     longitude = ((int32_t) avio_rb32(pb)) / (float) (1 << 16);

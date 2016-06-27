@@ -135,11 +135,12 @@ struct AVStreamInternal {
     int reorder;
 
     /**
-     * bitstream filter to run on stream
+     * bitstream filters to run on stream
      * - encoding: Set by muxer using ff_stream_add_bitstream_filter
      * - decoding: unused
      */
-    AVBitStreamFilterContext *bsfc;
+    AVBSFContext **bsfcs;
+    int nb_bsfcs;
 
     /**
      * Whether or not check_bitstream should still be run on each packet
@@ -625,9 +626,11 @@ int ff_bprint_to_codecpar_extradata(AVCodecParameters *par, struct AVBPrint *buf
  * The packet is not removed from the interleaving queue, but only
  * a pointer to it is returned.
  *
+ * @param ts_offset the ts difference between packet in the que and the muxer.
+ *
  * @return a pointer to the next packet, or NULL if no packet is queued
  *         for this stream.
  */
-const AVPacket *ff_interleaved_peek(AVFormatContext *s, int stream);
+const AVPacket *ff_interleaved_peek(AVFormatContext *s, int stream, int64_t *ts_offset);
 
 #endif /* AVFORMAT_INTERNAL_H */
