@@ -834,7 +834,7 @@ static int omx_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                 }
             } else {
                 // End of frame, and the caller provided a preallocated frame
-                if ((ret = ff_alloc_packet(pkt, s->output_buf_size + buffer->nFilledLen)) < 0) {
+                if ((ret = ff_alloc_packet2(avctx, pkt, s->output_buf_size + buffer->nFilledLen, 0)) < 0) {
                     av_log(avctx, AV_LOG_ERROR, "Error getting output packet of size %d.\n",
                            (int)(s->output_buf_size + buffer->nFilledLen));
                     goto end;
@@ -845,7 +845,6 @@ static int omx_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
                 s->output_buf_size = 0;
             }
             if (buffer->nFlags & OMX_BUFFERFLAG_ENDOFFRAME) {
-                ret = pkt->size;
                 pkt->pts = av_rescale_q(from_omx_ticks(buffer->nTimeStamp), AV_TIME_BASE_Q, avctx->time_base);
                 // We don't currently enable B-frames for the encoders, so set
                 // pkt->dts = pkt->pts. (The calling code behaves worse if the encoder

@@ -215,6 +215,7 @@ static int mov_read_covr(MOVContext *c, AVIOContext *pb, int type, int len)
     return 0;
 }
 
+// 3GPP TS 26.244
 static int mov_metadata_loci(MOVContext *c, AVIOContext *pb, unsigned len)
 {
     char language[4] = { 0 };
@@ -242,7 +243,8 @@ static int mov_metadata_loci(MOVContext *c, AVIOContext *pb, unsigned len)
     len -= 1;
 
     if (len < 12) {
-        av_log(c->fc, AV_LOG_ERROR, "no space for coordinates left (%d)\n", len);
+        av_log(c->fc, AV_LOG_ERROR,
+               "loci too short (%u bytes left, need at least %d)\n", len, 12);
         return AVERROR_INVALIDDATA;
     }
     longitude = ((int32_t) avio_rb32(pb)) / (float) (1 << 16);
@@ -2841,7 +2843,12 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
                 sample_size = sc->stsz_sample_size > 0 ? sc->stsz_sample_size : sc->sample_sizes[current_sample];
                 if (sc->pseudo_stream_id == -1 ||
                    sc->stsc_data[stsc_index].id - 1 == sc->pseudo_stream_id) {
-                    AVIndexEntry *e = &st->index_entries[st->nb_index_entries++];
+                    AVIndexEntry *e;
+                    if (sample_size > 0x3FFFFFFF) {
+                        av_log(mov->fc, AV_LOG_ERROR, "Sample size %u is too large\n", sample_size);
+                        return;
+                    }
+                    e = &st->index_entries[st->nb_index_entries++];
                     e->pos = current_offset;
                     e->timestamp = current_dts;
                     e->size = sample_size;
@@ -2964,6 +2971,10 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
 
                 if (st->nb_index_entries >= total) {
                     av_log(mov->fc, AV_LOG_ERROR, "wrong chunk count %d\n", total);
+                    return;
+                }
+                if (size > 0x3FFFFFFF) {
+                    av_log(mov->fc, AV_LOG_ERROR, "Sample size %u is too large\n", size);
                     return;
                 }
                 e = &st->index_entries[st->nb_index_entries++];
@@ -4674,6 +4685,31 @@ static int parse_timecode_in_framenum_format(AVFormatContext *s, AVStream *st,
     return 0;
 }
 
+static int mov_read_rtmd_track(AVFormatContext *s, AVStream *st)
+{
+    MOVStreamContext *sc = st->priv_data;
+    char buf[AV_TIMECODE_STR_SIZE];
+    int64_t cur_pos = avio_tell(sc->pb);
+    int hh, mm, ss, ff, drop;
+
+    if (!st->nb_index_entries)
+        return -1;
+
+    avio_seek(sc->pb, st->index_entries->pos, SEEK_SET);
+    avio_skip(s->pb, 13);
+    hh = avio_r8(s->pb);
+    mm = avio_r8(s->pb);
+    ss = avio_r8(s->pb);
+    drop = avio_r8(s->pb);
+    ff = avio_r8(s->pb);
+    snprintf(buf, AV_TIMECODE_STR_SIZE, "%02d:%02d:%02d%c%02d",
+             hh, mm, ss, drop ? ';' : ':', ff);
+    av_dict_set(&st->metadata, "timecode", buf, 0);
+
+    avio_seek(sc->pb, cur_pos, SEEK_SET);
+    return 0;
+}
+
 static int mov_read_timecode_track(AVFormatContext *s, AVStream *st)
 {
     MOVStreamContext *sc = st->priv_data;
@@ -4952,8 +4988,11 @@ static int mov_read_header(AVFormatContext *s)
         if (mov->chapter_track > 0 && !mov->ignore_chapters)
             mov_read_chapters(s);
         for (i = 0; i < s->nb_streams; i++)
-            if (s->streams[i]->codecpar->codec_tag == AV_RL32("tmcd"))
+            if (s->streams[i]->codecpar->codec_tag == AV_RL32("tmcd")) {
                 mov_read_timecode_track(s, s->streams[i]);
+            } else if (s->streams[i]->codecpar->codec_tag == AV_RL32("rtmd")) {
+                mov_read_rtmd_track(s, s->streams[i]);
+            }
     }
 
     /* copy timecode metadata from tmcd tracks to the related video streams */
