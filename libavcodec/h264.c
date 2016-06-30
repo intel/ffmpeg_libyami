@@ -308,7 +308,6 @@ static int h264_init_context(AVCodecContext *avctx, H264Context *h)
     h->backup_width          = -1;
     h->backup_height         = -1;
     h->backup_pix_fmt        = AV_PIX_FMT_NONE;
-    h->current_sps_id        = -1;
     h->cur_chroma_format_idc = -1;
 
     h->picture_structure     = PICT_FRAME;
@@ -951,9 +950,6 @@ again:
             h->has_recovery_point = 1;
         case NAL_SLICE:
             sl->gb = nal->gb;
-            if (   nals_needed >= i
-                || (!(avctx->active_thread_type & FF_THREAD_FRAME) && !context_count))
-                h->au_pps_id = -1;
 
             if ((err = ff_h264_decode_slice_header(h, sl)))
                 break;

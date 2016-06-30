@@ -31,9 +31,9 @@
 #include "libavutil/buffer.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/thread.h"
+
 #include "cabac.h"
 #include "error_resilience.h"
-#include "get_bits.h"
 #include "h264_parse.h"
 #include "h264_sei.h"
 #include "h2645_parse.h"
@@ -370,6 +370,7 @@ typedef struct H264SliceContext {
     int mb_xy;
     int resync_mb_x;
     int resync_mb_y;
+    unsigned int first_mb_addr;
     // index of the first MB of the next slice
     int next_slice_idx;
     int mb_skip_run;
@@ -406,6 +407,11 @@ typedef struct H264SliceContext {
     H264Ref ref_list[2][48];        /**< 0..15: frame refs, 16..47: mbaff field refs.
                                          *   Reordered version of default_ref_list
                                          *   according to picture reordering in slice header */
+    struct {
+        uint8_t op;
+        uint32_t val;
+    } ref_modifications[2][32];
+    int nb_ref_modifications[2];
 
     const uint8_t *intra_pcm_ptr;
     int16_t *dc_val_base;
@@ -460,7 +466,6 @@ typedef struct H264Context {
     H264DSPContext h264dsp;
     H264ChromaContext h264chroma;
     H264QpelContext h264qpel;
-    GetBitContext gb;
 
     H264Picture DPB[H264_MAX_PICTURE_COUNT];
     H264Picture *cur_pic_ptr;
@@ -515,11 +520,6 @@ typedef struct H264Context {
     uint32_t *mb2b_xy;  // FIXME are these 4 a good idea?
     uint32_t *mb2br_xy;
     int b_stride;       // FIXME use s->b4_stride
-
-
-    unsigned current_sps_id; ///< id of the current SPS
-
-    int au_pps_id; ///< pps_id of current access unit
 
     uint16_t *slice_table;      ///< slice_table_base + 2*mb_stride + 1
 
@@ -599,7 +599,7 @@ typedef struct H264Context {
      * memory management control operations buffer.
      */
     MMCO mmco[MAX_MMCO_COUNT];
-    int mmco_index;
+    int  nb_mmco;
     int mmco_reset;
 
     int long_ref_count;     ///< number of actual long term references
@@ -720,8 +720,8 @@ int ff_h264_get_slice_type(const H264SliceContext *sl);
  */
 int ff_h264_alloc_tables(H264Context *h);
 
-int ff_h264_decode_ref_pic_list_reordering(H264Context *h, H264SliceContext *sl);
-void ff_h264_fill_mbaff_ref_list(H264SliceContext *sl);
+int ff_h264_decode_ref_pic_list_reordering(const H264Context *h, H264SliceContext *sl);
+int ff_h264_build_ref_list(H264Context *h, H264SliceContext *sl);
 void ff_h264_remove_all_refs(H264Context *h);
 
 /**

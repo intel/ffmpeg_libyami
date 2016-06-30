@@ -31,7 +31,11 @@ extern "C" {
 #include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
 #include "libavutil/time.h"
+#include "libavutil/mem.h"
+#include "libavutil/pixdesc.h"
 #include "internal.h"
+#include "libavutil/internal.h"
+#include "bytestream.h"
 }
 #include "VideoDecoderHost.h"
 #include "libyami.h"
