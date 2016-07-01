@@ -377,7 +377,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
             s->decode_status = DECODE_THREAD_GOT_EOS; // call releaseLock for seek
         break;
     case DECODE_THREAD_GOT_EOS:
-        if (s->out_queue->empty())
+        if (s->out_queue->empty() && s->in_queue->empty())
             s->decode_status = DECODE_THREAD_NOT_INIT;
         break;
     default:
@@ -405,7 +405,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
                     pthread_cond_wait(&s->out_cond, &s->out_mutex);
             }
             pthread_mutex_unlock(&s->out_mutex);
-        } while (!avpkt->data && !yami_image && !s->out_queue->empty());
+        } while (!avpkt->data && !yami_image && (!s->out_queue->empty() || !s->in_queue->empty()));
         if (yami_image) {
             yami_image->va_display = ff_vaapi_create_display();
             status = DECODE_SUCCESS;
