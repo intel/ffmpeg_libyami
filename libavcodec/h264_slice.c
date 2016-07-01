@@ -356,7 +356,7 @@ int ff_h264_update_thread_context(AVCodecContext *dst,
         h->ps.sps_ref = av_buffer_ref(h1->ps.sps_ref);
         if (!h->ps.sps_ref)
             return AVERROR(ENOMEM);
-        h->ps.sps = (SPS*)h->ps.sps_ref->data;
+        h->ps.sps = (const SPS*)h->ps.sps_ref->data;
     }
 
     if (need_reinit || !inited) {
@@ -431,6 +431,7 @@ int ff_h264_update_thread_context(AVCodecContext *dst,
     memcpy(h->mmco, h1->mmco, sizeof(h->mmco));
     h->nb_mmco         = h1->nb_mmco;
     h->mmco_reset      = h1->mmco_reset;
+    h->explicit_ref_marking = h1->explicit_ref_marking;
     h->long_ref_count  = h1->long_ref_count;
     h->short_ref_count = h1->short_ref_count;
 
@@ -445,7 +446,7 @@ int ff_h264_update_thread_context(AVCodecContext *dst,
         return 0;
 
     if (!h->droppable) {
-        err = ff_h264_execute_ref_pic_marking(h, h->mmco, h->nb_mmco);
+        err = ff_h264_execute_ref_pic_marking(h);
         h->poc.prev_poc_msb = h->poc.poc_msb;
         h->poc.prev_poc_lsb = h->poc.poc_lsb;
     }
@@ -873,7 +874,7 @@ static enum AVPixelFormat get_pixel_format(H264Context *h, int force_callback)
 /* export coded and cropped frame dimensions to AVCodecContext */
 static int init_dimensions(H264Context *h)
 {
-    SPS *sps = h->ps.sps;
+    const SPS *sps = (const SPS*)h->ps.sps;
     int width  = h->width  - (sps->crop_right + sps->crop_left);
     int height = h->height - (sps->crop_top   + sps->crop_bottom);
     av_assert0(sps->crop_right + sps->crop_left < (unsigned)h->width);
@@ -887,23 +888,6 @@ static int init_dimensions(H264Context *h)
     ) {
         width  = h->avctx->width;
         height = h->avctx->height;
-    }
-
-    if (width <= 0 || height <= 0) {
-        av_log(h->avctx, AV_LOG_ERROR, "Invalid cropped dimensions: %dx%d.\n",
-               width, height);
-        if (h->avctx->err_recognition & AV_EF_EXPLODE)
-            return AVERROR_INVALIDDATA;
-
-        av_log(h->avctx, AV_LOG_WARNING, "Ignoring cropping information.\n");
-        sps->crop_bottom =
-        sps->crop_top    =
-        sps->crop_right  =
-        sps->crop_left   =
-        sps->crop        = 0;
-
-        width  = h->width;
-        height = h->height;
     }
 
     h->avctx->coded_width  = h->width;
@@ -1438,10 +1422,9 @@ static int h264_slice_header_parse(H264Context *h, H264SliceContext *sl)
             h->cur_pic_ptr->invalid_gap = !sps->gaps_in_frame_num_allowed_flag;
             ff_thread_report_progress(&h->cur_pic_ptr->tf, INT_MAX, 0);
             ff_thread_report_progress(&h->cur_pic_ptr->tf, INT_MAX, 1);
-            ret = ff_generate_sliding_window_mmcos(h, 1);
-            if (ret < 0 && (h->avctx->err_recognition & AV_EF_EXPLODE))
-                return ret;
-            ret = ff_h264_execute_ref_pic_marking(h, h->mmco, h->nb_mmco);
+
+            h->explicit_ref_marking = 0;
+            ret = ff_h264_execute_ref_pic_marking(h);
             if (ret < 0 && (h->avctx->err_recognition & AV_EF_EXPLODE))
                 return ret;
             /* Error concealment: If a ref is missing, copy the previous ref
@@ -1592,15 +1575,9 @@ static int h264_slice_header_parse(H264Context *h, H264SliceContext *sl)
         ff_h264_pred_weight_table(&sl->gb, sps, sl->ref_count,
                                   sl->slice_type_nos, &sl->pwt, h->avctx);
 
-    // If frame-mt is enabled, only update mmco tables for the first slice
-    // in a field. Subsequent slices can temporarily clobber h->nb_mmco
-    // or h->mmco, which will cause ref list mix-ups and decoding errors
-    // further down the line. This may break decoding if the first slice is
-    // corrupt, thus we only do this if frame-mt is enabled.
+    sl->explicit_ref_marking = 0;
     if (h->nal_ref_idc) {
-        ret = ff_h264_decode_ref_pic_marking(h, &sl->gb,
-                                             !(h->avctx->active_thread_type & FF_THREAD_FRAME) ||
-                                             h->current_slice == 0);
+        ret = ff_h264_decode_ref_pic_marking(h, sl, &sl->gb);
         if (ret < 0 && (h->avctx->err_recognition & AV_EF_EXPLODE))
             return AVERROR_INVALIDDATA;
     }
@@ -1691,9 +1668,14 @@ int ff_h264_decode_slice_header(H264Context *h, H264SliceContext *sl)
         sl->resync_mb_y = sl->mb_y = sl->mb_y + 1;
     av_assert1(sl->mb_y < h->mb_height);
 
-    if (!h->setup_finished)
+    if (!h->setup_finished) {
         ff_h264_init_poc(h->cur_pic_ptr->field_poc, &h->cur_pic_ptr->poc,
                          h->ps.sps, &h->poc, h->picture_structure, h->nal_ref_idc);
+
+        memcpy(h->mmco, sl->mmco, sl->nb_mmco * sizeof(*h->mmco));
+        h->nb_mmco = sl->nb_mmco;
+        h->explicit_ref_marking = sl->explicit_ref_marking;
+    }
 
     ret = ff_h264_build_ref_list(h, sl);
     if (ret < 0)
