@@ -51,12 +51,14 @@ struct YamiDecContext {
     pthread_cond_t out_cond;   // decode thread condition wait
     DecodeThreadStatus decode_status;
 
+    int dpb_is_full;
     //the pts is no value use this value
     int duration;
     // debug use
     int decode_count;
     int decode_count_yami;
     int render_count;
+    int recycle_count;
 };
 
 #endif /* LIBAVCODEC_LIBYAMI_DEC_H_ */
