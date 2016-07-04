@@ -6046,6 +6046,8 @@ enabled neon_clobber_test &&
                   -Wl,--wrap,avcodec_decode_subtitle2   \
                   -Wl,--wrap,avcodec_encode_audio2      \
                   -Wl,--wrap,avcodec_encode_video2      \
+                  -Wl,--wrap,avcodec_send_packet        \
+                  -Wl,--wrap,avcodec_receive_frame      \
                   -Wl,--wrap,avcodec_encode_subtitle    \
                   -Wl,--wrap,swr_convert                \
                   -Wl,--wrap,avresample_convert ||
@@ -6059,6 +6061,8 @@ enabled xmm_clobber_test &&
                   -Wl,--wrap,avcodec_encode_audio2      \
                   -Wl,--wrap,avcodec_encode_video2      \
                   -Wl,--wrap,avcodec_encode_subtitle    \
+                  -Wl,--wrap,avcodec_send_packet        \
+                  -Wl,--wrap,avcodec_receive_frame      \
                   -Wl,--wrap,swr_convert                \
                   -Wl,--wrap,avresample_convert         \
                   -Wl,--wrap,sws_scale ||
@@ -6222,6 +6226,10 @@ __declspec($_restrict) void* foo(int);
 EOF
     fi
     check_func strtoll || add_cflags -Dstrtoll=_strtoi64
+    # the new SSA optimzer in VS2015 U3 is mis-optimizing some parts of the code
+    # this flag should be re-checked on newer compiler releases and put under a
+    # version check once its fixed
+    check_cflags -d2SSAOptimizer-
 fi
 
 for pfx in "" host_; do

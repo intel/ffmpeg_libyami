@@ -375,6 +375,7 @@ typedef struct H264SliceContext {
     int mb_skip_run;
     int is_complex;
 
+    int picture_structure;
     int mb_field_decoding_flag;
     int mb_mbaff;               ///< mb_aff_frame && mb_field_decoding_flag
 
@@ -837,9 +838,9 @@ static av_always_inline uint16_t pack8to16(unsigned a, unsigned b)
 /**
  * Get the chroma qp.
  */
-static av_always_inline int get_chroma_qp(const H264Context *h, int t, int qscale)
+static av_always_inline int get_chroma_qp(const PPS *pps, int t, int qscale)
 {
-    return h->ps.pps->chroma_qp_table[t][qscale];
+    return pps->chroma_qp_table[t][qscale];
 }
 
 /**
