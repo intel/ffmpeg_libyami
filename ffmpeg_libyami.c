@@ -54,7 +54,7 @@ int yami_transcode_init(InputStream *inst, OutputStream *ost)
 
         /* check if the decoder supports libyami and the output only goes to this stream */
         ist = input_streams[ost->source_index];
-        if ((ist->nb_filters && !force_yami_pipeline) ||
+        if ((ist->nb_filters) ||
             !ist->dec || !ist->dec->pix_fmts)
             return 0;
         for (pix_fmt = ist->dec->pix_fmts; *pix_fmt != AV_PIX_FMT_NONE; pix_fmt++)

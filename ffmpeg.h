@@ -545,7 +545,6 @@ extern int frame_bits_per_raw_sample;
 extern AVIOContext *progress_avio;
 extern float max_error_rate;
 extern char *videotoolbox_pixfmt;
-extern int force_yami_pipeline;
 
 extern const AVIOInterruptCB int_cb;
 
