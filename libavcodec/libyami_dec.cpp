@@ -122,14 +122,21 @@ static void *ff_yami_decode_thread(void *arg)
             s->out_queue->push_back(yami_image);
             pthread_mutex_unlock(&s->out_mutex);
             continue;
+        } else {
+            if (s->decode_status == DECODE_THREAD_GOT_EOS 
+                && s->dpb_is_full == 0 
+                && s->in_queue->empty())
+                break;
         }
         av_free(yami_image);
 
         pthread_mutex_lock(&s->in_mutex);
         if (s->in_queue->empty()) {
             if (s->decode_status == DECODE_THREAD_GOT_EOS) {
+                s->decoder->decode(NULL);
+                s->dpb_is_full = 0;
                 pthread_mutex_unlock(&s->in_mutex);
-                break;
+                continue;
             } else {
                 av_log(avctx, AV_LOG_VERBOSE, "decode thread wait because s->in_queue is empty\n");
                 pthread_cond_wait(&s->in_cond, &s->in_mutex); // wait if no todo frame is available
@@ -388,7 +395,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
             s->decode_status = DECODE_THREAD_GOT_EOS; // call releaseLock for seek
         break;
     case DECODE_THREAD_GOT_EOS:
-        if (s->out_queue->empty() && s->in_queue->empty())
+        if (s->out_queue->empty() && s->in_queue->empty() && s->dpb_is_full == 0)
             s->decode_status = DECODE_THREAD_NOT_INIT;
         break;
     default:
@@ -410,13 +417,23 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
                 s->out_queue->pop_front();
             }
             pthread_mutex_unlock(&s->out_mutex);
-            if (avpkt->data)
-                av_usleep(100);
-            else
-                av_usleep(1000);
-        } while (((!avpkt->data && s->decode_status != DECODE_THREAD_EXIT) //flush wait thread exit
-                || s->dpb_is_full == 1) && !yami_image
-                && (!s->out_queue->empty() || !s->in_queue->empty()));
+            av_usleep(100);
+            pthread_mutex_lock(&s->ctx_mutex);
+            if (s->decode_status == DECODE_THREAD_EXIT 
+                && !yami_image 
+                && s->out_queue->empty()) {//all frame enqueue
+                pthread_mutex_unlock(&s->ctx_mutex);
+                break;
+            }
+
+            if (s->decode_status == DECODE_THREAD_RUNING
+                    && s->out_queue->empty()) { //try decode will break
+                pthread_mutex_unlock(&s->ctx_mutex);
+                break;
+            }
+            pthread_mutex_unlock(&s->ctx_mutex);
+        } while ((!avpkt->data  //flush wait thread exit
+                || s->dpb_is_full == 1) && !yami_image);
         if (yami_image) {
             yami_image->va_display = ff_vaapi_create_display();
             status = DECODE_SUCCESS;
