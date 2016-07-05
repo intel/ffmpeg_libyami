@@ -46,7 +46,7 @@ using namespace YamiMediaCodec;
 static int ff_fix_yami_h264_dpb(YamiDecContext *s)
 {
     if (!s) return 0;
-    if (s->decode_count - s->decode_count_yami)
+    if (s->decode_count - s->decode_count_yami > 16)
         return 1;
     if (s->decode_count_yami - s->render_count > 16)
         return 1;
