@@ -48,10 +48,8 @@ struct YamiDecContext {
     std::deque<YamiImage *> *out_queue;
     pthread_mutex_t out_mutex; // mutex for in_queue
     pthread_cond_t in_cond;   // decode thread condition wait
-    pthread_cond_t out_cond;   // decode thread condition wait
     DecodeThreadStatus decode_status;
 
-    int dpb_is_full;
     //the pts is no value use this value
     int duration;
     // debug use
