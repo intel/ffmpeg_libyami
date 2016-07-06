@@ -5060,6 +5060,7 @@ die_license_disabled version3 libopencore_amrnb
 die_license_disabled version3 libopencore_amrwb
 die_license_disabled version3 libsmbclient
 die_license_disabled version3 libvo_amrwbenc
+die_license_disabled version3 libyami
 
 enabled version3 && { enabled gpl && enable gplv3 || enable lgplv3; }
 
