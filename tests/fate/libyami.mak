@@ -570,65 +570,65 @@ FATE_SAMPLES_AVCONV-$(CONFIG_LIBYAMI_VP8_DECODER) += $(FATE_LIBYAMI_VP8-yes)
 fate-libyami-vp8: $(FATE_LIBYAMI_VP8-yes)
 
 
-fate-libyami-h264-enc%: CMD = framecrc -f rawvideo -s 352x288 -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth2.yuv -vcodec libyami_h264 ${OPTS}
-FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420
-fate-libyami-h264-enc_yuv420: OPTS =
+# fate-libyami-h264-enc%: CMD = framecrc -f rawvideo -s 352x288 -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth2.yuv -vcodec libyami_h264 ${OPTS}
+# FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420
+# fate-libyami-h264-enc_yuv420: OPTS =
 
-FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420_vbr
-fate-libyami-h264-enc_yuv420_vbr: OPTS = -maxrate 550k -b:v 500k
+# FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420_vbr
+# fate-libyami-h264-enc_yuv420_vbr: OPTS = -maxrate 550k -b:v 500k
 
-FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420_cbr
-fate-libyami-h264-enc_yuv420_cbr: OPTS = -maxrate 500k -b:v 500k
+# FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420_cbr
+# fate-libyami-h264-enc_yuv420_cbr: OPTS = -maxrate 500k -b:v 500k
 
-FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420_qp
-fate-libyami-h264-enc_yuv420_qp: OPTS = -qp 40
+# FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420_qp
+# fate-libyami-h264-enc_yuv420_qp: OPTS = -qp 40
 
-FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420_gop
-fate-libyami-h264-enc_yuv420_gop: OPTS = -g 30 -bf 4
+# FATE_LIBYAMI_H264_ENC += fate-libyami-h264-enc_yuv420_gop
+# fate-libyami-h264-enc_yuv420_gop: OPTS = -g 30 -bf 4
 
-$(FATE_LIBYAMI_H264_ENC): $(VREF)
+# $(FATE_LIBYAMI_H264_ENC): $(VREF)
 
-FATE_AVCONV-$(call ENCMUX, LIBYAMI_H264, AVI) += $(FATE_LIBYAMI_H264_ENC)
-fate-libyami-h264-enc: $(FATE_LIBYAMI_H264_ENC)
+# FATE_AVCONV-$(call ENCMUX, LIBYAMI_H264, AVI) += $(FATE_LIBYAMI_H264_ENC)
+# fate-libyami-h264-enc: $(FATE_LIBYAMI_H264_ENC)
 
-fate-libyami-h264-tran%: CMD = framecrc -vcodec libyami_h264 -i $(TARGET_SAMPLES)/h264/interlaced_crop.mp4 -vcodec libyami_h264 ${OPTS}
+# fate-libyami-h264-tran%: CMD = framecrc -vcodec libyami_h264 -i $(TARGET_SAMPLES)/h264/interlaced_crop.mp4 -vcodec libyami_h264 ${OPTS}
 
-FATE_LIBYAMI_H264_TRAN += fate-libyami-h264-tran_mp4
-fate-libyami-h264-tran_mp4: OPTS = 
+# FATE_LIBYAMI_H264_TRAN += fate-libyami-h264-tran_mp4
+# fate-libyami-h264-tran_mp4: OPTS = 
 
-$(FATE_LIBYAMI_H264_TRAN): $(VREF)
+# $(FATE_LIBYAMI_H264_TRAN): $(VREF)
 
-FATE_AVCONV-$(call ALLYES,  LIBYAMI_H264_DECODER LIBYAMI_H264_ENCODER MOV_DEMUXER AVI_MUXER) += $(FATE_LIBYAMI_H264_TRAN)
-fate-libyami-h264-tran: $(FATE_LIBYAMI_H264_TRAN)
+# FATE_AVCONV-$(call ALLYES,  LIBYAMI_H264_DECODER LIBYAMI_H264_ENCODER MOV_DEMUXER AVI_MUXER) += $(FATE_LIBYAMI_H264_TRAN)
+# fate-libyami-h264-tran: $(FATE_LIBYAMI_H264_TRAN)
 
 
-fate-libyami-vp8-enc%: CMD = framecrc -f rawvideo -s 352x288  -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth2.yuv -vcodec libyami_vp8 ${OPTS}
-FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420
-fate-libyami-vp8-enc_yuv420: OPTS =
+# fate-libyami-vp8-enc%: CMD = framecrc -f rawvideo -s 352x288  -pix_fmt yuv420p -i $(TARGET_PATH)/tests/data/vsynth2.yuv -vcodec libyami_vp8 ${OPTS}
+# FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420
+# fate-libyami-vp8-enc_yuv420: OPTS =
 
-FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420_vbr
-fate-libyami-vp8-enc_yuv420_vbr: OPTS = -maxrate 550k -b:v 500k
+# FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420_vbr
+# fate-libyami-vp8-enc_yuv420_vbr: OPTS = -maxrate 550k -b:v 500k
 
-FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420_cbr
-fate-libyami-vp8-enc_yuv420_cbr: OPTS = -maxrate 500k -b:v 500k
+# FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420_cbr
+# fate-libyami-vp8-enc_yuv420_cbr: OPTS = -maxrate 500k -b:v 500k
 
-FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420_qp
-fate-libyami-vp8-enc_yuv420_qp: OPTS = -qp 40
+# FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420_qp
+# fate-libyami-vp8-enc_yuv420_qp: OPTS = -qp 40
 
-FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420_gop
-fate-libyami-vp8-enc_yuv420_gop: OPTS = -g 30 -bf 4
+# FATE_LIBYAMI_VP8_ENC += fate-libyami-vp8-enc_yuv420_gop
+# fate-libyami-vp8-enc_yuv420_gop: OPTS = -g 30 -bf 4
 
-$(FATE_LIBYAMI_VP8_ENC): $(VREF)
+# $(FATE_LIBYAMI_VP8_ENC): $(VREF)
 
-FATE_AVCONV-$(call ENCMUX, LIBYAMI_VP8, AVI) += $(FATE_LIBYAMI_VP8_ENC)
-fate-libyami-vp8-enc: $(FATE_LIBYAMI_VP8_ENC)
+# FATE_AVCONV-$(call ENCMUX, LIBYAMI_VP8, AVI) += $(FATE_LIBYAMI_VP8_ENC)
+# fate-libyami-vp8-enc: $(FATE_LIBYAMI_VP8_ENC)
 
-fate-libyami-vp8-tran%: CMD = framecrc -vcodec libyami_h264 -i $(TARGET_SAMPLES)/h264/interlaced_crop.mp4 -vcodec libyami_vp8 ${OPTS}
+# fate-libyami-vp8-tran%: CMD = framecrc -vcodec libyami_h264 -i $(TARGET_SAMPLES)/h264/interlaced_crop.mp4 -vcodec libyami_vp8 ${OPTS}
 
-FATE_LIBYAMI_VP8_TRAN += fate-libyami-vp8-tran_mp4
-fate-libyami-vp8-tran_mp4: OPTS = 
+# FATE_LIBYAMI_VP8_TRAN += fate-libyami-vp8-tran_mp4
+# fate-libyami-vp8-tran_mp4: OPTS = 
 
-$(FATE_LIBYAMI_VP8_TRAN): $(VREF)
+# $(FATE_LIBYAMI_VP8_TRAN): $(VREF)
 
-FATE_AVCONV-$(call ALLYES,  LIBYAMI_H264_DECODER LIBYAMI_VP8_ENCODER MOV_DEMUXER IVF_DEMUXER) += $(FATE_LIBYAMI_VP8_TRAN)
-fate-libyami-vp8-tran: $(FATE_LIBYAMI_VP8_TRAN)
+# FATE_AVCONV-$(call ALLYES,  LIBYAMI_H264_DECODER LIBYAMI_VP8_ENCODER MOV_DEMUXER IVF_DEMUXER) += $(FATE_LIBYAMI_VP8_TRAN)
+# fate-libyami-vp8-tran: $(FATE_LIBYAMI_VP8_TRAN)
