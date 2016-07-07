@@ -124,8 +124,10 @@ static void *ff_yami_decode_thread(void *arg)
             continue;
         } else {
             if (s->decode_status == DECODE_THREAD_GOT_EOS 
-                && s->in_queue->empty())
+                && s->in_queue->empty()) {
+                av_free(yami_image);
                 break;
+            }
         }
         av_free(yami_image);
 
