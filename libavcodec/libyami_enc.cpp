@@ -361,7 +361,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
             return ret;
         while (s->encode_status < ENCODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
             pthread_mutex_lock(&s->in_mutex);
-            if (s->in_queue->size() < s->max_inqueue_size) {
+            if (s->in_queue->size() < 6/*s->max_inqueue_size*/) {   /*FIXME libyami decode dpb will use 16 surfaces,total is 22 surfaces*/
                 s->in_queue->push_back(qframe);
                 av_log(avctx, AV_LOG_VERBOSE, "wakeup encode thread ...\n");
                 pthread_cond_signal(&s->in_cond);
