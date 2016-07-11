@@ -116,6 +116,7 @@ static void *ff_yami_decode_thread(void *arg)
         if (!yami_image) {
             av_log(avctx, AV_LOG_ERROR, "decode thread wait because s->in_queue is empty\n");
         }
+        /* get all decoder frame before push packet to decoder */
         yami_image->output_frame = s->decoder->getOutput();
         if (yami_image->output_frame) {
             pthread_mutex_lock(&s->out_mutex);
@@ -123,7 +124,8 @@ static void *ff_yami_decode_thread(void *arg)
             pthread_mutex_unlock(&s->out_mutex);
             continue;
         } else {
-            if (s->decode_status == DECODE_THREAD_GOT_EOS 
+            /* no decoder frame and end of stream */
+            if (s->decode_status == DECODE_THREAD_GOT_EOS
                 && s->in_queue->empty())
                 break;
         }
@@ -132,7 +134,7 @@ static void *ff_yami_decode_thread(void *arg)
         pthread_mutex_lock(&s->in_mutex);
         if (s->in_queue->empty()) {
             if (s->decode_status == DECODE_THREAD_GOT_EOS) {
-                // flush all frame in dpb
+                /* flush all frame in dpb with NULL buffer */
                 VideoDecodeBuffer flush_buf;
                 flush_buf.data = NULL;
                 flush_buf.size = 0;
@@ -287,7 +289,7 @@ static int yami_dec_init(AVCodecContext *avctx)
     native_display.type = NATIVE_DISPLAY_VA;
     native_display.handle = (intptr_t)va_display;
     s->decoder->setNativeDisplay(&native_display);
-    //fellow h264.c style
+    // fellow h264.c style
     if (avctx->codec_id == AV_CODEC_ID_H264) {
         if (avctx->ticks_per_frame == 1) {
             if (avctx->time_base.den < INT_MAX / 2) {
@@ -410,8 +412,8 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
             pthread_mutex_unlock(&s->out_mutex);
             av_usleep(100);
             pthread_mutex_lock(&s->ctx_mutex);
-            if (s->decode_status == DECODE_THREAD_EXIT 
-                && !yami_image 
+            if (s->decode_status == DECODE_THREAD_EXIT
+                && !yami_image
                 && s->out_queue->empty()) {//all frame enqueue
                 pthread_mutex_unlock(&s->ctx_mutex);
                 break;
