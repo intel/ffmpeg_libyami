@@ -127,7 +127,9 @@ static void *ff_yami_decode_thread(void *arg)
             /* no decoder frame and end of stream */
             if (s->decode_status == DECODE_THREAD_GOT_EOS
                 && s->in_queue->empty())
+                av_free(yami_image);
                 break;
+            }
         }
         av_free(yami_image);
 
@@ -301,7 +303,7 @@ static int yami_dec_init(AVCodecContext *avctx)
     }
     VideoConfigBuffer config_buffer;
     memset(&config_buffer, 0, sizeof(VideoConfigBuffer));
-    if (avctx->extradata && avctx->extradata_size && avctx->extradata[0] == 1) {
+    if (avctx->extradata && avctx->extradata_size) {
         config_buffer.data = avctx->extradata;
         config_buffer.size = avctx->extradata_size;
     }
