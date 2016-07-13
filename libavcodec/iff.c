@@ -1381,13 +1381,15 @@ static void decode_delta_l(uint8_t *dst,
         bytestream2_init(&dgb, buf + 2 * poff0, buf_end - (buf + 2 * poff0));
         bytestream2_init(&ogb, buf + 2 * poff1, buf_end - (buf + 2 * poff1));
 
-        while ((bytestream2_peek_be16(&ogb)) != 0xFFFF && bytestream2_get_bytes_left(&ogb) >= 4) {
+        while (bytestream2_peek_be16(&ogb) != 0xFFFF && bytestream2_get_bytes_left(&ogb) >= 4) {
             uint32_t offset = bytestream2_get_be16(&ogb);
             int16_t cnt = bytestream2_get_be16(&ogb);
             uint16_t data;
 
             offset = ((2 * offset) / planepitch_byte) * pitch + ((2 * offset) % planepitch_byte) + k * planepitch;
             if (cnt < 0) {
+                if (bytestream2_get_bytes_left(&dgb) < 2)
+                    break;
                 bytestream2_seek_p(&pb, offset, SEEK_SET);
                 cnt = -cnt;
                 data = bytestream2_get_be16(&dgb);
@@ -1396,6 +1398,8 @@ static void decode_delta_l(uint8_t *dst,
                     bytestream2_skip_p(&pb, dstpitch - 2);
                 }
             } else {
+                if (bytestream2_get_bytes_left(&dgb) < 2*cnt)
+                    break;
                 bytestream2_seek_p(&pb, offset, SEEK_SET);
                 for (i = 0; i < cnt; i++) {
                     data = bytestream2_get_be16(&dgb);
