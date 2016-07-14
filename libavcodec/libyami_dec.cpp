@@ -208,6 +208,11 @@ static void ff_yami_recycle_frame(void *opaque, uint8_t *data)
     av_log(avctx, AV_LOG_DEBUG, "recycle previous frame: %p\n", yami_image);
 }
 
+/*
+ * when decode output format is YAMI, don't move the decoded data from GPU to CPU,
+ * otherwise, used the USWC memory copy. maybe change this solution with generic
+ * hardware surface upload/download filter "hwupload/hwdownload"
+ */
 static int ff_convert_to_frame(AVCodecContext *avctx, YamiImage *from, AVFrame *to)
 {
     if(!avctx || !from || !to)
