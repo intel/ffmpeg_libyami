@@ -52,4 +52,8 @@ bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in);
 bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out);
 bool ff_check_vaapi_status(VAStatus status, const char *msg);
 
+YamiStatus ff_yami_alloc_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params);
+YamiStatus ff_yami_free_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params);
+void ff_yami_unref_surface (SurfaceAllocator* thiz);
+
 #endif /* LIBAVCODEC_LIBYAMI_H_ */

@@ -48,6 +48,7 @@ struct YamiDecContext {
     pthread_cond_t in_cond;   // decode thread condition wait
     DecodeThreadStatus decode_status;
 
+    SurfaceAllocator *p_alloc;
     //the pts is no value use this value
     int duration;
     // debug use

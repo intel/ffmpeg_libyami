@@ -25,7 +25,7 @@
 #define LIBAVCODEC_LIBYAMI_ENC_H_
 
 
-#define ENCODE_QUEUE_SIZE 8
+#define ENCODE_QUEUE_SIZE 4
 
 typedef enum {
     ENCODE_THREAD_NOT_INIT = 0,
