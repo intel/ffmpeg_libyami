@@ -116,6 +116,7 @@ static void *ff_yami_decode_thread(void *arg)
         if (!yami_image) {
             av_log(avctx, AV_LOG_ERROR, "decode thread wait because s->in_queue is empty\n");
         }
+        /* get all decoder frame before push packet to decoder */
         yami_image->output_frame = s->decoder->getOutput();
         if (yami_image->output_frame) {
             pthread_mutex_lock(&s->out_mutex);
@@ -123,16 +124,19 @@ static void *ff_yami_decode_thread(void *arg)
             pthread_mutex_unlock(&s->out_mutex);
             continue;
         } else {
-            if (s->decode_status == DECODE_THREAD_GOT_EOS 
-                && s->in_queue->empty())
+            /* no decoder frame and end of stream */
+            if (s->decode_status == DECODE_THREAD_GOT_EOS
+                && s->in_queue->empty()) {
+                av_free(yami_image);
                 break;
+            }
         }
         av_free(yami_image);
 
         pthread_mutex_lock(&s->in_mutex);
         if (s->in_queue->empty()) {
             if (s->decode_status == DECODE_THREAD_GOT_EOS) {
-                // flush all frame in dpb
+                /* flush all frame in dpb with NULL buffer */
                 VideoDecodeBuffer flush_buf;
                 flush_buf.data = NULL;
                 flush_buf.size = 0;
@@ -204,6 +208,11 @@ static void ff_yami_recycle_frame(void *opaque, uint8_t *data)
     av_log(avctx, AV_LOG_DEBUG, "recycle previous frame: %p\n", yami_image);
 }
 
+/*
+ * when decode output format is YAMI, don't move the decoded data from GPU to CPU,
+ * otherwise, used the USWC memory copy. maybe change this solution with generic
+ * hardware surface upload/download filter "hwupload/hwdownload"
+ */
 static int ff_convert_to_frame(AVCodecContext *avctx, YamiImage *from, AVFrame *to)
 {
     if(!avctx || !from || !to)
@@ -246,6 +255,8 @@ static const char *get_mime(AVCodecID id)
         return YAMI_MIME_H265;
     case AV_CODEC_ID_VP8:
         return YAMI_MIME_VP8;
+    case AV_CODEC_ID_MPEG2VIDEO:
+      return YAMI_MIME_MPEG2;
     default:
         av_assert0(!"Invalid codec ID!");
         return 0;
@@ -287,7 +298,7 @@ static int yami_dec_init(AVCodecContext *avctx)
     native_display.type = NATIVE_DISPLAY_VA;
     native_display.handle = (intptr_t)va_display;
     s->decoder->setNativeDisplay(&native_display);
-    //fellow h264.c style
+    // fellow h264.c style
     if (avctx->codec_id == AV_CODEC_ID_H264) {
         if (avctx->ticks_per_frame == 1) {
             if (avctx->time_base.den < INT_MAX / 2) {
@@ -299,7 +310,7 @@ static int yami_dec_init(AVCodecContext *avctx)
     }
     VideoConfigBuffer config_buffer;
     memset(&config_buffer, 0, sizeof(VideoConfigBuffer));
-    if (avctx->extradata && avctx->extradata_size && avctx->extradata[0] == 1) {
+    if (avctx->extradata && avctx->extradata_size) {
         config_buffer.data = avctx->extradata;
         config_buffer.size = avctx->extradata_size;
     }
@@ -410,8 +421,8 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
             pthread_mutex_unlock(&s->out_mutex);
             av_usleep(100);
             pthread_mutex_lock(&s->ctx_mutex);
-            if (s->decode_status == DECODE_THREAD_EXIT 
-                && !yami_image 
+            if (s->decode_status == DECODE_THREAD_EXIT
+                && !yami_image
                 && s->out_queue->empty()) {//all frame enqueue
                 pthread_mutex_unlock(&s->ctx_mutex);
                 break;
@@ -524,3 +535,4 @@ AVCodec ff_libyami_##NAME##_decoder = { \
 YAMI_DEC(h264, AV_CODEC_ID_H264)
 YAMI_DEC(hevc, AV_CODEC_ID_HEVC)
 YAMI_DEC(vp8, AV_CODEC_ID_VP8)
+YAMI_DEC(mpeg2, AV_CODEC_ID_MPEG2VIDEO)

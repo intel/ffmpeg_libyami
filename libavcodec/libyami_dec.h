@@ -46,7 +46,7 @@ struct YamiDecContext {
     std::deque<VideoDecodeBuffer *> *in_queue;
     pthread_mutex_t in_mutex; // mutex for in_queue
     std::deque<YamiImage *> *out_queue;
-    pthread_mutex_t out_mutex; // mutex for in_queue
+    pthread_mutex_t out_mutex; // mutex for out_queue
     pthread_cond_t in_cond;   // decode thread condition wait
     DecodeThreadStatus decode_status;
 

@@ -883,7 +883,7 @@ static void hdcd_reset(hdcd_state_t *state, unsigned rate)
     state->cb7 = 0;
 }
 
-static int integrate(hdcd_state_t *state, int *flag, const int32_t *samples, int count, int stride)
+static int hdcd_integrate(hdcd_state_t *state, int *flag, const int32_t *samples, int count, int stride)
 {
     uint32_t bits = 0;
     int result = FFMIN(state->readahead, count);
@@ -941,7 +941,7 @@ static int hdcd_scan(hdcd_state_t *state, const int32_t *samples, int max, int s
     result = 0;
     while (result < max) {
         int flag;
-        int consumed = integrate(state, &flag, samples, max - result, stride);
+        int consumed = hdcd_integrate(state, &flag, samples, max - result, stride);
         result += consumed;
         if (flag > 0) {
             state->sustain = state->sustain_reset;
@@ -1165,13 +1165,15 @@ static av_cold void uninit(AVFilterContext *ctx)
     }
 
     /* log the HDCD decode information */
-    av_log(ctx, AV_LOG_INFO,
-        "HDCD detected: %s, peak_extend: %s, max_gain_adj: %0.1f dB, transient_filter: %s\n",
-        (s->hdcd_detected) ? "yes" : "no",
-        (s->uses_peak_extend) ? "enabled" : "never enabled",
-        s->max_gain_adjustment,
-        (s->uses_transient_filter) ? "detected" : "not detected"
-        );
+    if (s->hdcd_detected)
+        av_log(ctx, AV_LOG_INFO,
+            "HDCD detected: yes, peak_extend: %s, max_gain_adj: %0.1f dB, transient_filter: %s\n",
+            (s->uses_peak_extend) ? "enabled" : "never enabled",
+            s->max_gain_adjustment,
+            (s->uses_transient_filter) ? "detected" : "not detected"
+            );
+    else
+        av_log(ctx, AV_LOG_INFO, "HDCD detected: no\n");
 }
 
 static av_cold int init(AVFilterContext *ctx)

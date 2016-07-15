@@ -2557,6 +2557,7 @@ h264_d3d11va_hwaccel_select="h264_decoder"
 h264_dxva2_hwaccel_deps="dxva2"
 h264_dxva2_hwaccel_select="h264_decoder"
 h264_mediacodec_decoder_deps="mediacodec"
+h264_mediacodec_hwaccel_deps="mediacodec"
 h264_mediacodec_decoder_select="h264_mp4toannexb_bsf h264_parser"
 h264_mmal_decoder_deps="mmal"
 h264_mmal_decoder_select="mmal"
@@ -2791,6 +2792,8 @@ libyami_hevc_decoder_deps="libyami"
 libyami_hevc_decoder_select="libyami_decoder"
 libyami_vp8_decoder_deps="libyami"
 libyami_vp8_decoder_select="libyami_decoder"
+libyami_mpeg2_decoder_deps="libyami"
+libyami_mpeg2_decoder_select="libyami_decoder"
 libyami_vp8_encoder_deps="libyami"
 libyami_vp8_encoder_select="libyami_encoder"
 libyami_h264_encoder_deps="libyami"
@@ -6158,11 +6161,7 @@ elif enabled ccc; then
     add_cflags -msg_disable nonstandcast
     add_cflags -msg_disable unsupieee
 elif enabled gcc; then
-    case $gcc_basever in
-        4.9*) enabled x86 || check_optflags -fno-tree-vectorize ;;
-        4.*)                 check_optflags -fno-tree-vectorize ;;
-        *)    enabled x86 || check_optflags -fno-tree-vectorize ;;
-    esac
+    check_optflags -fno-tree-vectorize
     check_cflags -Werror=format-security
     check_cflags -Werror=implicit-function-declaration
     check_cflags -Werror=missing-prototypes
