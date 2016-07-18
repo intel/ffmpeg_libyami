@@ -161,6 +161,14 @@ static void *ff_yami_decode_thread(void *arg)
         av_log(avctx, AV_LOG_VERBOSE, "try to process one input buffer, in_buffer->data=%p, in_buffer->size=%zu\n", in_buffer->data, in_buffer->size);
         Decode_Status status = s->decoder->decode(in_buffer);
         av_log(avctx, AV_LOG_VERBOSE, "decode() status=%d, decode_count_yami=%d render_count %d\n", status, s->decode_count_yami, s->render_count);
+        if (DECODE_SUCCESS == status && !s->format_info) {
+            s->format_info = s->decoder->getFormatInfo();
+            av_log(avctx, AV_LOG_VERBOSE, "decode format %dx%d\n", s->format_info->width,s->format_info->height);
+            if (!s->format_info) {
+                avctx->width = s->format_info->width;
+                avctx->height = s->format_info->height;
+            }
+        }
         if (DECODE_FORMAT_CHANGE == status) {
             s->format_info = s->decoder->getFormatInfo();
             av_log(avctx, AV_LOG_VERBOSE, "decode format change %dx%d\n", s->format_info->width,s->format_info->height);
