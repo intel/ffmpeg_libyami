@@ -263,10 +263,10 @@ static const char *get_mime(AVCodecID id)
     case AV_CODEC_ID_VP8:
         return YAMI_MIME_VP8;
     case AV_CODEC_ID_MPEG2VIDEO:
-      return YAMI_MIME_MPEG2;
+        return YAMI_MIME_MPEG2;
     default:
         av_assert0(!"Invalid codec ID!");
-        return 0;
+        return NULL;
     }
 }
 
