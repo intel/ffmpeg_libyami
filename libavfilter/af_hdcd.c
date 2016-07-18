@@ -822,8 +822,11 @@ typedef struct {
     int running_gain;
     unsigned sustain, sustain_reset;
     int code_counterA;
+    int code_counterA_almost; /* looks like an A code, but a bit expected to be 0 is 1 */
     int code_counterB;
+    int code_counterB_checkfails; /* looks like a B code, but doesn't pass the XOR check */
     int code_counterC;
+    int code_counterC_unmatched; /* told to look for a code, but didn't find one */
 
     /* For user information/stats, pulled up into HDCDContext
      * by filter_frame() */
@@ -835,7 +838,8 @@ typedef struct {
      * steps of 0.5, but no value below -6.0 dB should appear. */
     int gain_counts[16]; /* for cursiosity, mostly */
     int max_gain;
-    int cb6, cb7; /* watch bits 6 and 7 of the control code, for curiosity */
+
+    AVFilterContext *fctx; /* filter context for logging errors */
 } hdcd_state_t;
 
 typedef struct HDCDContext {
@@ -844,6 +848,7 @@ typedef struct HDCDContext {
 
     /* User information/stats */
     int hdcd_detected;
+    int det_errors;            /* detectable errors */
     int uses_peak_extend;
     int uses_transient_filter; /* detected, but not implemented */
     float max_gain_adjustment; /* in dB, expected in the range -6.0 to 0.0 */
@@ -872,15 +877,25 @@ static void hdcd_reset(hdcd_state_t *state, unsigned rate)
     state->sustain_reset = rate * 10;
 
     state->code_counterA = 0;
+    state->code_counterA_almost = 0;
     state->code_counterB = 0;
+    state->code_counterB_checkfails = 0;
     state->code_counterC = 0;
+    state->code_counterC_unmatched = 0;
 
     state->count_peak_extend = 0;
     state->count_transient_filter = 0;
     for(i = 0; i < 16; i++) state->gain_counts[i] = 0;
     state->max_gain = 0;
-    state->cb6 = 0;
-    state->cb7 = 0;
+}
+
+/* update the user info/counters */
+static void hdcd_update_info(hdcd_state_t *state)
+{
+    if (state->control & 16) state->count_peak_extend++;
+    if (state->control & 32) state->count_transient_filter++;
+    state->gain_counts[state->control & 15]++;
+    state->max_gain = FFMAX(state->max_gain, (state->control & 15));
 }
 
 static int hdcd_integrate(hdcd_state_t *state, int *flag, const int32_t *samples, int count, int stride)
@@ -903,16 +918,41 @@ static int hdcd_integrate(hdcd_state_t *state, int *flag, const int32_t *samples
     bits = (state->window ^ state->window >> 5 ^ state->window >> 23);
 
     if (state->arg) {
-        if ((bits & 0xffffffc8) == 0x0fa00500) {
-            state->control = (bits & 255) + (bits & 7);
-            *flag = 1;
-            state->code_counterA++;
+        if ((bits & 0x0fa00500) == 0x0fa00500) {
+            /* A: 8-bit code */
+            if ((bits & 0xc8) == 0) {
+                /*                   [..pt gggg]
+                 * 0x0fa005[..] -> 0b[00.. 0...], gain part doubled */
+                state->control = (bits & 255) + (bits & 7);
+                *flag = 1;
+                state->code_counterA++;
+            } else {
+                /* one of bits 3, 6, or 7 was not 0 */
+                state->code_counterA_almost++;
+                av_log(state->fctx, AV_LOG_VERBOSE,
+                    "hdcd error: Control A almost: 0x%08x\n", bits);
+            }
+        } else if ((bits & 0xa0060000) == 0xa0060000) {
+            /* B: 8-bit code, 8-bit XOR check */
+            if (((bits ^ (~bits >> 8 & 255)) & 0xffff00ff) == 0xa0060000) {
+                /*          check:   [..pt gggg ~(..pt gggg)]
+                 * 0xa006[....] -> 0b[.... ....   .... .... ] */
+                state->control = bits >> 8 & 255;
+                *flag = 1;
+                state->code_counterB++;
+            } else {
+                /* XOR check failed */
+                state->code_counterB_checkfails++;
+                av_log(state->fctx, AV_LOG_VERBOSE,
+                    "hdcd error: Control B check failed: 0x%08x\n", bits);
+            }
+        } else {
+            /* told to look for a code, but didn't match one */
+            state->code_counterC_unmatched++;
+            av_log(state->fctx, AV_LOG_VERBOSE,
+                "hdcd error: Unmatched code: 0x%08x\n", bits);
         }
-        if (((bits ^ (~bits >> 8 & 255)) & 0xffff00ff) == 0xa0060000) {
-            state->control = bits >> 8 & 255;
-            *flag = 1;
-            state->code_counterB++;
-        }
+        if (*flag) hdcd_update_info(state);
         state->arg = 0;
     }
     if (bits == 0x7e0fa005 || bits == 0x7e0fa006) {
@@ -1011,18 +1051,6 @@ static int hdcd_envelope(int32_t *samples, int count, int stride, int gain, int 
     return gain;
 }
 
-/* update the user info/flags */
-static void hdcd_update_info(hdcd_state_t *state)
-{
-    if (state->control & 16) state->count_peak_extend++;
-    if (state->control & 32) state->count_transient_filter++;
-    state->gain_counts[state->control & 15]++;
-    state->max_gain = FFMAX(state->max_gain, (state->control & 15));
-
-    if (state->control & 64) state->cb6++;
-    if (state->control & 128) state->cb7++;
-}
-
 static void hdcd_process(hdcd_state_t *state, int32_t *samples, int count, int stride)
 {
     int32_t *samples_end = samples + count * stride;
@@ -1030,8 +1058,6 @@ static void hdcd_process(hdcd_state_t *state, int32_t *samples, int count, int s
     int peak_extend = (state->control & 16);
     int target_gain = (state->control & 15) << 7;
     int lead = 0;
-
-    hdcd_update_info(state);
 
     while (count > lead) {
         int envelope_run;
@@ -1049,7 +1075,6 @@ static void hdcd_process(hdcd_state_t *state, int32_t *samples, int count, int s
         lead = run - envelope_run;
         peak_extend = (state->control & 16);
         target_gain = (state->control & 15) << 7;
-        hdcd_update_info(state);
     }
     if (lead > 0) {
         av_assert0(samples + lead * stride <= samples_end);
@@ -1087,6 +1112,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         out_data[n] = in_data[n];
     }
 
+    s->det_errors = 0;
     for (c = 0; c < inlink->channels; c++) {
         hdcd_state_t *state = &s->state[c];
         hdcd_process(state, out_data + c, in->nb_samples, out->channels);
@@ -1094,7 +1120,10 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         s->uses_peak_extend |= !!state->count_peak_extend;
         s->uses_transient_filter |= !!state->count_transient_filter;
         s->max_gain_adjustment = FFMIN(s->max_gain_adjustment, GAINTOFLOAT(state->max_gain));
-        s->hdcd_detected |= state->code_counterC || state->code_counterB || state->code_counterA;
+        s->hdcd_detected |= state->code_counterB || state->code_counterA;
+        s->det_errors += state->code_counterA_almost
+            + state->code_counterB_checkfails
+            + state->code_counterC_unmatched;
     }
 
     av_frame_free(&in);
@@ -1155,22 +1184,27 @@ static av_cold void uninit(AVFilterContext *ctx)
     /* dump the state for each channel for AV_LOG_VERBOSE */
     for (i = 0; i < 2; i++) {
         hdcd_state_t *state = &s->state[i];
-        av_log(ctx, AV_LOG_VERBOSE, "Channel %d: counter A: %d, B: %d, C: %d\n", i, state->code_counterA,
-                state->code_counterB, state->code_counterC);
-        av_log(ctx, AV_LOG_VERBOSE, "Channel %d: c(pe): %d, c(tf): %d, cb6: %d, cb7: %d\n", i,
-                state->count_peak_extend, state->count_transient_filter, state->cb6, state->cb7);
+        av_log(ctx, AV_LOG_VERBOSE, "Channel %d: counter A: %d, B: %d, C: %d\n", i,
+                state->code_counterA, state->code_counterB, state->code_counterC);
+        av_log(ctx, AV_LOG_VERBOSE, "Channel %d: pe: %d, tf: %d, almost_A: %d, checkfail_B: %d, unmatched_C: %d\n", i,
+            state->count_peak_extend,
+            state->count_transient_filter,
+            state->code_counterA_almost,
+            state->code_counterB_checkfails,
+            state->code_counterC_unmatched);
         for (j = 0; j <= state->max_gain; j++) {
-            av_log(ctx, AV_LOG_VERBOSE, "Channel %d: tg %0.1f - %d\n", i, GAINTOFLOAT(j), state->gain_counts[j]);
+            av_log(ctx, AV_LOG_VERBOSE, "Channel %d: tg %0.1f: %d\n", i, GAINTOFLOAT(j), state->gain_counts[j]);
         }
     }
 
     /* log the HDCD decode information */
     if (s->hdcd_detected)
         av_log(ctx, AV_LOG_INFO,
-            "HDCD detected: yes, peak_extend: %s, max_gain_adj: %0.1f dB, transient_filter: %s\n",
+            "HDCD detected: yes, peak_extend: %s, max_gain_adj: %0.1f dB, transient_filter: %s, detectable errors: %d%s\n",
             (s->uses_peak_extend) ? "enabled" : "never enabled",
             s->max_gain_adjustment,
-            (s->uses_transient_filter) ? "detected" : "not detected"
+            (s->uses_transient_filter) ? "detected" : "not detected",
+            s->det_errors, (s->det_errors) ? " (try -v verbose)" : ""
             );
     else
         av_log(ctx, AV_LOG_INFO, "HDCD detected: no\n");
@@ -1186,6 +1220,7 @@ static av_cold int init(AVFilterContext *ctx)
 
     for (c = 0; c < 2; c++) {
         hdcd_reset(&s->state[c], 44100);
+        s->state[c].fctx = ctx;
     }
 
     return 0;
