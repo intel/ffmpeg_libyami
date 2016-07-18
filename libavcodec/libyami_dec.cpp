@@ -35,7 +35,6 @@ extern "C" {
 #include "libavutil/pixdesc.h"
 #include "internal.h"
 #include "libavutil/internal.h"
-#include "bytestream.h"
 }
 #include "VideoDecoderHost.h"
 #include "libyami.h"
@@ -362,7 +361,6 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     VideoDecodeBuffer *in_buffer = NULL;
     Decode_Status status = DECODE_FAIL;
     YamiImage *yami_image =  NULL;
-    int ret = 0;
     AVFrame *frame = (AVFrame *)data;
     av_log(avctx, AV_LOG_VERBOSE, "yami_dec_frame\n");
     // append avpkt to input buffer queue
@@ -467,13 +465,6 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
            "decode_count_yami=%d, decode_count=%d, render_count=%d\n",
            s->decode_count_yami, s->decode_count, s->render_count);
     return avpkt->size;
-fail:
-    if (yami_image) {
-        yami_image->output_frame.reset();
-        if (yami_image)
-            av_free(yami_image);
-    }
-    return ret;
 }
 
 static int yami_dec_close(AVCodecContext *avctx)
