@@ -887,6 +887,7 @@ OBJS-$(CONFIG_LIBYAMI_HEVC_DECODER)       += libyami_dec.o libyami.o
 OBJS-$(CONFIG_LIBYAMI_VP8_DECODER)        += libyami_dec.o libyami.o
 OBJS-$(CONFIG_LIBYAMI_VP8_ENCODER)        += libyami_enc.o libyami.o
 OBJS-$(CONFIG_LIBYAMI_MPEG2_DECODER)      += libyami_dec.o libyami.o
+OBJS-$(CONFIG_LIBYAMI_VC1_DECODER)        += libyami_dec.o libyami.o
 OBJS-$(CONFIG_LIBTHEORA_ENCODER)          += libtheoraenc.o
 OBJS-$(CONFIG_LIBTWOLAME_ENCODER)         += libtwolame.o
 OBJS-$(CONFIG_LIBVO_AMRWBENC_ENCODER)     += libvo-amrwbenc.o
