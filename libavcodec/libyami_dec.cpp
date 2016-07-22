@@ -325,7 +325,7 @@ static int yami_dec_init(AVCodecContext *avctx)
     }
     config_buffer.profile = VAProfileNone;
     status = s->decoder->start(&config_buffer);
-    if (status != DECODE_SUCCESS) {
+    if (status != DECODE_SUCCESS && status != DECODE_FORMAT_CHANGE) {
         av_log(avctx, AV_LOG_ERROR, "yami decoder fail to start\n");
         return AVERROR_BUG;
     }
