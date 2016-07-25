@@ -392,7 +392,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
         break;
     case ENCODE_THREAD_RUNING:
         if (!frame) {
-            s->encode_status = ENCODE_THREAD_GOT_EOS; // call releaseLock for seek
+            s->encode_status = ENCODE_THREAD_GOT_EOS;
         }
         break;
     case ENCODE_THREAD_GOT_EOS:

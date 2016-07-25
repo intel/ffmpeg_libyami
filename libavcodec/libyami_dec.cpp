@@ -402,7 +402,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         break;
     case DECODE_THREAD_RUNING:
         if (!avpkt->data || !avpkt->size) {
-            s->decode_status = DECODE_THREAD_GOT_EOS; // call releaseLock for seek
+            s->decode_status = DECODE_THREAD_GOT_EOS;
             pthread_cond_signal(&s->in_cond);
         }
         break;
