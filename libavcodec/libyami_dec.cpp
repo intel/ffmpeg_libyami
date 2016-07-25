@@ -307,7 +307,15 @@ static int yami_dec_init(AVCodecContext *avctx)
     native_display.type = NATIVE_DISPLAY_VA;
     native_display.handle = (intptr_t)va_display;
     s->decoder->setNativeDisplay(&native_display);
-    // fellow h264.c style
+
+    //set allocator
+    s->p_alloc = (SurfaceAllocator *) av_mallocz(sizeof(SurfaceAllocator));
+    s->p_alloc->alloc = ff_yami_alloc_surface;
+    s->p_alloc->free =  ff_yami_free_surface;
+    s->p_alloc->unref = ff_yami_unref_surface;
+    s->decoder->setAllocator(s->p_alloc);
+
+    //fellow h264.c style
     if (avctx->codec_id == AV_CODEC_ID_H264) {
         if (avctx->ticks_per_frame == 1) {
             if (avctx->time_base.den < INT_MAX / 2) {
@@ -407,6 +415,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         }
         break;
     case DECODE_THREAD_GOT_EOS:
+        pthread_cond_signal(&s->in_cond);
         break;
     default:
         break;
@@ -419,32 +428,25 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
             continue;
         }
 
-        do{
-            //flush the decoder and sync the decoder thread if avpkt->data is null
-            pthread_mutex_lock(&s->out_mutex);
-            if (!s->out_queue->empty()) {
-                yami_image = s->out_queue->front();
-                s->out_queue->pop_front();
-            }
-            pthread_mutex_unlock(&s->out_mutex);
-            av_usleep(100);
-            pthread_mutex_lock(&s->ctx_mutex);
-            if (s->decode_status == DECODE_THREAD_EXIT
-                && !yami_image
-                && s->out_queue->empty()) {//all frame enqueue
-                pthread_mutex_unlock(&s->ctx_mutex);
-                break;
-            }
+        yami_image = (YamiImage *)av_mallocz(sizeof(YamiImage));
+        if (!yami_image) {
+            ret = AVERROR(ENOMEM);
+            goto fail;
+        }
 
-            if (s->decode_status == DECODE_THREAD_RUNING
-                    && s->out_queue->empty()) { //try decode will break
+        do{
+            yami_image->output_frame = s->decoder->getOutput();
+            av_log(avctx, AV_LOG_DEBUG, "getoutput() status=%d\n", status);
+            pthread_mutex_lock(&s->ctx_mutex);
+            if (!(!avpkt->data && !yami_image->output_frame && s->decode_status != DECODE_THREAD_EXIT)) {
                 pthread_mutex_unlock(&s->ctx_mutex);
                 break;
             }
             pthread_mutex_unlock(&s->ctx_mutex);
-        } while ((!avpkt->data  //flush wait thread exit
-                || ff_fix_yami_h264_dpb(s)) && !yami_image);
-        if (yami_image) {
+            av_usleep(100);
+        } while (1);
+
+        if (yami_image->output_frame) {
             yami_image->va_display = ff_vaapi_create_display();
             status = DECODE_SUCCESS;
             break;
@@ -485,6 +487,8 @@ static int yami_dec_close(AVCodecContext *avctx)
         releaseVideoDecoder(s->decoder);
         s->decoder = NULL;
     }
+    if (s->p_alloc)
+        av_free(s->p_alloc);
     while (!s->in_queue->empty()) {
         VideoDecodeBuffer *in_buffer = s->in_queue->front();
         s->in_queue->pop_front();
