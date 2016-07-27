@@ -377,7 +377,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
             yami_image->output_frame = s->decoder->getOutput();
             av_log(avctx, AV_LOG_DEBUG, "getoutput() status=%d\n", status);
             pthread_mutex_lock(&s->ctx_mutex);
-            if (!(!avpkt->data && !yami_image->output_frame && s->decode_status != DECODE_THREAD_EXIT)) {
+            if (avpkt->data || yami_image->output_frame || s->decode_status == DECODE_THREAD_EXIT) {
                 pthread_mutex_unlock(&s->ctx_mutex);
                 break;
             }
