@@ -268,7 +268,7 @@ static int yami_dec_init(AVCodecContext *avctx)
     }
     config_buffer.profile = VAProfileNone;
     status = s->decoder->start(&config_buffer);
-    if (status != DECODE_SUCCESS) {
+    if (status != DECODE_SUCCESS && status != DECODE_FORMAT_CHANGE) {
         av_log(avctx, AV_LOG_ERROR, "yami decoder fail to start\n");
         return AVERROR_BUG;
     }
@@ -350,7 +350,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         break;
     case DECODE_THREAD_RUNING:
         if (!avpkt->data || !avpkt->size) {
-            s->decode_status = DECODE_THREAD_GOT_EOS; // call releaseLock for seek
+            s->decode_status = DECODE_THREAD_GOT_EOS;
             pthread_cond_signal(&s->in_cond);
         }
         break;

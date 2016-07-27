@@ -290,21 +290,24 @@ static int yami_enc_init(AVCodecContext *avctx)
     } else {
         encVideoParams.level = 40;
     }
-    /*libyami only support h264 main now*/
-//    if (s->profile){
-//        if (!strcmp(s->profile , "high"))
-//            encVideoParams.profile = VAProfileH264High;
-//        else if(!strcmp(s->profile , "main")){
-//            encVideoParams.profile = VAProfileH264Main;
-//        } else {
-//            encVideoParams.profile = VAProfileH264Baseline;
-//        }
-//    } else {
-//        encVideoParams.profile = VAProfileH264High;
-//    }
-    // s->encoder->setEncoderParameters(&encVideoParams);
+
+    if (avctx->codec_id == AV_CODEC_ID_H264) {
+        encVideoParams.profile = VAProfileH264Main;
+        if (s->profile) {
+            if (!strcmp(s->profile , "high"))
+                encVideoParams.profile = VAProfileH264High;
+            else if(!strcmp(s->profile , "main")) {
+                encVideoParams.profile = VAProfileH264Main;
+            } else if(!strcmp(s->profile , "baseline")) {
+                encVideoParams.profile = VAProfileH264Baseline;
+            }
+        } else {
+            av_log(avctx, AV_LOG_WARNING, "Using the default main profile.\n");
+        }
+    }
     encVideoParams.size = sizeof(VideoParamsCommon);
     s->encoder->setParameters(VideoParamsTypeCommon, &encVideoParams);
+
     if (avctx->codec_id == AV_CODEC_ID_H264) {
         VideoConfigAVCStreamFormat streamFormat;
         streamFormat.size = sizeof(VideoConfigAVCStreamFormat);
@@ -389,7 +392,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
         break;
     case ENCODE_THREAD_RUNING:
         if (!frame) {
-            s->encode_status = ENCODE_THREAD_GOT_EOS; // call releaseLock for seek
+            s->encode_status = ENCODE_THREAD_GOT_EOS;
         }
         break;
     case ENCODE_THREAD_GOT_EOS:
