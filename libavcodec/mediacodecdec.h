@@ -34,13 +34,19 @@
 
 typedef struct MediaCodecDecContext {
 
+    volatile int refcount;
+
     char *codec_name;
 
     FFAMediaCodec *codec;
     FFAMediaFormat *format;
 
+    void *surface;
+
     int started;
+    int draining;
     int flushing;
+    int eos;
 
     int width;
     int height;
@@ -53,8 +59,6 @@ typedef struct MediaCodecDecContext {
     int crop_left;
     int crop_right;
 
-    int queued_buffer_nb;
-    int queued_buffer_max;
     uint64_t dequeued_buffer_nb;
 
     int first_buffer;
@@ -78,5 +82,17 @@ int ff_mediacodec_dec_flush(AVCodecContext *avctx,
 
 int ff_mediacodec_dec_close(AVCodecContext *avctx,
                             MediaCodecDecContext *s);
+
+int ff_mediacodec_dec_is_flushing(AVCodecContext *avctx,
+                                  MediaCodecDecContext *s);
+
+typedef struct MediaCodecBuffer {
+
+    MediaCodecDecContext *ctx;
+    ssize_t index;
+    int64_t pts;
+    volatile int released;
+
+} MediaCodecBuffer;
 
 #endif /* AVCODEC_MEDIACODECDEC_H */

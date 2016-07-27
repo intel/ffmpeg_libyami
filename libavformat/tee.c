@@ -27,8 +27,6 @@
 #include "avformat.h"
 #include "avio_internal.h"
 
-#define MAX_SLAVES 16
-
 typedef enum {
     ON_SLAVE_FAILURE_ABORT  = 1,
     ON_SLAVE_FAILURE_IGNORE = 2
@@ -52,7 +50,7 @@ typedef struct TeeContext {
     const AVClass *class;
     unsigned nb_slaves;
     unsigned nb_alive;
-    TeeSlave slaves[MAX_SLAVES];
+    TeeSlave *slaves;
 } TeeContext;
 
 static const char *const slave_delim     = "|";
@@ -203,6 +201,7 @@ static void close_slaves(AVFormatContext *avf)
     for (i = 0; i < tee->nb_slaves; i++) {
         close_slave(&tee->slaves[i]);
     }
+    av_freep(&tee->slaves);
 }
 
 static int open_slave(AVFormatContext *avf, char *slave, TeeSlave *tee_slave)
@@ -295,26 +294,17 @@ static int open_slave(AVFormatContext *avf, char *slave, TeeSlave *tee_slave)
             ret = AVERROR(ENOMEM);
             goto end;
         }
-        st2->id = st->id;
-        st2->r_frame_rate        = st->r_frame_rate;
-        st2->time_base           = st->time_base;
-        st2->start_time          = st->start_time;
-        st2->duration            = st->duration;
-        st2->nb_frames           = st->nb_frames;
-        st2->disposition         = st->disposition;
-        st2->sample_aspect_ratio = st->sample_aspect_ratio;
-        st2->avg_frame_rate      = st->avg_frame_rate;
-        av_dict_copy(&st2->metadata, st->metadata, 0);
-        if ((ret = avcodec_parameters_copy(st2->codecpar, st->codecpar)) < 0)
+
+        ret = ff_stream_encode_params_copy(st2, st);
+        if (ret < 0)
             goto end;
     }
 
-    if (!(avf2->oformat->flags & AVFMT_NOFILE)) {
-        if ((ret = avf2->io_open(avf2, &avf2->pb, filename, AVIO_FLAG_WRITE, NULL)) < 0) {
-            av_log(avf, AV_LOG_ERROR, "Slave '%s': error opening: %s\n",
-                   slave, av_err2str(ret));
-            goto end;
-        }
+    ret = ff_format_output_open(avf2, filename, NULL);
+    if (ret < 0) {
+        av_log(avf, AV_LOG_ERROR, "Slave '%s': error opening: %s\n", slave,
+               av_err2str(ret));
+        goto end;
     }
 
     if ((ret = avformat_write_header(avf2, &options)) < 0) {
@@ -443,24 +433,28 @@ static int tee_write_header(AVFormatContext *avf)
     TeeContext *tee = avf->priv_data;
     unsigned nb_slaves = 0, i;
     const char *filename = avf->filename;
-    char *slaves[MAX_SLAVES];
+    char **slaves = NULL;
     int ret;
 
     while (*filename) {
-        if (nb_slaves == MAX_SLAVES) {
-            av_log(avf, AV_LOG_ERROR, "Maximum %d slave muxers reached.\n",
-                   MAX_SLAVES);
-            ret = AVERROR_PATCHWELCOME;
+        char *slave = av_get_token(&filename, slave_delim);
+        if (!slave) {
+            ret = AVERROR(ENOMEM);
             goto fail;
         }
-        if (!(slaves[nb_slaves++] = av_get_token(&filename, slave_delim))) {
-            ret = AVERROR(ENOMEM);
+        ret = av_dynarray_add_nofree(&slaves, &nb_slaves, slave);
+        if (ret < 0) {
+            av_free(slave);
             goto fail;
         }
         if (strspn(filename, slave_delim))
             filename++;
     }
 
+    if (!(tee->slaves = av_mallocz_array(nb_slaves, sizeof(*tee->slaves)))) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
     tee->nb_slaves = tee->nb_alive = nb_slaves;
 
     for (i = 0; i < nb_slaves; i++) {
@@ -483,12 +477,14 @@ static int tee_write_header(AVFormatContext *avf)
             av_log(avf, AV_LOG_WARNING, "Input stream #%d is not mapped "
                    "to any slave.\n", i);
     }
+    av_free(slaves);
     return 0;
 
 fail:
     for (i = 0; i < nb_slaves; i++)
         av_freep(&slaves[i]);
     close_slaves(avf);
+    av_free(slaves);
     return ret;
 }
 
@@ -505,6 +501,7 @@ static int tee_write_trailer(AVFormatContext *avf)
                 ret_all = ret;
         }
     }
+    av_freep(&tee->slaves);
     return ret_all;
 }
 
@@ -521,6 +518,17 @@ static int tee_write_packet(AVFormatContext *avf, AVPacket *pkt)
     for (i = 0; i < tee->nb_slaves; i++) {
         if (!(avf2 = tee->slaves[i].avf))
             continue;
+
+        /* Flush slave if pkt is NULL*/
+        if (!pkt) {
+            ret = av_interleaved_write_frame(avf2, NULL);
+            if (ret < 0) {
+                ret = tee_process_slave_failure(avf, i, ret);
+                if (!ret_all && ret < 0)
+                    ret_all = ret;
+            }
+            continue;
+        }
 
         s = pkt->stream_index;
         s2 = tee->slaves[i].stream_map[s];
@@ -559,5 +567,5 @@ AVOutputFormat ff_tee_muxer = {
     .write_trailer     = tee_write_trailer,
     .write_packet      = tee_write_packet,
     .priv_class        = &tee_muxer_class,
-    .flags             = AVFMT_NOFILE,
+    .flags             = AVFMT_NOFILE | AVFMT_ALLOW_FLUSH,
 };

@@ -215,6 +215,7 @@ static int mov_read_covr(MOVContext *c, AVIOContext *pb, int type, int len)
     return 0;
 }
 
+// 3GPP TS 26.244
 static int mov_metadata_loci(MOVContext *c, AVIOContext *pb, unsigned len)
 {
     char language[4] = { 0 };
@@ -242,7 +243,8 @@ static int mov_metadata_loci(MOVContext *c, AVIOContext *pb, unsigned len)
     len -= 1;
 
     if (len < 12) {
-        av_log(c->fc, AV_LOG_ERROR, "no space for coordinates left (%d)\n", len);
+        av_log(c->fc, AV_LOG_ERROR,
+               "loci too short (%u bytes left, need at least %d)\n", len, 12);
         return AVERROR_INVALIDDATA;
     }
     longitude = ((int32_t) avio_rb32(pb)) / (float) (1 << 16);
@@ -413,9 +415,9 @@ retry:
     if (atom.size < 0 || str_size >= INT_MAX/2)
         return AVERROR_INVALIDDATA;
 
-    // Allocates enough space if data_type is a float32 number, otherwise
+    // Allocates enough space if data_type is a int32 or float32 number, otherwise
     // worst-case requirement for output string in case of utf8 coded input
-    num = (data_type == 23);
+    num = (data_type >= 21 && data_type <= 23);
     str_size_alloc = (num ? 512 : (raw ? str_size : str_size * 2)) + 1;
     str = av_mallocz(str_size_alloc);
     if (!str)
@@ -426,6 +428,38 @@ retry:
     else {
         if (!raw && (data_type == 3 || (data_type == 0 && (langcode < 0x400 || langcode == 0x7fff)))) { // MAC Encoded
             mov_read_mac_string(c, pb, str_size, str, str_size_alloc);
+        } else if (data_type == 21) { // BE signed integer, variable size
+            int val = 0;
+            if (str_size == 1)
+                val = (int8_t)avio_r8(pb);
+            else if (str_size == 2)
+                val = (int16_t)avio_rb16(pb);
+            else if (str_size == 3)
+                val = ((int32_t)(avio_rb24(pb)<<8))>>8;
+            else if (str_size == 4)
+                val = (int32_t)avio_rb32(pb);
+            if (snprintf(str, str_size_alloc, "%d", val) >= str_size_alloc) {
+                av_log(c->fc, AV_LOG_ERROR,
+                       "Failed to store the number (%d) in string.\n", val);
+                av_free(str);
+                return AVERROR_INVALIDDATA;
+            }
+        } else if (data_type == 22) { // BE unsigned integer, variable size
+            unsigned int val = 0;
+            if (str_size == 1)
+                val = avio_r8(pb);
+            else if (str_size == 2)
+                val = avio_rb16(pb);
+            else if (str_size == 3)
+                val = avio_rb24(pb);
+            else if (str_size == 4)
+                val = avio_rb32(pb);
+            if (snprintf(str, str_size_alloc, "%u", val) >= str_size_alloc) {
+                av_log(c->fc, AV_LOG_ERROR,
+                       "Failed to store the number (%u) in string.\n", val);
+                av_free(str);
+                return AVERROR_INVALIDDATA;
+            }
         } else if (data_type == 23 && str_size >= 4) {  // BE float32
             float val = av_int2float(avio_rb32(pb));
             if (snprintf(str, str_size_alloc, "%f", val) >= str_size_alloc) {
@@ -2171,6 +2205,8 @@ static int mov_skip_multiple_stsd(MOVContext *c, AVIOContext *pb,
 
     if (codec_tag &&
          (codec_tag != format &&
+          // prores is allowed to have differing data format and codec tag
+          codec_tag != AV_RL32("apcn") && codec_tag != AV_RL32("apch") &&
           (c->fc->video_codec_id ? video_codec_id != c->fc->video_codec_id
                                  : codec_tag != MKTAG('j','p','e','g')))) {
         /* Multiple fourcc, we skip JPEG. This is not correct, we should
@@ -2181,8 +2217,7 @@ static int mov_skip_multiple_stsd(MOVContext *c, AVIOContext *pb,
         avio_skip(pb, size);
         return 1;
     }
-    if ( codec_tag == AV_RL32("avc1") ||
-         codec_tag == AV_RL32("hvc1") ||
+    if ( codec_tag == AV_RL32("hvc1") ||
          codec_tag == AV_RL32("hev1")
     )
         av_log(c->fc, AV_LOG_WARNING, "Concatenated H.264 or H.265 might not play correctly.\n");
@@ -2260,6 +2295,19 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
                 return ret;
         } else if (a.size > 0)
             avio_skip(pb, a.size);
+
+        if (sc->extradata) {
+            int extra_size = st->codecpar->extradata_size;
+
+            /* Move the current stream extradata to the stream context one. */
+            sc->extradata_size[pseudo_stream_id] = extra_size;
+            sc->extradata[pseudo_stream_id] = av_malloc(extra_size + AV_INPUT_BUFFER_PADDING_SIZE);
+            if (!sc->extradata[pseudo_stream_id])
+                return AVERROR(ENOMEM);
+            memcpy(sc->extradata[pseudo_stream_id], st->codecpar->extradata, extra_size);
+            av_freep(&st->codecpar->extradata);
+            st->codecpar->extradata_size = 0;
+        }
     }
 
     if (pb->eof_reached)
@@ -2270,13 +2318,41 @@ int ff_mov_read_stsd_entries(MOVContext *c, AVIOContext *pb, int entries)
 
 static int mov_read_stsd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 {
-    int entries;
+    AVStream *st;
+    MOVStreamContext *sc;
+    int ret;
+
+    if (c->fc->nb_streams < 1)
+        return 0;
+    st = c->fc->streams[c->fc->nb_streams - 1];
+    sc = st->priv_data;
 
     avio_r8(pb); /* version */
     avio_rb24(pb); /* flags */
-    entries = avio_rb32(pb);
+    sc->stsd_count = avio_rb32(pb); /* entries */
 
-    return ff_mov_read_stsd_entries(c, pb, entries);
+    /* Prepare space for hosting multiple extradata. */
+    sc->extradata = av_mallocz_array(sc->stsd_count, sizeof(*sc->extradata));
+    if (!sc->extradata)
+        return AVERROR(ENOMEM);
+
+    sc->extradata_size = av_mallocz_array(sc->stsd_count, sizeof(*sc->extradata_size));
+    if (!sc->extradata_size)
+        return AVERROR(ENOMEM);
+
+    ret = ff_mov_read_stsd_entries(c, pb, sc->stsd_count);
+    if (ret < 0)
+        return ret;
+
+    /* Restore back the primary extradata. */
+    av_free(st->codecpar->extradata);
+    st->codecpar->extradata_size = sc->extradata_size[0];
+    st->codecpar->extradata = av_mallocz(sc->extradata_size[0] + AV_INPUT_BUFFER_PADDING_SIZE);
+    if (!st->codecpar->extradata)
+        return AVERROR(ENOMEM);
+    memcpy(st->codecpar->extradata, sc->extradata[0], sc->extradata_size[0]);
+
+    return 0;
 }
 
 static int mov_read_stsc(MOVContext *c, AVIOContext *pb, MOVAtom atom)
@@ -2319,6 +2395,19 @@ static int mov_read_stsc(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         return AVERROR_EOF;
 
     return 0;
+}
+
+/* Compute the samples value for the stsc entry at the given index. */
+static inline int mov_get_stsc_samples(MOVStreamContext *sc, int index)
+{
+    int chunk_count;
+
+    if (index < sc->stsc_count - 1)
+        chunk_count = sc->stsc_data[index + 1].first - sc->stsc_data[index].first;
+    else
+        chunk_count = sc->chunk_count - (sc->stsc_data[index].first - 1);
+
+    return sc->stsc_data[index].count * chunk_count;
 }
 
 static int mov_read_stps(MOVContext *c, AVIOContext *pb, MOVAtom atom)
@@ -2809,7 +2898,12 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
                 sample_size = sc->stsz_sample_size > 0 ? sc->stsz_sample_size : sc->sample_sizes[current_sample];
                 if (sc->pseudo_stream_id == -1 ||
                    sc->stsc_data[stsc_index].id - 1 == sc->pseudo_stream_id) {
-                    AVIndexEntry *e = &st->index_entries[st->nb_index_entries++];
+                    AVIndexEntry *e;
+                    if (sample_size > 0x3FFFFFFF) {
+                        av_log(mov->fc, AV_LOG_ERROR, "Sample size %u is too large\n", sample_size);
+                        return;
+                    }
+                    e = &st->index_entries[st->nb_index_entries++];
                     e->pos = current_offset;
                     e->timestamp = current_dts;
                     e->size = sample_size;
@@ -2932,6 +3026,10 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
 
                 if (st->nb_index_entries >= total) {
                     av_log(mov->fc, AV_LOG_ERROR, "wrong chunk count %d\n", total);
+                    return;
+                }
+                if (size > 0x3FFFFFFF) {
+                    av_log(mov->fc, AV_LOG_ERROR, "Sample size %u is too large\n", size);
                     return;
                 }
                 e = &st->index_entries[st->nb_index_entries++];
@@ -3169,7 +3267,6 @@ static int mov_read_trak(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     }
     /* Do not need those anymore. */
     av_freep(&sc->chunk_offsets);
-    av_freep(&sc->stsc_data);
     av_freep(&sc->sample_sizes);
     av_freep(&sc->keyframes);
     av_freep(&sc->stts_data);
@@ -4642,6 +4739,31 @@ static int parse_timecode_in_framenum_format(AVFormatContext *s, AVStream *st,
     return 0;
 }
 
+static int mov_read_rtmd_track(AVFormatContext *s, AVStream *st)
+{
+    MOVStreamContext *sc = st->priv_data;
+    char buf[AV_TIMECODE_STR_SIZE];
+    int64_t cur_pos = avio_tell(sc->pb);
+    int hh, mm, ss, ff, drop;
+
+    if (!st->nb_index_entries)
+        return -1;
+
+    avio_seek(sc->pb, st->index_entries->pos, SEEK_SET);
+    avio_skip(s->pb, 13);
+    hh = avio_r8(s->pb);
+    mm = avio_r8(s->pb);
+    ss = avio_r8(s->pb);
+    drop = avio_r8(s->pb);
+    ff = avio_r8(s->pb);
+    snprintf(buf, AV_TIMECODE_STR_SIZE, "%02d:%02d:%02d%c%02d",
+             hh, mm, ss, drop ? ';' : ':', ff);
+    av_dict_set(&st->metadata, "timecode", buf, 0);
+
+    avio_seek(sc->pb, cur_pos, SEEK_SET);
+    return 0;
+}
+
 static int mov_read_timecode_track(AVFormatContext *s, AVStream *st)
 {
     MOVStreamContext *sc = st->priv_data;
@@ -4704,6 +4826,11 @@ static int mov_read_close(AVFormatContext *s)
         av_freep(&sc->elst_data);
         av_freep(&sc->rap_group);
         av_freep(&sc->display_matrix);
+
+        for (j = 0; j < sc->stsd_count; j++)
+            av_free(sc->extradata[j]);
+        av_freep(&sc->extradata);
+        av_freep(&sc->extradata_size);
 
         av_freep(&sc->cenc.auxiliary_info);
         av_freep(&sc->cenc.auxiliary_info_sizes);
@@ -4920,8 +5047,11 @@ static int mov_read_header(AVFormatContext *s)
         if (mov->chapter_track > 0 && !mov->ignore_chapters)
             mov_read_chapters(s);
         for (i = 0; i < s->nb_streams; i++)
-            if (s->streams[i]->codecpar->codec_tag == AV_RL32("tmcd"))
+            if (s->streams[i]->codecpar->codec_tag == AV_RL32("tmcd")) {
                 mov_read_timecode_track(s, s->streams[i]);
+            } else if (s->streams[i]->codecpar->codec_tag == AV_RL32("rtmd")) {
+                mov_read_rtmd_track(s, s->streams[i]);
+            }
     }
 
     /* copy timecode metadata from tmcd tracks to the related video streams */
@@ -5119,6 +5249,29 @@ static int mov_switch_root(AVFormatContext *s, int64_t target)
     return 1;
 }
 
+static int mov_change_extradata(MOVStreamContext *sc, AVPacket *pkt)
+{
+    uint8_t *side, *extradata;
+    int extradata_size;
+
+    /* Save the current index. */
+    sc->last_stsd_index = sc->stsc_data[sc->stsc_index].id - 1;
+
+    /* Notify the decoder that extradata changed. */
+    extradata_size = sc->extradata_size[sc->last_stsd_index];
+    extradata = sc->extradata[sc->last_stsd_index];
+    if (extradata_size > 0 && extradata) {
+        side = av_packet_new_side_data(pkt,
+                                       AV_PKT_DATA_NEW_EXTRADATA,
+                                       extradata_size);
+        if (!side)
+            return AVERROR(ENOMEM);
+        memcpy(side, extradata, extradata_size);
+    }
+
+    return 0;
+}
+
 static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
 {
     MOVContext *mov = s->priv_data;
@@ -5153,6 +5306,12 @@ static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
             sc->current_sample -= should_retry(sc->pb, ret64);
             return AVERROR_INVALIDDATA;
         }
+
+        if( st->discard == AVDISCARD_NONKEY && 0==(sample->flags & AVINDEX_KEYFRAME) ) {
+            av_log(mov->fc, AV_LOG_DEBUG, "Nonkey frame from stream %d discarded due to AVDISCARD_NONKEY\n", sc->ffindex);
+            goto retry;
+        }
+
         ret = av_get_packet(sc->pb, pkt, sample->size);
         if (ret < 0) {
             sc->current_sample -= should_retry(sc->pb, ret);
@@ -5204,6 +5363,25 @@ static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
         goto retry;
     pkt->flags |= sample->flags & AVINDEX_KEYFRAME ? AV_PKT_FLAG_KEY : 0;
     pkt->pos = sample->pos;
+
+    /* Multiple stsd handling. */
+    if (sc->stsc_data) {
+        /* Keep track of the stsc index for the given sample, then check
+        * if the stsd index is different from the last used one. */
+        sc->stsc_sample++;
+        if (sc->stsc_index < sc->stsc_count - 1 &&
+            mov_get_stsc_samples(sc, sc->stsc_index) == sc->stsc_sample) {
+            sc->stsc_index++;
+            sc->stsc_sample = 0;
+        /* Do not check indexes after a switch. */
+        } else if (sc->stsc_data[sc->stsc_index].id > 0 &&
+                   sc->stsc_data[sc->stsc_index].id - 1 < sc->stsd_count &&
+                   sc->stsc_data[sc->stsc_index].id - 1 != sc->last_stsd_index) {
+            ret = mov_change_extradata(sc, pkt);
+            if (ret < 0)
+                return ret;
+        }
+    }
 
     if (mov->aax_mode)
         aax_filter(pkt->data, pkt->size, mov);
@@ -5273,6 +5451,18 @@ static int mov_seek_stream(AVFormatContext *s, AVStream *st, int64_t timestamp, 
             }
             time_sample = next;
         }
+    }
+
+    /* adjust stsd index */
+    time_sample = 0;
+    for (i = 0; i < sc->stsc_count; i++) {
+        int next = time_sample + mov_get_stsc_samples(sc, i);
+        if (next > sc->current_sample) {
+            sc->stsc_index = i;
+            sc->stsc_sample = sc->current_sample - time_sample;
+            break;
+        }
+        time_sample = next;
     }
 
     ret = mov_seek_auxiliary_info(s, sc);

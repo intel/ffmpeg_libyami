@@ -135,11 +135,12 @@ struct AVStreamInternal {
     int reorder;
 
     /**
-     * bitstream filter to run on stream
+     * bitstream filters to run on stream
      * - encoding: Set by muxer using ff_stream_add_bitstream_filter
      * - decoding: unused
      */
-    AVBitStreamFilterContext *bsfc;
+    AVBSFContext **bsfcs;
+    int nb_bsfcs;
 
     /**
      * Whether or not check_bitstream should still be run on each packet
@@ -490,6 +491,15 @@ int ff_generate_avci_extradata(AVStream *st);
 int ff_stream_add_bitstream_filter(AVStream *st, const char *name, const char *args);
 
 /**
+ * Copy encoding parameters from source to destination stream
+ *
+ * @param dst pointer to destination AVStream
+ * @param src pointer to source AVStream
+ * @return >=0 on success, AVERROR code on error
+ */
+int ff_stream_encode_params_copy(AVStream *dst, const AVStream *src);
+
+/**
  * Wrap errno on rename() error.
  *
  * @param oldpath source path
@@ -562,6 +572,16 @@ int ffio_open2_wrapper(struct AVFormatContext *s, AVIOContext **pb, const char *
  */
 #define FFERROR_REDO FFERRTAG('R','E','D','O')
 
+/**
+ * Utility function to open IO stream of output format.
+ *
+ * @param s AVFormatContext
+ * @param url URL or file name to open for writing
+ * @options optional options which will be passed to io_open callback
+ * @return >=0 on success, negative AVERROR in case of failure
+ */
+int ff_format_output_open(AVFormatContext *s, const char *url, AVDictionary **options);
+
 /*
  * A wrapper around AVFormatContext.io_close that should be used
  * instead of calling the pointer directly.
@@ -619,5 +639,17 @@ int ff_get_packet_palette(AVFormatContext *s, AVPacket *pkt, int ret, uint32_t *
  * Finalize buf into extradata and set its size appropriately.
  */
 int ff_bprint_to_codecpar_extradata(AVCodecParameters *par, struct AVBPrint *buf);
+
+/**
+ * Find the next packet in the interleaving queue for the given stream.
+ * The packet is not removed from the interleaving queue, but only
+ * a pointer to it is returned.
+ *
+ * @param ts_offset the ts difference between packet in the que and the muxer.
+ *
+ * @return a pointer to the next packet, or NULL if no packet is queued
+ *         for this stream.
+ */
+const AVPacket *ff_interleaved_peek(AVFormatContext *s, int stream, int64_t *ts_offset);
 
 #endif /* AVFORMAT_INTERNAL_H */

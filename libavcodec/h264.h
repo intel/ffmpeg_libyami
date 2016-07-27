@@ -31,9 +31,9 @@
 #include "libavutil/buffer.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/thread.h"
+
 #include "cabac.h"
 #include "error_resilience.h"
-#include "get_bits.h"
 #include "h264_parse.h"
 #include "h264_sei.h"
 #include "h2645_parse.h"
@@ -234,8 +234,7 @@ typedef struct H264ParamSets {
     AVBufferRef *sps_ref;
     /* currently active parameters sets */
     const PPS *pps;
-    // FIXME this should properly be const
-    SPS *sps;
+    const SPS *sps;
 } H264ParamSets;
 
 /**
@@ -370,11 +369,13 @@ typedef struct H264SliceContext {
     int mb_xy;
     int resync_mb_x;
     int resync_mb_y;
+    unsigned int first_mb_addr;
     // index of the first MB of the next slice
     int next_slice_idx;
     int mb_skip_run;
     int is_complex;
 
+    int picture_structure;
     int mb_field_decoding_flag;
     int mb_mbaff;               ///< mb_aff_frame && mb_field_decoding_flag
 
@@ -406,6 +407,13 @@ typedef struct H264SliceContext {
     H264Ref ref_list[2][48];        /**< 0..15: frame refs, 16..47: mbaff field refs.
                                          *   Reordered version of default_ref_list
                                          *   according to picture reordering in slice header */
+    struct {
+        uint8_t op;
+        uint32_t val;
+    } ref_modifications[2][32];
+    int nb_ref_modifications[2];
+
+    unsigned int pps_id;
 
     const uint8_t *intra_pcm_ptr;
     int16_t *dc_val_base;
@@ -448,6 +456,10 @@ typedef struct H264SliceContext {
     CABACContext cabac;
     uint8_t cabac_state[1024];
     int cabac_init_idc;
+
+    MMCO mmco[MAX_MMCO_COUNT];
+    int  nb_mmco;
+    int explicit_ref_marking;
 } H264SliceContext;
 
 /**
@@ -460,7 +472,6 @@ typedef struct H264Context {
     H264DSPContext h264dsp;
     H264ChromaContext h264chroma;
     H264QpelContext h264qpel;
-    GetBitContext gb;
 
     H264Picture DPB[H264_MAX_PICTURE_COUNT];
     H264Picture *cur_pic_ptr;
@@ -515,11 +526,6 @@ typedef struct H264Context {
     uint32_t *mb2b_xy;  // FIXME are these 4 a good idea?
     uint32_t *mb2br_xy;
     int b_stride;       // FIXME use s->b4_stride
-
-
-    unsigned current_sps_id; ///< id of the current SPS
-
-    int au_pps_id; ///< pps_id of current access unit
 
     uint16_t *slice_table;      ///< slice_table_base + 2*mb_stride + 1
 
@@ -599,8 +605,9 @@ typedef struct H264Context {
      * memory management control operations buffer.
      */
     MMCO mmco[MAX_MMCO_COUNT];
-    int mmco_index;
+    int  nb_mmco;
     int mmco_reset;
+    int explicit_ref_marking;
 
     int long_ref_count;     ///< number of actual long term references
     int short_ref_count;    ///< number of actual short term references
@@ -720,19 +727,17 @@ int ff_h264_get_slice_type(const H264SliceContext *sl);
  */
 int ff_h264_alloc_tables(H264Context *h);
 
-int ff_h264_decode_ref_pic_list_reordering(H264Context *h, H264SliceContext *sl);
-void ff_h264_fill_mbaff_ref_list(H264SliceContext *sl);
+int ff_h264_decode_ref_pic_list_reordering(const H264Context *h, H264SliceContext *sl);
+int ff_h264_build_ref_list(H264Context *h, H264SliceContext *sl);
 void ff_h264_remove_all_refs(H264Context *h);
 
 /**
  * Execute the reference picture marking (memory management control operations).
  */
-int ff_h264_execute_ref_pic_marking(H264Context *h, MMCO *mmco, int mmco_count);
+int ff_h264_execute_ref_pic_marking(H264Context *h);
 
-int ff_h264_decode_ref_pic_marking(H264Context *h, GetBitContext *gb,
-                                   int first_slice);
-
-int ff_generate_sliding_window_mmcos(H264Context *h, int first_slice);
+int ff_h264_decode_ref_pic_marking(const H264Context *h, H264SliceContext *sl,
+                                   GetBitContext *gb);
 
 void ff_h264_hl_decode_mb(const H264Context *h, H264SliceContext *sl);
 int ff_h264_decode_init(AVCodecContext *avctx);
@@ -835,9 +840,9 @@ static av_always_inline uint16_t pack8to16(unsigned a, unsigned b)
 /**
  * Get the chroma qp.
  */
-static av_always_inline int get_chroma_qp(const H264Context *h, int t, int qscale)
+static av_always_inline int get_chroma_qp(const PPS *pps, int t, int qscale)
 {
-    return h->ps.pps->chroma_qp_table[t][qscale];
+    return pps->chroma_qp_table[t][qscale];
 }
 
 /**
@@ -989,7 +994,8 @@ int ff_h264_slice_context_init(H264Context *h, H264SliceContext *sl);
 
 void ff_h264_draw_horiz_band(const H264Context *h, H264SliceContext *sl, int y, int height);
 
-int ff_h264_decode_slice_header(H264Context *h, H264SliceContext *sl);
+int ff_h264_decode_slice_header(H264Context *h, H264SliceContext *sl,
+                                const H2645NAL *nal);
 #define SLICE_SINGLETHREAD 1
 #define SLICE_SKIPED 2
 

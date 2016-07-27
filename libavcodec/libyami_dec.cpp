@@ -31,11 +31,14 @@ extern "C" {
 #include "libavutil/imgutils.h"
 #include "libavutil/opt.h"
 #include "libavutil/time.h"
+#include "libavutil/mem.h"
+#include "libavutil/pixdesc.h"
 #include "internal.h"
+#include "libavutil/internal.h"
 }
 #include "VideoDecoderHost.h"
-#include "libyami_dec.h"
 #include "libyami.h"
+#include "libyami_dec.h"
 
 using namespace YamiMediaCodec;
 
@@ -149,6 +152,11 @@ static void ff_yami_recycle_frame(void *opaque, uint8_t *data)
     av_log(avctx, AV_LOG_DEBUG, "recycle previous frame: %p\n", yami_image);
 }
 
+/*
+ * when decode output format is YAMI, don't move the decoded data from GPU to CPU,
+ * otherwise, used the USWC memory copy. maybe change this solution with generic
+ * hardware surface upload/download filter "hwupload/hwdownload"
+ */
 static int ff_convert_to_frame(AVCodecContext *avctx, YamiImage *from, AVFrame *to)
 {
     if(!avctx || !from || !to)
@@ -191,9 +199,13 @@ static const char *get_mime(AVCodecID id)
         return YAMI_MIME_H265;
     case AV_CODEC_ID_VP8:
         return YAMI_MIME_VP8;
+    case AV_CODEC_ID_MPEG2VIDEO:
+        return YAMI_MIME_MPEG2;
+    case AV_CODEC_ID_VC1:
+        return YAMI_MIME_VC1;
     default:
         av_assert0(!"Invalid codec ID!");
-        return 0;
+        return NULL;
     }
 }
 
@@ -468,3 +480,5 @@ AVCodec ff_libyami_##NAME##_decoder = { \
 YAMI_DEC(h264, AV_CODEC_ID_H264)
 YAMI_DEC(hevc, AV_CODEC_ID_HEVC)
 YAMI_DEC(vp8, AV_CODEC_ID_VP8)
+YAMI_DEC(mpeg2, AV_CODEC_ID_MPEG2VIDEO)
+YAMI_DEC(vc1, AV_CODEC_ID_VC1)

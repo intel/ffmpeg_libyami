@@ -41,7 +41,7 @@
 
 typedef struct MediaCodecH264DecContext {
 
-    MediaCodecDecContext ctx;
+    MediaCodecDecContext *ctx;
 
     AVBSFContext *bsf;
 
@@ -55,7 +55,8 @@ static av_cold int mediacodec_decode_close(AVCodecContext *avctx)
 {
     MediaCodecH264DecContext *s = avctx->priv_data;
 
-    ff_mediacodec_dec_close(avctx, &s->ctx);
+    ff_mediacodec_dec_close(avctx, s->ctx);
+    s->ctx = NULL;
 
     av_fifo_free(s->fifo);
 
@@ -63,6 +64,58 @@ static av_cold int mediacodec_decode_close(AVCodecContext *avctx)
     av_packet_unref(&s->filtered_pkt);
 
     return 0;
+}
+
+static int h264_ps_to_nalu(const uint8_t *src, int src_size, uint8_t **out, int *out_size)
+{
+    int i;
+    int ret = 0;
+    uint8_t *p = NULL;
+    static const uint8_t nalu_header[] = { 0x00, 0x00, 0x00, 0x01 };
+
+    if (!out || !out_size) {
+        return AVERROR(EINVAL);
+    }
+
+    p = av_malloc(sizeof(nalu_header) + src_size);
+    if (!p) {
+        return AVERROR(ENOMEM);
+    }
+
+    *out = p;
+    *out_size = sizeof(nalu_header) + src_size;
+
+    memcpy(p, nalu_header, sizeof(nalu_header));
+    memcpy(p + sizeof(nalu_header), src, src_size);
+
+    /* Escape 0x00, 0x00, 0x0{0-3} pattern */
+    for (i = 4; i < *out_size; i++) {
+        if (i < *out_size - 3 &&
+            p[i + 0] == 0 &&
+            p[i + 1] == 0 &&
+            p[i + 2] <= 3) {
+            uint8_t *new;
+
+            *out_size += 1;
+            new = av_realloc(*out, *out_size);
+            if (!new) {
+                ret = AVERROR(ENOMEM);
+                goto done;
+            }
+            *out = p = new;
+
+            i = i + 3;
+            memmove(p + i, p + i - 1, *out_size - i);
+            p[i - 1] = 0x03;
+        }
+    }
+done:
+    if (ret < 0) {
+        av_freep(out);
+        *out_size = 0;
+    }
+
+    return ret;
 }
 
 static av_cold int mediacodec_decode_init(AVCodecContext *avctx)
@@ -112,15 +165,35 @@ static av_cold int mediacodec_decode_init(AVCodecContext *avctx)
     }
 
     if (pps && sps) {
-        ff_AMediaFormat_setBuffer(format, "csd-0", (void*)sps->data, sps->data_size);
-        ff_AMediaFormat_setBuffer(format, "csd-1", (void*)pps->data, pps->data_size);
+        uint8_t *data = NULL;
+        size_t data_size = 0;
+
+        if ((ret = h264_ps_to_nalu(sps->data, sps->data_size, &data, &data_size)) < 0) {
+            goto done;
+        }
+        ff_AMediaFormat_setBuffer(format, "csd-0", (void*)data, data_size);
+        av_freep(&data);
+
+        if ((ret = h264_ps_to_nalu(pps->data, pps->data_size, &data, &data_size)) < 0) {
+            goto done;
+        }
+        ff_AMediaFormat_setBuffer(format, "csd-1", (void*)data, data_size);
+        av_freep(&data);
     } else {
         av_log(avctx, AV_LOG_ERROR, "Could not extract PPS/SPS from extradata");
         ret = AVERROR_INVALIDDATA;
         goto done;
     }
 
-    if ((ret = ff_mediacodec_dec_init(avctx, &s->ctx, CODEC_MIME, format)) < 0) {
+    s->ctx = av_mallocz(sizeof(*s->ctx));
+    if (!s->ctx) {
+        av_log(avctx, AV_LOG_ERROR, "Failed to allocate MediaCodecDecContext\n");
+        ret = AVERROR(ENOMEM);
+        goto done;
+    }
+
+    if ((ret = ff_mediacodec_dec_init(avctx, s->ctx, CODEC_MIME, format)) < 0) {
+        s->ctx = NULL;
         goto done;
     }
 
@@ -169,7 +242,7 @@ static int mediacodec_process_data(AVCodecContext *avctx, AVFrame *frame,
 {
     MediaCodecH264DecContext *s = avctx->priv_data;
 
-    return ff_mediacodec_dec_decode(avctx, &s->ctx, frame, got_frame, pkt);
+    return ff_mediacodec_dec_decode(avctx, s->ctx, frame, got_frame, pkt);
 }
 
 static int mediacodec_decode_frame(AVCodecContext *avctx, void *data,
@@ -196,6 +269,32 @@ static int mediacodec_decode_frame(AVCodecContext *avctx, void *data,
         av_fifo_generic_write(s->fifo, &input_pkt, sizeof(input_pkt), NULL);
     }
 
+    /*
+     * MediaCodec.flush() discards both input and output buffers, thus we
+     * need to delay the call to this function until the user has released or
+     * renderered the frames he retains.
+     *
+     * After we have buffered an input packet, check if the codec is in the
+     * flushing state. If it is, we need to call ff_mediacodec_dec_flush.
+     *
+     * ff_mediacodec_dec_flush returns 0 if the flush cannot be performed on
+     * the codec (because the user retains frames). The codec stays in the
+     * flushing state.
+     *
+     * ff_mediacodec_dec_flush returns 1 if the flush can actually be
+     * performed on the codec. The codec leaves the flushing state and can
+     * process again packets.
+     *
+     * ff_mediacodec_dec_flush returns a negative value if an error has
+     * occurred.
+     *
+     */
+    if (ff_mediacodec_dec_is_flushing(avctx, s->ctx)) {
+        if (!ff_mediacodec_dec_flush(avctx, s->ctx)) {
+            return avpkt->size;
+        }
+    }
+
     /* process buffered data */
     while (!*got_frame) {
         /* prepare the input data -- convert to Annex B if needed */
@@ -207,7 +306,7 @@ static int mediacodec_decode_frame(AVCodecContext *avctx, void *data,
             /* no more data */
             if (av_fifo_size(s->fifo) < sizeof(AVPacket)) {
                 return avpkt->size ? avpkt->size :
-                    ff_mediacodec_dec_decode(avctx, &s->ctx, frame, got_frame, avpkt);
+                    ff_mediacodec_dec_decode(avctx, s->ctx, frame, got_frame, avpkt);
             }
 
             av_fifo_generic_read(s->fifo, &input_pkt, sizeof(input_pkt), NULL);
@@ -254,7 +353,7 @@ static void mediacodec_decode_flush(AVCodecContext *avctx)
 
     av_packet_unref(&s->filtered_pkt);
 
-    ff_mediacodec_dec_flush(avctx, &s->ctx);
+    ff_mediacodec_dec_flush(avctx, s->ctx);
 }
 
 AVCodec ff_h264_mediacodec_decoder = {

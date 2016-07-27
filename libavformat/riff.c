@@ -181,6 +181,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_MJPEG,        MKTAG('L', 'J', 'P', 'G') },
     { AV_CODEC_ID_MJPEG,        MKTAG('d', 'm', 'b', '1') },
     { AV_CODEC_ID_MJPEG,        MKTAG('m', 'j', 'p', 'a') },
+    { AV_CODEC_ID_MJPEG,        MKTAG('J', 'R', '2', '4') }, /* Quadrox Mjpeg */
     { AV_CODEC_ID_LJPEG,        MKTAG('L', 'J', 'P', 'G') },
     /* Pegasus lossless JPEG */
     { AV_CODEC_ID_MJPEG,        MKTAG('J', 'P', 'G', 'L') },
@@ -424,6 +425,7 @@ const AVCodecTag ff_codec_bmp_tags[] = {
     { AV_CODEC_ID_M101,         MKTAG('M', '1', '0', '1') },
     { AV_CODEC_ID_M101,         MKTAG('M', '1', '0', '2') },
     { AV_CODEC_ID_MAGICYUV,     MKTAG('M', 'A', 'G', 'Y') },
+    { AV_CODEC_ID_YLC,          MKTAG('Y', 'L', 'C', '0') },
 
     { AV_CODEC_ID_NONE,         0 }
 };
