@@ -1,7 +1,6 @@
 /*
- * Android MediaCodec Surface functions
- *
- * Copyright (c) 2016 Matthieu Bouron <matthieu.bouron stupeflix.com>
+ * OpenH264 shared utils
+ * Copyright (C) 2014 Martin Storsjo
  *
  * This file is part of FFmpeg.
  *
@@ -20,37 +19,21 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <jni.h>
+#ifndef AVCODEC_LIBOPENH264_H
+#define AVCODEC_LIBOPENH264_H
 
-#include "ffjni.h"
-#include "mediacodec_surface.h"
+#define OPENH264_VER_AT_LEAST(maj, min) \
+    ((OPENH264_MAJOR  > (maj)) || \
+     (OPENH264_MAJOR == (maj) && OPENH264_MINOR >= (min)))
 
-void *ff_mediacodec_surface_ref(void *surface, void *log_ctx)
-{
-    JNIEnv *env = NULL;
+// This function will be provided to the libopenh264 library.  The function will be called
+// when libopenh264 wants to log a message (error, warning, info, etc.).  The signature for
+// this function (defined in .../codec/api/svc/codec_api.h) is:
+//
+//        typedef void (*WelsTraceCallback) (void* ctx, int level, const char* string);
 
-    void *reference = NULL;
+void ff_libopenh264_trace_callback(void *ctx, int level, const char *msg);
 
-    env = ff_jni_get_env(log_ctx);
-    if (!env) {
-        return NULL;
-    }
+int ff_libopenh264_check_version(void *logctx);
 
-    reference = (*env)->NewGlobalRef(env, surface);
-
-    return reference;
-}
-
-int ff_mediacodec_surface_unref(void *surface, void *log_ctx)
-{
-    JNIEnv *env = NULL;
-
-    env = ff_jni_get_env(log_ctx);
-    if (!env) {
-        return AVERROR_EXTERNAL;
-    }
-
-    (*env)->DeleteGlobalRef(env, surface);
-
-    return 0;
-}
+#endif /* AVCODEC_LIBOPENH264_H */
