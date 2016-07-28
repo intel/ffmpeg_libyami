@@ -98,12 +98,10 @@ static void *ff_yami_decode_thread(void *arg)
                 av_log(avctx, AV_LOG_VERBOSE, "decode thread wait because s->in_queue is empty\n");
                 pthread_cond_wait(&s->in_cond, &s->in_mutex); // wait if no todo frame is available
             }
-        }
-
-        if (s->in_queue->empty()) { // may wake up from EOS/Close
             pthread_mutex_unlock(&s->in_mutex);
             continue;
         }
+
         av_log(avctx, AV_LOG_VERBOSE, "s->in_queue->size()=%ld\n", s->in_queue->size());
         in_buffer = s->in_queue->front();
         pthread_mutex_unlock(&s->in_mutex);
@@ -125,7 +123,9 @@ static void *ff_yami_decode_thread(void *arg)
             break;
         }
         s->decode_count_yami++;
+        pthread_mutex_lock(&s->in_mutex);
         s->in_queue->pop_front();
+        pthread_mutex_unlock(&s->in_mutex);
         av_free(in_buffer->data);
         av_free(in_buffer);
     }
