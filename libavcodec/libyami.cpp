@@ -367,7 +367,7 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
     return true;
 }
 
-YamiStatus ff_yami_alloc_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params) 
+YamiStatus ff_yami_alloc_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params)
 {
     if (!params)
         return YAMI_INVALID_PARAM;
@@ -382,6 +382,9 @@ YamiStatus ff_yami_alloc_surface (SurfaceAllocator* thiz, SurfaceAllocParams* pa
     VASurfaceID* v = new VASurfaceID[size];
     VAStatus status = vaCreateSurfaces(ff_vaapi_create_display(), VA_RT_FORMAT_YUV420, width,
             height, &v[0], size, NULL, 0);
+    if (!ff_check_vaapi_status(status, "vaCreateSurfaces"))
+        return YAMI_FAIL;
+
     params->surfaces = new intptr_t[size];
     for (uint32_t i = 0; i < size; i++) {
         params->surfaces[i] = (intptr_t)v[i];
@@ -390,7 +393,7 @@ YamiStatus ff_yami_alloc_surface (SurfaceAllocator* thiz, SurfaceAllocParams* pa
     return YAMI_SUCCESS;
 }
 
-YamiStatus ff_yami_free_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params) 
+YamiStatus ff_yami_free_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params)
 {
     if (!params || !params->size || !params->surfaces)
         return YAMI_INVALID_PARAM;
@@ -409,7 +412,7 @@ YamiStatus ff_yami_free_surface (SurfaceAllocator* thiz, SurfaceAllocParams* par
     return YAMI_SUCCESS;
 }
 
-void ff_yami_unref_surface (SurfaceAllocator* thiz) 
+void ff_yami_unref_surface (SurfaceAllocator* thiz)
 {
     //TODO
 }
