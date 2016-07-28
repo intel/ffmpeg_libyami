@@ -97,7 +97,7 @@ fate-filter-asetrate: CMD = framecrc -i $(SRC) -aframes 20 -af asetrate=20000
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, CHORUS, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-chorus
 fate-filter-chorus: tests/data/asynth-22050-1.wav
 fate-filter-chorus: SRC = $(TARGET_PATH)/tests/data/asynth-22050-1.wav
-fate-filter-chorus: CMD = framecrc -i $(SRC) -aframes 10 -af chorus=0.5:0.5:64:0.5:0.25:2
+fate-filter-chorus: CMD = framecrc -i $(SRC) -aframes 10 -af chorus=0.050001:0.050002:64:0.050001:0.025003:2.00004
 
 FATE_AFILTER-$(call FILTERDEMDECENCMUX, DCSHIFT, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-dcshift
 fate-filter-dcshift: tests/data/asynth-44100-2.wav
@@ -108,6 +108,11 @@ FATE_AFILTER-$(call FILTERDEMDECENCMUX, EARWAX, WAV, PCM_S16LE, PCM_S16LE, WAV) 
 fate-filter-earwax: tests/data/asynth-44100-2.wav
 fate-filter-earwax: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
 fate-filter-earwax: CMD = framecrc -i $(SRC) -aframes 20 -af earwax
+
+FATE_AFILTER-$(call FILTERDEMDECENCMUX, EXTRASTEREO, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-extrastereo
+fate-filter-extrastereo: tests/data/asynth-44100-2.wav
+fate-filter-extrastereo: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
+fate-filter-extrastereo: CMD = framecrc -i $(SRC) -aframes 20 -af extrastereo=m=2
 
 tests/data/hls-list.m3u8: TAG = GEN
 tests/data/hls-list.m3u8: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data
@@ -213,6 +218,18 @@ fate-filter-hdcd: SRC = $(TARGET_SAMPLES)/filter/hdcd.flac
 fate-filter-hdcd: CMD = md5 -i $(SRC) -af hdcd -f s24le
 fate-filter-hdcd: CMP = oneline
 fate-filter-hdcd: REF = 5db465a58d2fd0d06ca944b883b33476
+
+FATE_AFILTER_SAMPLES-$(call FILTERDEMDECENCMUX, HDCD, FLAC, FLAC, PCM_S24LE, PCM_S24LE) += fate-filter-hdcd-false-positive
+fate-filter-hdcd-false-positive: SRC = $(TARGET_SAMPLES)/filter/hdcd-false-positive.flac
+fate-filter-hdcd-false-positive: CMD = md5 -i $(SRC) -af hdcd -f s24le
+fate-filter-hdcd-false-positive: CMP = grep
+fate-filter-hdcd-false-positive: REF = HDCD detected: no
+
+FATE_AFILTER_SAMPLES-$(call FILTERDEMDECENCMUX, HDCD, FLAC, FLAC, PCM_S24LE, PCM_S24LE) += fate-filter-hdcd-detect-errors
+fate-filter-hdcd-detect-errors: SRC = $(TARGET_SAMPLES)/filter/hdcd-encoding-errors.flac
+fate-filter-hdcd-detect-errors: CMD = md5 -i $(SRC) -af hdcd -f s24le
+fate-filter-hdcd-detect-errors: CMP = grep
+fate-filter-hdcd-detect-errors: REF = detectable errors: [1-9]
 
 FATE_AFILTER-yes += fate-filter-formats
 fate-filter-formats: libavfilter/tests/formats$(EXESUF)
