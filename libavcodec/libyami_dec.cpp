@@ -42,18 +42,6 @@ extern "C" {
 
 using namespace YamiMediaCodec;
 
-static int ff_fix_yami_h264_dpb(YamiDecContext *s)
-{
-    if (!s) return 0;
-    if (s->decode_count - s->decode_count_yami > 16)
-        return 1;
-    if (s->decode_count_yami - s->render_count > 16)
-        return 1;
-    if (s->render_count - s->recycle_count > 3)
-        return 1;
-    return 0;
-}
-
 static int ff_yami_decode_thread_init(YamiDecContext *s)
 {
     int ret = 0;
@@ -62,8 +50,6 @@ static int ff_yami_decode_thread_init(YamiDecContext *s)
     if ((ret = pthread_mutex_init(&s->ctx_mutex, NULL)) < 0)
         return ret;
     if ((ret = pthread_mutex_init(&s->in_mutex, NULL)) < 0)
-        return ret;
-    if ((ret = pthread_mutex_init(&s->out_mutex, NULL)) < 0)
         return ret;
     if ((ret = pthread_cond_init(&s->in_cond, NULL)) < 0)
         return ret;
@@ -84,18 +70,10 @@ static int ff_yami_decode_thread_close(YamiDecContext *s)
         pthread_cond_signal(&s->in_cond);
         av_usleep(10000);
         pthread_mutex_lock(&s->ctx_mutex);
-        pthread_mutex_lock(&s->out_mutex);
-        if (!s->out_queue->empty()) {
-            YamiImage *yami_image = s->out_queue->front();
-            yami_image->output_frame.reset();
-            s->out_queue->pop_front();
-        }
-        pthread_mutex_unlock(&s->out_mutex);
     }
     pthread_mutex_unlock(&s->ctx_mutex);
     pthread_mutex_destroy(&s->in_mutex);
     pthread_cond_destroy(&s->in_cond);
-    pthread_mutex_destroy(&s->out_mutex);
     return 0;
 }
 
@@ -107,31 +85,6 @@ static void *ff_yami_decode_thread(void *arg)
         VideoDecodeBuffer *in_buffer = NULL;
         // deque one input buffer
         av_log(avctx, AV_LOG_VERBOSE, "decode thread runs one cycle start ... \n");
-
-        if (s->decode_status == DECODE_THREAD_NOT_INIT)
-            continue;
-
-        YamiImage *yami_image = (YamiImage *)av_mallocz(sizeof(YamiImage));
-        if (!yami_image) {
-            av_log(avctx, AV_LOG_ERROR, "decode thread wait because s->in_queue is empty\n");
-        }
-        /* get all decoder frame before push packet to decoder */
-        yami_image->output_frame = s->decoder->getOutput();
-        if (yami_image->output_frame) {
-            pthread_mutex_lock(&s->out_mutex);
-            s->out_queue->push_back(yami_image);
-            pthread_mutex_unlock(&s->out_mutex);
-            continue;
-        } else {
-            /* no decoder frame and end of stream */
-            if (s->decode_status == DECODE_THREAD_GOT_EOS
-                && s->in_queue->empty()) {
-                av_free(yami_image);
-                break;
-            }
-        }
-        av_free(yami_image);
-
         pthread_mutex_lock(&s->in_mutex);
         if (s->in_queue->empty()) {
             if (s->decode_status == DECODE_THREAD_GOT_EOS) {
@@ -146,9 +99,6 @@ static void *ff_yami_decode_thread(void *arg)
                 av_log(avctx, AV_LOG_VERBOSE, "decode thread wait because s->in_queue is empty\n");
                 pthread_cond_wait(&s->in_cond, &s->in_mutex); // wait if no todo frame is available
             }
-        }
-
-        if (s->in_queue->empty()) { // may wake up from EOS/Close
             pthread_mutex_unlock(&s->in_mutex);
             continue;
         }
@@ -160,14 +110,6 @@ static void *ff_yami_decode_thread(void *arg)
         av_log(avctx, AV_LOG_VERBOSE, "try to process one input buffer, in_buffer->data=%p, in_buffer->size=%zu\n", in_buffer->data, in_buffer->size);
         Decode_Status status = s->decoder->decode(in_buffer);
         av_log(avctx, AV_LOG_VERBOSE, "decode() status=%d, decode_count_yami=%d render_count %d\n", status, s->decode_count_yami, s->render_count);
-        if (DECODE_SUCCESS == status && !s->format_info) {
-            s->format_info = s->decoder->getFormatInfo();
-            av_log(avctx, AV_LOG_VERBOSE, "decode format %dx%d\n", s->format_info->width,s->format_info->height);
-            if (!s->format_info) {
-                avctx->width = s->format_info->width;
-                avctx->height = s->format_info->height;
-            }
-        }
         if (DECODE_FORMAT_CHANGE == status) {
             s->format_info = s->decoder->getFormatInfo();
             av_log(avctx, AV_LOG_VERBOSE, "decode format change %dx%d\n", s->format_info->width,s->format_info->height);
@@ -185,7 +127,6 @@ static void *ff_yami_decode_thread(void *arg)
         pthread_mutex_lock(&s->in_mutex);
         s->in_queue->pop_front();
         pthread_mutex_unlock(&s->in_mutex);
-
         av_free(in_buffer->data);
         av_free(in_buffer);
     }
@@ -194,8 +135,6 @@ static void *ff_yami_decode_thread(void *arg)
     pthread_mutex_lock(&s->ctx_mutex);
     s->decode_status = DECODE_THREAD_EXIT;
     pthread_mutex_unlock(&s->ctx_mutex);
-    pthread_mutex_lock(&s->out_mutex);
-    pthread_mutex_unlock(&s->out_mutex);
     return NULL;
 }
 
@@ -210,7 +149,6 @@ static void ff_yami_recycle_frame(void *opaque, uint8_t *data)
     /* XXX: should I delete frame buffer?? */
     yami_image->output_frame.reset();
     av_free(yami_image);
-    s->recycle_count++;
     pthread_mutex_unlock(&s->ctx_mutex);
     av_log(avctx, AV_LOG_DEBUG, "recycle previous frame: %p\n", yami_image);
 }
@@ -338,7 +276,6 @@ static int yami_dec_init(AVCodecContext *avctx)
         return AVERROR_BUG;
     }
     s->in_queue = new std::deque<VideoDecodeBuffer*>;
-    s->out_queue = new std::deque<YamiImage*>;
 
 #if HAVE_PTHREADS
     if (ff_yami_decode_thread_init(s) < 0)
@@ -350,7 +287,6 @@ static int yami_dec_init(AVCodecContext *avctx)
     s->decode_count = 0;
     s->decode_count_yami = 0;
     s->render_count = 0;
-    s->recycle_count = 0;
     return 0;
 }
 
@@ -371,6 +307,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     VideoDecodeBuffer *in_buffer = NULL;
     Decode_Status status = DECODE_FAIL;
     YamiImage *yami_image =  NULL;
+    int ret = 0;
     AVFrame *frame = (AVFrame *)data;
     av_log(avctx, AV_LOG_VERBOSE, "yami_dec_frame\n");
     // append avpkt to input buffer queue
@@ -383,21 +320,27 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         if (!in_buffer->data)
             return AVERROR(ENOMEM);
         memcpy(in_buffer->data, avpkt->data, avpkt->size);
-        s->decode_count++;
     }
     in_buffer->size = avpkt->size;
     in_buffer->timeStamp = avpkt->pts;
     if (avpkt->duration != 0)
         s->duration = avpkt->duration;
-    if (s->decode_status < DECODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
+    while (s->decode_status < DECODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
         pthread_mutex_lock(&s->in_mutex);
-        s->in_queue->push_back(in_buffer);
-        av_log(avctx, AV_LOG_VERBOSE, "wakeup decode thread ...\n");
-        pthread_cond_signal(&s->in_cond);
+        if (s->in_queue->size() < DECODE_QUEUE_SIZE) {
+            s->in_queue->push_back(in_buffer);
+            av_log(avctx, AV_LOG_VERBOSE, "wakeup decode thread ...\n");
+            pthread_cond_signal(&s->in_cond);
+            pthread_mutex_unlock(&s->in_mutex);
+            break;
+        }
         pthread_mutex_unlock(&s->in_mutex);
-
+        av_log(avctx, AV_LOG_DEBUG,
+               "s->in_queue->size()=%ld, s->decode_count=%d, s->decode_count_yami=%d, too many buffer are under decoding, wait ...\n",
+               s->in_queue->size(), s->decode_count, s->decode_count_yami);
+        av_usleep(1000);
     };
-
+    s->decode_count++;
     // decode thread status update
     pthread_mutex_lock(&s->ctx_mutex);
     switch (s->decode_status) {
@@ -438,7 +381,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
             yami_image->output_frame = s->decoder->getOutput();
             av_log(avctx, AV_LOG_DEBUG, "getoutput() status=%d\n", status);
             pthread_mutex_lock(&s->ctx_mutex);
-            if (!(!avpkt->data && !yami_image->output_frame && s->decode_status != DECODE_THREAD_EXIT)) {
+            if (avpkt->data || yami_image->output_frame || s->decode_status == DECODE_THREAD_EXIT) {
                 pthread_mutex_unlock(&s->ctx_mutex);
                 break;
             }
@@ -469,17 +412,18 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
            "decode_count_yami=%d, decode_count=%d, render_count=%d\n",
            s->decode_count_yami, s->decode_count, s->render_count);
     return avpkt->size;
+fail:
+    if (yami_image) {
+        yami_image->output_frame.reset();
+        if (yami_image)
+            av_free(yami_image);
+    }
+    return ret;
 }
 
 static int yami_dec_close(AVCodecContext *avctx)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
-
-    while(!s->out_queue->empty()) {
-        YamiImage *yami_image = s->out_queue->front();
-        yami_image->output_frame.reset();
-        s->out_queue->pop_front();
-    }
 
     ff_yami_decode_thread_close(s);
     if (s->decoder) {
