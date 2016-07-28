@@ -94,7 +94,7 @@ static void *ff_yami_decode_thread(void *arg)
                 flush_buf.size = 0;
                 s->decoder->decode(&flush_buf);
                 pthread_mutex_unlock(&s->in_mutex);
-                continue;
+                break;
             } else {
                 av_log(avctx, AV_LOG_VERBOSE, "decode thread wait because s->in_queue is empty\n");
                 pthread_cond_wait(&s->in_cond, &s->in_mutex); // wait if no todo frame is available
