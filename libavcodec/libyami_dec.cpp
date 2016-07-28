@@ -88,16 +88,16 @@ static void *ff_yami_decode_thread(void *arg)
         pthread_mutex_lock(&s->in_mutex);
         if (s->in_queue->empty()) {
             if (s->decode_status == DECODE_THREAD_GOT_EOS) {
-                /* flush all frame in dpb with NULL buffer */
-                VideoDecodeBuffer flush_buf;
-                flush_buf.data = NULL;
-                flush_buf.size = 0;
-                s->decoder->decode(&flush_buf);
+                /* flush the decode buffer with NULL when get EOS */
+                VideoDecodeBuffer flush_buffer;
+                flush_buffer.data = NULL;
+                flush_buffer.size = 0;
+                s->decoder->decode(&flush_buffer);
                 pthread_mutex_unlock(&s->in_mutex);
                 break;
             } else {
-                av_log(avctx, AV_LOG_VERBOSE, "decode thread wait because s->in_queue is empty\n");
-                pthread_cond_wait(&s->in_cond, &s->in_mutex); // wait if no todo frame is available
+                av_log(avctx, AV_LOG_VERBOSE, "decode thread wait because in queue is empty\n");
+                pthread_cond_wait(&s->in_cond, &s->in_mutex); // wait the packet to decode
             }
             pthread_mutex_unlock(&s->in_mutex);
             continue;
@@ -110,6 +110,15 @@ static void *ff_yami_decode_thread(void *arg)
         av_log(avctx, AV_LOG_VERBOSE, "try to process one input buffer, in_buffer->data=%p, in_buffer->size=%zu\n", in_buffer->data, in_buffer->size);
         Decode_Status status = s->decoder->decode(in_buffer);
         av_log(avctx, AV_LOG_VERBOSE, "decode() status=%d, decode_count_yami=%d render_count %d\n", status, s->decode_count_yami, s->render_count);
+        if (DECODE_SUCCESS == status && !s->format_info) {
+            s->format_info = s->decoder->getFormatInfo();
+            av_log(avctx, AV_LOG_VERBOSE, "decode format %dx%d\n", s->format_info->width,s->format_info->height);
+            if (!s->format_info) {
+                avctx->width = s->format_info->width;
+                avctx->height = s->format_info->height;
+            }
+        }
+
         if (DECODE_FORMAT_CHANGE == status) {
             s->format_info = s->decoder->getFormatInfo();
             av_log(avctx, AV_LOG_VERBOSE, "decode format change %dx%d\n", s->format_info->width,s->format_info->height);
