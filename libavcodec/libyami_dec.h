@@ -25,9 +25,6 @@
 #ifndef LIBAVCODEC_LIBYAMI_DEC_H_
 #define LIBAVCODEC_LIBYAMI_DEC_H_
 
-
-#define DECODE_QUEUE_SIZE 8
-
 typedef enum {
     DECODE_THREAD_NOT_INIT = 0,
     DECODE_THREAD_RUNING,
@@ -50,6 +47,7 @@ struct YamiDecContext {
     pthread_cond_t in_cond;   // decode thread condition wait
     DecodeThreadStatus decode_status;
 
+    SurfaceAllocator *p_alloc;
     //the pts is no value use this value
     int duration;
     // debug use

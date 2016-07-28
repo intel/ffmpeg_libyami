@@ -366,3 +366,50 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
     ff_check_vaapi_status(vaDestroyImage(m_vaDisplay, image.image_id), "vaDestroyImage");
     return true;
 }
+
+YamiStatus ff_yami_alloc_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params) 
+{
+    if (!params)
+        return YAMI_INVALID_PARAM;
+    uint32_t size = params->size;
+    uint32_t width = params->width;
+    uint32_t height = params->height;
+    if (!width || !height || !size)
+        return YAMI_INVALID_PARAM;
+
+    size += EXTRA_SIZE;
+
+    VASurfaceID* v = new VASurfaceID[size];
+    VAStatus status = vaCreateSurfaces(ff_vaapi_create_display(), VA_RT_FORMAT_YUV420, width,
+            height, &v[0], size, NULL, 0);
+    params->surfaces = new intptr_t[size];
+    for (uint32_t i = 0; i < size; i++) {
+        params->surfaces[i] = (intptr_t)v[i];
+    }
+    params->size = size;
+    return YAMI_SUCCESS;
+}
+
+YamiStatus ff_yami_free_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params) 
+{
+    if (!params || !params->size || !params->surfaces)
+        return YAMI_INVALID_PARAM;
+    uint32_t size = params->size;
+    VADisplay m_vaDisplay = ff_vaapi_create_display();
+    VASurfaceID *surfaces = new VASurfaceID[size];
+    for (uint32_t i = 0; i < size; i++) {
+        surfaces[i] = params->surfaces[i];
+    }
+    VAStatus status = vaDestroySurfaces((VADisplay) m_vaDisplay, &surfaces[0], size);
+    delete[] surfaces;
+    if (!ff_check_vaapi_status(status, "vaDestroySurfaces"))
+        return YAMI_FAIL;
+
+    delete[] params->surfaces;
+    return YAMI_SUCCESS;
+}
+
+void ff_yami_unref_surface (SurfaceAllocator* thiz) 
+{
+    //TODO
+}

@@ -52,4 +52,13 @@ bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in);
 bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out);
 bool ff_check_vaapi_status(VAStatus status, const char *msg);
 
+YamiStatus ff_yami_alloc_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params);
+YamiStatus ff_yami_free_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params);
+void ff_yami_unref_surface (SurfaceAllocator* thiz);
+
+#define DECODE_QUEUE_SIZE 8
+#define ENCODE_QUEUE_SIZE 4
+
+#define EXTRA_SIZE (DECODE_QUEUE_SIZE + ENCODE_QUEUE_SIZE + 2) //EXTRA_SIZE must great than DEC_QUE+ENC_QUE+DBP-19 or the thread will be block
+
 #endif /* LIBAVCODEC_LIBYAMI_H_ */
