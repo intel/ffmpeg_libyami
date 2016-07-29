@@ -213,6 +213,8 @@ static const char *get_mime(AVCodecID id)
         return YAMI_MIME_MPEG2;
     case AV_CODEC_ID_VC1:
         return YAMI_MIME_VC1;
+    case AV_CODEC_ID_VP9:
+        return YAMI_MIME_VP9;
     default:
         av_assert0(!"Invalid codec ID!");
         return NULL;
@@ -495,3 +497,4 @@ YAMI_DEC(hevc, AV_CODEC_ID_HEVC)
 YAMI_DEC(vp8, AV_CODEC_ID_VP8)
 YAMI_DEC(mpeg2, AV_CODEC_ID_MPEG2VIDEO)
 YAMI_DEC(vc1, AV_CODEC_ID_VC1)
+YAMI_DEC(vp9, AV_CODEC_ID_VP9)
