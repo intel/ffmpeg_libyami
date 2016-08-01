@@ -135,7 +135,7 @@ void *ff_copy_from_uswc(void *dst, void *src, size_t size)
     int i, round;
     uint8_t *pDst, *pSrc;
 
-    if (dst == NULL || src == NULL) {
+    if (dst == NULL || src == NULL || size == 0) {
         return NULL;
     }
 
@@ -275,6 +275,9 @@ bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in)
         dest_linesize[0] = image.pitches[0];
         dest_linesize[1] = image.pitches[1];
         dest_linesize[2] = image.pitches[2];
+    } else {
+        av_log(NULL, AV_LOG_ERROR, "Unsupported the pixel format : %s.\n", av_pix_fmt_desc_get((AVPixelFormat)in->format)->name);
+        return false;
     }
 
     av_image_copy(dest_data, (int *)dest_linesize, src_data,
@@ -354,6 +357,9 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
         src_linesize[0] = image.pitches[0];
         src_linesize[1] = image.pitches[1];
         src_linesize[2] = image.pitches[2];
+    } else {
+        av_log(NULL, AV_LOG_ERROR, "Unsupported the pixel format : %s.\n", av_pix_fmt_desc_get((AVPixelFormat)out->format)->name);
+        return false;
     }
 
     av_image_copy(dest_data, (int *)dest_linesize, src_data,
