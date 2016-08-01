@@ -3063,6 +3063,7 @@ static int transcode_init(void)
             if (qsv_transcode_init(ost))
                 exit_program(1);
 #endif
+
 #if CONFIG_LIBYAMI
             if (yami_transcode_init(ist, ost))
                 exit_program(1);
