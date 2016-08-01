@@ -927,7 +927,7 @@ static int has_decode_delay_been_guessed(AVStream *st)
     if (st->codecpar->codec_id != AV_CODEC_ID_H264) return 1;
     if (!st->info) // if we have left find_stream_info then nb_decoded_frames won't increase anymore for stream copy
         return 1;
-#if CONFIG_H264_DECODER && !CONFIG_LIBYAMI_H264_DECODER
+#if CONFIG_H264_DECODER
     if (st->internal->avctx->has_b_frames &&
        avpriv_h264_has_num_reorder_frames(st->internal->avctx) == st->internal->avctx->has_b_frames)
         return 1;

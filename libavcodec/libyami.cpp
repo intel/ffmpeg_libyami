@@ -48,7 +48,7 @@ VADisplay ff_vaapi_create_display(void)
 
     if (!display) {
 #if !HAVE_VAAPI_DRM
-        const char *device = NULL;/*FIXME*/
+        const char *device = NULL;
         // Try to open the device as an X11 display.
         Display *x11_display = XOpenDisplay(device);
         if (!x11_display) {

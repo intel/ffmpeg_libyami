@@ -260,7 +260,7 @@ static int yami_dec_init(AVCodecContext *avctx)
     //set allocator
     s->p_alloc = (SurfaceAllocator *) av_mallocz(sizeof(SurfaceAllocator));
     s->p_alloc->alloc = ff_yami_alloc_surface;
-    s->p_alloc->free =  ff_yami_free_surface;
+    s->p_alloc->free = ff_yami_free_surface;
     s->p_alloc->unref = ff_yami_unref_surface;
     s->decoder->setAllocator(s->p_alloc);
 
