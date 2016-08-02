@@ -42,8 +42,7 @@
 typedef struct {
     SharedPtr<VideoFrame> output_frame;
     VADisplay va_display;
-/*if map the output_frame to buffer will use follow value*/
-}YamiImage;
+} YamiImage;
 
 VADisplay ff_vaapi_create_display(void);
 SharedPtr<VideoFrame> ff_vaapi_create_surface(uint32_t rt_fmt, int pix_fmt, uint32_t w, uint32_t h);
@@ -59,6 +58,6 @@ void ff_yami_unref_surface (SurfaceAllocator* thiz);
 #define DECODE_QUEUE_SIZE 8
 #define ENCODE_QUEUE_SIZE 4
 
-#define EXTRA_SIZE (DECODE_QUEUE_SIZE + ENCODE_QUEUE_SIZE + 2) //EXTRA_SIZE must great than DEC_QUE+ENC_QUE+DBP-19 or the thread will be block
-
+/* EXTRA_SIZE must great than DEC_QUE+ENC_QUE+DBP-19 or the thread will be block */
+#define EXTRA_SIZE (DECODE_QUEUE_SIZE + ENCODE_QUEUE_SIZE + 2)
 #endif /* LIBAVCODEC_LIBYAMI_H_ */

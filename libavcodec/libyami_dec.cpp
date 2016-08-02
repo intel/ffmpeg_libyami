@@ -83,8 +83,10 @@ static void *ff_yami_decode_thread(void *arg)
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     while (1) {
         VideoDecodeBuffer *in_buffer = NULL;
-        // deque one input buffer
-        av_log(avctx, AV_LOG_VERBOSE, "decode thread runs one cycle start ... \n");
+
+        av_log(avctx, AV_LOG_VERBOSE, "decode thread running ...\n");
+        /* when in queue is empty and don't get EOS, waiting, else
+           flush the decode buffer with NULL */
         pthread_mutex_lock(&s->in_mutex);
         if (s->in_queue->empty()) {
             if (s->decode_status == DECODE_THREAD_GOT_EOS) {
@@ -95,44 +97,57 @@ static void *ff_yami_decode_thread(void *arg)
                 s->decoder->decode(&flush_buffer);
                 pthread_mutex_unlock(&s->in_mutex);
                 break;
-            } else {
-                av_log(avctx, AV_LOG_VERBOSE, "decode thread wait because in queue is empty\n");
-                pthread_cond_wait(&s->in_cond, &s->in_mutex); // wait the packet to decode
             }
+
+            av_log(avctx, AV_LOG_VERBOSE, "decode thread waiting with empty queue.\n");
+            pthread_cond_wait(&s->in_cond, &s->in_mutex); // wait the packet to decode
             pthread_mutex_unlock(&s->in_mutex);
             continue;
         }
 
-        av_log(avctx, AV_LOG_VERBOSE, "s->in_queue->size()=%ld\n", s->in_queue->size());
+        av_log(avctx, AV_LOG_VERBOSE, "in queue size %ld\n", s->in_queue->size());
+        /* get a packet from in queue and decode */
         in_buffer = s->in_queue->front();
         pthread_mutex_unlock(&s->in_mutex);
-        // decode one input buffer
-        av_log(avctx, AV_LOG_VERBOSE, "try to process one input buffer, in_buffer->data=%p, in_buffer->size=%zu\n", in_buffer->data, in_buffer->size);
+        av_log(avctx, AV_LOG_VERBOSE, "process input buffer, [data=%p, size=%zu]\n",
+               in_buffer->data, in_buffer->size);
         Decode_Status status = s->decoder->decode(in_buffer);
-        av_log(avctx, AV_LOG_VERBOSE, "decode() status=%d, decode_count_yami=%d render_count %d\n", status, s->decode_count_yami, s->render_count);
+        av_log(avctx, AV_LOG_VERBOSE, "decode status %d, decoded count %d render count %d\n",
+               status, s->decode_count_yami, s->render_count);
+        /* get the format info when the first decode success */
         if (DECODE_SUCCESS == status && !s->format_info) {
             s->format_info = s->decoder->getFormatInfo();
-            av_log(avctx, AV_LOG_VERBOSE, "decode format %dx%d\n", s->format_info->width,s->format_info->height);
+            av_log(avctx, AV_LOG_VERBOSE, "decode format %dx%d\n",
+                   s->format_info->width,s->format_info->height);
             if (!s->format_info) {
-                avctx->width = s->format_info->width;
+                avctx->width  = s->format_info->width;
                 avctx->height = s->format_info->height;
             }
         }
 
+        /* when format change, update format info and re-send the
+           packet to decoder */
         if (DECODE_FORMAT_CHANGE == status) {
             s->format_info = s->decoder->getFormatInfo();
-            av_log(avctx, AV_LOG_VERBOSE, "decode format change %dx%d\n", s->format_info->width,s->format_info->height);
-            // resend the buffer to decoder
+            if (!s->format_info) {
+                avctx->width  = s->format_info->width;
+                avctx->height = s->format_info->height;
+            }
+            av_log(avctx, AV_LOG_VERBOSE, "decode format change %dx%d\n",
+                   s->format_info->width,s->format_info->height);
             status = s->decoder->decode(in_buffer);
-            av_log(avctx, AV_LOG_VERBOSE, "decode() status=%d\n",status);
-            avctx->width = s->format_info->width;
-            avctx->height = s->format_info->height;
+            if (status < 0) {
+                av_log(avctx, AV_LOG_ERROR, "decode error %d\n", status);
+            }
         }
-        if (status < 0 || !s->format_info) {//if format_info is null means current frame decode failed
+
+        if (status < 0 || !s->format_info) {
             av_log(avctx, AV_LOG_ERROR, "decode error %d\n", status);
             break;
         }
+
         s->decode_count_yami++;
+
         pthread_mutex_lock(&s->in_mutex);
         s->in_queue->pop_front();
         pthread_mutex_unlock(&s->in_mutex);
@@ -233,6 +248,7 @@ static int yami_dec_init(AVCodecContext *avctx)
             AV_PIX_FMT_YAMI,
             AV_PIX_FMT_NONE
         };
+
     if (avctx->pix_fmt == AV_PIX_FMT_NONE) {
         int ret = ff_get_format(avctx, pix_fmts);
         if (ret < 0)
@@ -240,6 +256,7 @@ static int yami_dec_init(AVCodecContext *avctx)
 
         avctx->pix_fmt = (AVPixelFormat)ret;
     }
+
     VADisplay va_display = ff_vaapi_create_display();
     if (!va_display) {
         av_log(avctx, AV_LOG_ERROR, "\nfail to create display\n");
@@ -257,14 +274,14 @@ static int yami_dec_init(AVCodecContext *avctx)
     native_display.handle = (intptr_t)va_display;
     s->decoder->setNativeDisplay(&native_display);
 
-    //set allocator
+    /* set external surface allocator */
     s->p_alloc = (SurfaceAllocator *) av_mallocz(sizeof(SurfaceAllocator));
     s->p_alloc->alloc = ff_yami_alloc_surface;
     s->p_alloc->free = ff_yami_free_surface;
     s->p_alloc->unref = ff_yami_unref_surface;
     s->decoder->setAllocator(s->p_alloc);
 
-    //fellow h264.c style
+    /* fellow h264.c style */
     if (avctx->codec_id == AV_CODEC_ID_H264) {
         if (avctx->ticks_per_frame == 1) {
             if (avctx->time_base.den < INT_MAX / 2) {
@@ -274,6 +291,7 @@ static int yami_dec_init(AVCodecContext *avctx)
         }
         avctx->ticks_per_frame = 2;
     }
+
     VideoConfigBuffer config_buffer;
     memset(&config_buffer, 0, sizeof(VideoConfigBuffer));
     if (avctx->extradata && avctx->extradata_size) {
@@ -310,7 +328,7 @@ static int ff_get_best_pkt_dts(AVFrame *frame, YamiDecContext *s)
 }
 
 static int yami_dec_frame(AVCodecContext *avctx, void *data,
-                   int *got_frame, AVPacket *avpkt)
+                          int *got_frame, AVPacket *avpkt)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     if (!s || !s->decoder)
@@ -321,7 +339,8 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     int ret = 0;
     AVFrame *frame = (AVFrame *)data;
     av_log(avctx, AV_LOG_VERBOSE, "yami_dec_frame\n");
-    // append avpkt to input buffer queue
+
+    /* append packet to input buffer queue */
     in_buffer = (VideoDecodeBuffer *)av_mallocz(sizeof(VideoDecodeBuffer));
     if (!in_buffer)
         return AVERROR(ENOMEM);
@@ -336,7 +355,9 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     in_buffer->timeStamp = avpkt->pts;
     if (avpkt->duration != 0)
         s->duration = avpkt->duration;
-    while (s->decode_status < DECODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
+
+    while (s->decode_status < DECODE_THREAD_GOT_EOS) {
+        /* need enque eos buffer more than once */
         pthread_mutex_lock(&s->in_mutex);
         if (s->in_queue->size() < DECODE_QUEUE_SIZE) {
             s->in_queue->push_back(in_buffer);
@@ -347,12 +368,14 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         }
         pthread_mutex_unlock(&s->in_mutex);
         av_log(avctx, AV_LOG_DEBUG,
-               "s->in_queue->size()=%ld, s->decode_count=%d, s->decode_count_yami=%d, too many buffer are under decoding, wait ...\n",
+               "in queue size %ld, decode count %d, decoded count %d,"
+               "too many buffer are under decoding, wait ...\n",
                s->in_queue->size(), s->decode_count, s->decode_count_yami);
         av_usleep(1000);
     };
     s->decode_count++;
-    // decode thread status update
+
+    /* thread status update */
     pthread_mutex_lock(&s->ctx_mutex);
     switch (s->decode_status) {
     case DECODE_THREAD_NOT_INIT:
@@ -375,7 +398,8 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         break;
     }
     pthread_mutex_unlock(&s->ctx_mutex);
-    // get an output buffer from yami
+
+    /* get an output buffer from yami */
     do {
         if (!s->format_info) {
             av_usleep(10000);
@@ -388,7 +412,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
             goto fail;
         }
 
-        do{
+        do {
             yami_image->output_frame = s->decoder->getOutput();
             av_log(avctx, AV_LOG_DEBUG, "getoutput() status=%d\n", status);
             pthread_mutex_lock(&s->ctx_mutex);
@@ -413,7 +437,8 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         av_log(avctx, AV_LOG_VERBOSE, "after processed EOS, return\n");
         return avpkt->size;
     }
-    // process the output frame
+
+    /* process the output frame */
     if (ff_convert_to_frame(avctx, yami_image, frame) < 0)
         av_log(avctx, AV_LOG_VERBOSE, "yami frame convert av_frame failed\n");
     ff_get_best_pkt_dts(frame, s);
@@ -423,6 +448,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
            "decode_count_yami=%d, decode_count=%d, render_count=%d\n",
            s->decode_count_yami, s->decode_count, s->render_count);
     return avpkt->size;
+
 fail:
     if (yami_image) {
         yami_image->output_frame.reset();

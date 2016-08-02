@@ -387,7 +387,7 @@ YamiStatus ff_yami_alloc_surface (SurfaceAllocator* thiz, SurfaceAllocParams* pa
 
     VASurfaceID* v = new VASurfaceID[size];
     VAStatus status = vaCreateSurfaces(ff_vaapi_create_display(), VA_RT_FORMAT_YUV420, width,
-            height, &v[0], size, NULL, 0);
+                                       height, &v[0], size, NULL, 0);
     if (!ff_check_vaapi_status(status, "vaCreateSurfaces"))
         return YAMI_FAIL;
 

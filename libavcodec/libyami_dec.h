@@ -34,27 +34,23 @@ typedef enum {
 
 struct YamiDecContext {
     AVCodecContext *avctx;
-    pthread_mutex_t ctx_mutex; // mutex for decoder->getOutput() and YamiContext itself update (decode_status, etc)
+    pthread_mutex_t ctx_mutex; /* mutex for YamiContext */
 
     YamiMediaCodec::IVideoDecoder *decoder;
-    //VideoDataMemoryType output_type;
     const VideoFormatInfo *format_info;
     pthread_t decode_thread_id;
     std::deque<VideoDecodeBuffer *> *in_queue;
-    pthread_mutex_t in_mutex; // mutex for in_queue
-    std::deque<YamiImage *> *out_queue;
-    pthread_mutex_t out_mutex; // mutex for out_queue
-    pthread_cond_t in_cond;   // decode thread condition wait
+    pthread_mutex_t in_mutex; /* mutex for in queue */
+    pthread_cond_t in_cond;   /* decode thread condition wait */
     DecodeThreadStatus decode_status;
 
     SurfaceAllocator *p_alloc;
-    //the pts is no value use this value
+    /* the pts is no value use this value */
     int duration;
-    // debug use
+    /* debug use */
     int decode_count;
     int decode_count_yami;
     int render_count;
-    int recycle_count;
 };
 
 #endif /* LIBAVCODEC_LIBYAMI_DEC_H_ */
