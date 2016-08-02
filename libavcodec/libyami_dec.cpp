@@ -119,7 +119,7 @@ static void *ff_yami_decode_thread(void *arg)
             s->format_info = s->decoder->getFormatInfo();
             av_log(avctx, AV_LOG_VERBOSE, "decode format %dx%d\n",
                    s->format_info->width,s->format_info->height);
-            if (!s->format_info) {
+            if (s->format_info) {
                 avctx->width  = s->format_info->width;
                 avctx->height = s->format_info->height;
             }
@@ -129,12 +129,12 @@ static void *ff_yami_decode_thread(void *arg)
            packet to decoder */
         if (DECODE_FORMAT_CHANGE == status) {
             s->format_info = s->decoder->getFormatInfo();
-            if (!s->format_info) {
+            if (s->format_info) {
                 avctx->width  = s->format_info->width;
                 avctx->height = s->format_info->height;
-            }
-            av_log(avctx, AV_LOG_VERBOSE, "decode format change %dx%d\n",
+                av_log(avctx, AV_LOG_VERBOSE, "decode format change %dx%d\n",
                    s->format_info->width,s->format_info->height);
+            }
             status = s->decoder->decode(in_buffer);
             if (status < 0) {
                 av_log(avctx, AV_LOG_ERROR, "decode error %d\n", status);
