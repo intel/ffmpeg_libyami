@@ -45,6 +45,7 @@
 #include "h264data.h"
 #include "h264chroma.h"
 #include "h264_mvpred.h"
+#include "h264_ps.h"
 #include "golomb.h"
 #include "mathops.h"
 #include "me_cmp.h"
@@ -405,15 +406,13 @@ av_cold int ff_h264_decode_init(AVCodecContext *avctx)
         return AVERROR_UNKNOWN;
     }
 
-    if (avctx->codec_id == AV_CODEC_ID_H264) {
-        if (avctx->ticks_per_frame == 1) {
-            if(h->avctx->time_base.den < INT_MAX/2) {
-                h->avctx->time_base.den *= 2;
-            } else
-                h->avctx->time_base.num /= 2;
-        }
-        avctx->ticks_per_frame = 2;
+    if (avctx->ticks_per_frame == 1) {
+        if(h->avctx->time_base.den < INT_MAX/2) {
+            h->avctx->time_base.den *= 2;
+        } else
+            h->avctx->time_base.num /= 2;
     }
+    avctx->ticks_per_frame = 2;
 
     if (avctx->extradata_size > 0 && avctx->extradata) {
         ret = ff_h264_decode_extradata(avctx->extradata, avctx->extradata_size,
@@ -673,13 +672,13 @@ static int get_last_needed_nal(H264Context *h)
          * which splits NALs strangely if so, when frame threading we
          * can't start the next thread until we've read all of them */
         switch (nal->type) {
-        case NAL_SPS:
-        case NAL_PPS:
+        case H264_NAL_SPS:
+        case H264_NAL_PPS:
             nals_needed = i;
             break;
-        case NAL_DPA:
-        case NAL_IDR_SLICE:
-        case NAL_SLICE:
+        case H264_NAL_DPA:
+        case H264_NAL_IDR_SLICE:
+        case H264_NAL_SLICE:
             ret = init_get_bits8(&gb, nal->data + 1, (nal->size - 1));
             if (ret < 0)
                 return ret;
@@ -767,7 +766,7 @@ static int decode_nal_units(H264Context *h, const uint8_t *buf, int buf_size)
         int err;
 
         if (avctx->skip_frame >= AVDISCARD_NONREF &&
-            nal->ref_idc == 0 && nal->type != NAL_SEI)
+            nal->ref_idc == 0 && nal->type != H264_NAL_SEI)
             continue;
 
 again:
@@ -777,14 +776,14 @@ again:
 
         err = 0;
         switch (nal->type) {
-        case NAL_IDR_SLICE:
+        case H264_NAL_IDR_SLICE:
             if ((nal->data[1] & 0xFC) == 0x98) {
                 av_log(h->avctx, AV_LOG_ERROR, "Invalid inter IDR frame\n");
                 h->next_outputed_poc = INT_MIN;
                 ret = -1;
                 goto end;
             }
-            if (nal->type != NAL_IDR_SLICE) {
+            if (nal->type != H264_NAL_IDR_SLICE) {
                 av_log(h->avctx, AV_LOG_ERROR,
                        "Invalid mix of idr and non-idr slices\n");
                 ret = -1;
@@ -800,7 +799,7 @@ again:
             }
             idr_cleared = 1;
             h->has_recovery_point = 1;
-        case NAL_SLICE:
+        case H264_NAL_SLICE:
             sl->gb = nal->gb;
 
             if ((err = ff_h264_decode_slice_header(h, sl, nal)))
@@ -821,16 +820,16 @@ again:
                 }
             }
 
-            h->cur_pic_ptr->f->key_frame |= (nal->type == NAL_IDR_SLICE);
+            h->cur_pic_ptr->f->key_frame |= (nal->type == H264_NAL_IDR_SLICE);
 
-            if (nal->type == NAL_IDR_SLICE ||
+            if (nal->type == H264_NAL_IDR_SLICE ||
                 (h->recovery_frame == h->poc.frame_num && nal->ref_idc)) {
                 h->recovery_frame         = -1;
                 h->cur_pic_ptr->recovered = 1;
             }
             // If we have an IDR, all frames after it in decoded order are
             // "recovered".
-            if (nal->type == NAL_IDR_SLICE)
+            if (nal->type == H264_NAL_IDR_SLICE)
                 h->frame_recovered |= FRAME_RECOVERED_IDR;
 #if 1
             h->cur_pic_ptr->recovered |= h->frame_recovered;
@@ -873,12 +872,12 @@ again:
                     context_count++;
             }
             break;
-        case NAL_DPA:
-        case NAL_DPB:
-        case NAL_DPC:
+        case H264_NAL_DPA:
+        case H264_NAL_DPB:
+        case H264_NAL_DPC:
             avpriv_request_sample(avctx, "data partitioning");
             break;
-        case NAL_SEI:
+        case H264_NAL_SEI:
             ret = ff_h264_sei_decode(&h->sei, &nal->gb, &h->ps, avctx);
             h->has_recovery_point = h->has_recovery_point || h->sei.recovery_point.recovery_frame_cnt != -1;
             if (avctx->debug & FF_DEBUG_GREEN_MD)
@@ -891,7 +890,7 @@ FF_ENABLE_DEPRECATION_WARNINGS
             if (ret < 0 && (h->avctx->err_recognition & AV_EF_EXPLODE))
                 goto end;
             break;
-        case NAL_SPS: {
+        case H264_NAL_SPS: {
             GetBitContext tmp_gb = nal->gb;
             if (ff_h264_decode_seq_parameter_set(&tmp_gb, avctx, &h->ps, 0) >= 0)
                 break;
@@ -903,18 +902,18 @@ FF_ENABLE_DEPRECATION_WARNINGS
             ff_h264_decode_seq_parameter_set(&nal->gb, avctx, &h->ps, 1);
             break;
         }
-        case NAL_PPS:
+        case H264_NAL_PPS:
             ret = ff_h264_decode_picture_parameter_set(&nal->gb, avctx, &h->ps,
                                                        nal->size_bits);
             if (ret < 0 && (h->avctx->err_recognition & AV_EF_EXPLODE))
                 goto end;
             break;
-        case NAL_AUD:
-        case NAL_END_SEQUENCE:
-        case NAL_END_STREAM:
-        case NAL_FILLER_DATA:
-        case NAL_SPS_EXT:
-        case NAL_AUXILIARY_SLICE:
+        case H264_NAL_AUD:
+        case H264_NAL_END_SEQUENCE:
+        case H264_NAL_END_STREAM:
+        case H264_NAL_FILLER_DATA:
+        case H264_NAL_SPS_EXT:
+        case H264_NAL_AUXILIARY_SLICE:
             break;
         default:
             av_log(avctx, AV_LOG_DEBUG, "Unknown NAL code: %d (%d bits)\n",
@@ -1156,7 +1155,7 @@ static int h264_decode_frame(AVCodecContext *avctx, void *data,
     if (buf_index < 0)
         return AVERROR_INVALIDDATA;
 
-    if (!h->cur_pic_ptr && h->nal_unit_type == NAL_END_SEQUENCE) {
+    if (!h->cur_pic_ptr && h->nal_unit_type == H264_NAL_END_SEQUENCE) {
         av_assert0(buf_index <= buf_size);
         goto out;
     }
