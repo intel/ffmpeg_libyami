@@ -68,8 +68,8 @@ static int ff_yami_encode_thread_close(YamiEncContext *s)
         s->encode_status = ENCODE_THREAD_GOT_EOS;
         pthread_mutex_unlock(&s->ctx_mutex);
         pthread_cond_signal(&s->in_cond);
-        av_usleep(10000);
         pthread_mutex_lock(&s->ctx_mutex);
+        av_usleep(10000);
     }
     pthread_mutex_unlock(&s->ctx_mutex);
     pthread_mutex_destroy(&s->in_mutex);
@@ -88,7 +88,8 @@ static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *t
     } else {
         av_log(avctx, AV_LOG_VERBOSE, "used the un-support format ... \n");
     }
-    to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, pix_fmt, avctx->width, avctx->height);
+    to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420,
+                                               pix_fmt, avctx->width, avctx->height);
     ff_vaapi_load_image(to->output_frame, from);
     if (from->key_frame)
         to->output_frame->flags |= VIDEO_FRAME_FLAGS_KEY;
