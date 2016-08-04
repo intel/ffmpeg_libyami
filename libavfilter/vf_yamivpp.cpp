@@ -168,8 +168,11 @@ static int config_props(AVFilterLink *inlink)
     else
         outlink->format = AV_PIX_FMT_NV12;
 
-    av_log(yamivpp, AV_LOG_VERBOSE, "out w:%d, h:%d, deinterlace:%d, denoise:%d, framerate:%d/%d, pipeline:%d\n",
-           yamivpp->out_width, yamivpp->out_height, yamivpp->deinterlace, yamivpp->denoise, yamivpp->framerate.num, yamivpp->framerate.den, yamivpp->pipeline);
+    av_log(yamivpp, AV_LOG_VERBOSE, "out w:%d, h:%d, deinterlace:%d,"
+           "denoise:%d, framerate:%d/%d, pipeline:%d\n",
+           yamivpp->out_width, yamivpp->out_height,
+           yamivpp->deinterlace, yamivpp->denoise,
+           yamivpp->framerate.num, yamivpp->framerate.den, yamivpp->pipeline);
 
 
     return 0;
@@ -202,7 +205,8 @@ static int map_fmt_to_fourcc(int fmt)
     return fourcc;
 }
 
-static SharedPtr<VideoFrame> ff_vaapi_create_nopipeline_surface(int fmt, uint32_t w, uint32_t h)
+static SharedPtr<VideoFrame>
+ff_vaapi_create_nopipeline_surface(int fmt, uint32_t w, uint32_t h)
 {
     SharedPtr<VideoFrame> src;
     int fourcc = map_fmt_to_fourcc(fmt);
@@ -212,7 +216,8 @@ static SharedPtr<VideoFrame> ff_vaapi_create_nopipeline_surface(int fmt, uint32_
     return src;
 }
 
-static SharedPtr<VideoFrame> ff_vaapi_create_pipeline_src_surface(int fmt, uint32_t w, uint32_t h, AVFrame *frame)
+static SharedPtr<VideoFrame>
+ff_vaapi_create_pipeline_src_surface(int fmt, uint32_t w, uint32_t h, AVFrame *frame)
 {
     YamiImage *yami_image = NULL;
     yami_image = (YamiImage *)frame->data[3];
@@ -220,7 +225,8 @@ static SharedPtr<VideoFrame> ff_vaapi_create_pipeline_src_surface(int fmt, uint3
     return yami_image->output_frame;
 }
 
-static SharedPtr<VideoFrame> ff_vaapi_create_pipeline_dest_surface(int fmt, uint32_t w, uint32_t h, AVFrame *frame)
+static SharedPtr<VideoFrame>
+ff_vaapi_create_pipeline_dest_surface(int fmt, uint32_t w, uint32_t h, AVFrame *frame)
 {
     SharedPtr<VideoFrame> dest;
     int fourcc = map_fmt_to_fourcc(fmt);
@@ -339,8 +345,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         yami_image->va_display = m_display;
         out->data[3] = reinterpret_cast<uint8_t *>(yami_image);
         out->buf[0] = av_buffer_create((uint8_t *)out->data[3],
-                                   sizeof(YamiImage),
-                                   av_recycle_surface, NULL, 0);
+                                       sizeof(YamiImage),
+                                       av_recycle_surface, NULL, 0);
 
         status = yamivpp->scaler->process(yamivpp->src, yamivpp->dest);
         if (status != YAMI_SUCCESS) {

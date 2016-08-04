@@ -62,9 +62,9 @@ static int ff_yami_decode_thread_close(YamiDecContext *s)
     if (!s)
         return -1;
     pthread_mutex_lock(&s->ctx_mutex);
+    /* if decode thread do not create do not loop */
     while (s->decode_status != DECODE_THREAD_EXIT
-           && s->decode_status != DECODE_THREAD_NOT_INIT) { // if decode thread do not create do not loop
-        // potential race condition on s->decode_status
+           && s->decode_status != DECODE_THREAD_NOT_INIT) {
         s->decode_status = DECODE_THREAD_GOT_EOS;
         pthread_mutex_unlock(&s->ctx_mutex);
         pthread_cond_signal(&s->in_cond);
@@ -100,7 +100,7 @@ static void *ff_yami_decode_thread(void *arg)
             }
 
             av_log(avctx, AV_LOG_VERBOSE, "decode thread waiting with empty queue.\n");
-            pthread_cond_wait(&s->in_cond, &s->in_mutex); // wait the packet to decode
+            pthread_cond_wait(&s->in_cond, &s->in_mutex); /* wait the packet to decode */
             pthread_mutex_unlock(&s->in_mutex);
             continue;
         }
