@@ -1,7 +1,4 @@
 /*
- * Blackmagic DeckLink input
- * Copyright (c) 2013-2014 Ramiro Polla
- *
  * This file is part of FFmpeg.
  *
  * FFmpeg is free software; you can redistribute it and/or
@@ -19,19 +16,18 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#ifndef AVDEVICE_DECKLINK_DEC_H
-#define AVDEVICE_DECKLINK_DEC_H
+#ifndef AVCODEC_TTAENCDSP_H
+#define AVCODEC_TTAENCDSP_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <stdint.h>
 
-int ff_decklink_read_header(AVFormatContext *avctx);
-int ff_decklink_read_packet(AVFormatContext *avctx, AVPacket *pkt);
-int ff_decklink_read_close(AVFormatContext *avctx);
+typedef struct TTAEncDSPContext {
+    void (*filter_process)(int32_t *qm, int32_t *dx, int32_t *dl,
+                           int32_t *error, int32_t *in, int32_t shift,
+                           int32_t round);
+} TTAEncDSPContext;
 
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
+void ff_ttaencdsp_init(TTAEncDSPContext *c);
+void ff_ttaencdsp_init_x86(TTAEncDSPContext *c);
 
-#endif /* AVDEVICE_DECKLINK_DEC_H */
+#endif /* AVCODEC_TTAENCDSP_H */
