@@ -1499,6 +1499,38 @@ static int h264_field_start(H264Context *h, const H264SliceContext *sl,
 
     h->picture_idr = nal->type == H264_NAL_IDR_SLICE;
 
+    if (h->sei.recovery_point.recovery_frame_cnt >= 0) {
+        const int sei_recovery_frame_cnt = h->sei.recovery_point.recovery_frame_cnt;
+
+        if (h->poc.frame_num != sei_recovery_frame_cnt || sl->slice_type_nos != AV_PICTURE_TYPE_I)
+            h->valid_recovery_point = 1;
+
+        if (   h->recovery_frame < 0
+            || av_mod_uintp2(h->recovery_frame - h->poc.frame_num, h->ps.sps->log2_max_frame_num) > sei_recovery_frame_cnt) {
+            h->recovery_frame = av_mod_uintp2(h->poc.frame_num + sei_recovery_frame_cnt, h->ps.sps->log2_max_frame_num);
+
+            if (!h->valid_recovery_point)
+                h->recovery_frame = h->poc.frame_num;
+        }
+    }
+
+    h->cur_pic_ptr->f->key_frame |= (nal->type == H264_NAL_IDR_SLICE);
+
+    if (nal->type == H264_NAL_IDR_SLICE ||
+        (h->recovery_frame == h->poc.frame_num && nal->ref_idc)) {
+        h->recovery_frame         = -1;
+        h->cur_pic_ptr->recovered = 1;
+    }
+    // If we have an IDR, all frames after it in decoded order are
+    // "recovered".
+    if (nal->type == H264_NAL_IDR_SLICE)
+        h->frame_recovered |= FRAME_RECOVERED_IDR;
+#if 1
+    h->cur_pic_ptr->recovered |= h->frame_recovered;
+#else
+    h->cur_pic_ptr->recovered |= !!(h->frame_recovered & FRAME_RECOVERED_IDR);
+#endif
+
     /* Set the frame properties/side data. Only done for the second field in
      * field coded frames, since some SEI information is present for each field
      * and is merged by the SEI parsing code. */
@@ -1624,6 +1656,7 @@ static int h264_slice_header_parse(const H264Context *h, H264SliceContext *sl,
             sl->delta_poc[1] = get_se_golomb(&sl->gb);
     }
 
+    sl->redundant_pic_count = 0;
     if (pps->redundant_pic_cnt_present)
         sl->redundant_pic_count = get_ue_golomb(&sl->gb);
 
@@ -1736,6 +1769,10 @@ int ff_h264_decode_slice_header(H264Context *h, H264SliceContext *sl,
     ret = h264_slice_header_parse(h, sl, nal);
     if (ret < 0)
         return ret;
+
+    // discard redundant pictures
+    if (sl->redundant_pic_count > 0)
+        return 0;
 
     if (sl->first_mb_addr == 0 || !h->current_slice) {
         if (h->setup_finished) {
