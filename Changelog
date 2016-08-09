@@ -2,6 +2,18 @@ Entries are sorted chronologically from oldest to youngest within each release,
 releases are sorted from youngest to oldest.
 
 version <next>:
+- libopenmpt demuxer
+- tee protocol
+- Changed metadata print option to accept general urls
+- Alias muxer for Ogg Video (.ogv)
+- VP8 in Ogg muxing
+- curves filter doesn't automatically insert points at x=0 and x=1 anymore
+- 16-bit support in curves filter
+- 16-bit support in selectivecolor filter
+- OpenH264 decoder wrapper
+- MediaCodec hwaccel
+- True Audio (TTA) muxer
+- crystalizer audio filter
 
 
 version 3.1:

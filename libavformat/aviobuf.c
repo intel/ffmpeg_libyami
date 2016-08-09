@@ -385,7 +385,7 @@ static inline int put_str16(AVIOContext *s, const char *str, const int be)
                   ret += 2;)
         continue;
 invalid:
-        av_log(s, AV_LOG_ERROR, "Invaid UTF8 sequence in avio_put_str16%s\n", be ? "be" : "le");
+        av_log(s, AV_LOG_ERROR, "Invalid UTF8 sequence in avio_put_str16%s\n", be ? "be" : "le");
         err = AVERROR(EINVAL);
         if (!*(q-1))
             break;
@@ -558,6 +558,12 @@ unsigned long ff_crc04C11DB7_update(unsigned long checksum, const uint8_t *buf,
                                     unsigned int len)
 {
     return av_crc(av_crc_get_table(AV_CRC_32_IEEE), checksum, buf, len);
+}
+
+unsigned long ff_crcEDB88320_update(unsigned long checksum, const uint8_t *buf,
+                                    unsigned int len)
+{
+    return av_crc(av_crc_get_table(AV_CRC_32_IEEE_LE), checksum, buf, len);
 }
 
 unsigned long ff_crcA001_update(unsigned long checksum, const uint8_t *buf,

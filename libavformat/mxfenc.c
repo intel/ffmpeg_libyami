@@ -671,7 +671,7 @@ static uint64_t mxf_utf16len(const char *utf8_str)
             size += 2;
         continue;
 invalid:
-        av_log(NULL, AV_LOG_ERROR, "Invaid UTF8 sequence in mxf_utf16len\n\n");
+        av_log(NULL, AV_LOG_ERROR, "Invalid UTF8 sequence in mxf_utf16len\n\n");
     }
     size += 1;
     return size;
@@ -1860,11 +1860,11 @@ static int mxf_parse_h264_frame(AVFormatContext *s, AVStream *st,
             break;
         --buf;
         switch (state & 0x1f) {
-        case NAL_SPS:
+        case H264_NAL_SPS:
             st->codecpar->profile = buf[1];
             e->flags |= 0x40;
             break;
-        case NAL_PPS:
+        case H264_NAL_PPS:
             if (e->flags & 0x40) { // sequence header present
                 e->flags |= 0x80; // random access
                 extra_size = 0;

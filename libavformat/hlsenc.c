@@ -62,6 +62,7 @@ typedef enum HLSFlags {
     HLS_ROUND_DURATIONS = (1 << 2),
     HLS_DISCONT_START = (1 << 3),
     HLS_OMIT_ENDLIST = (1 << 4),
+    HLS_SPLIT_BY_TIME = (1 << 5),
 } HLSFlags;
 
 typedef enum {
@@ -560,14 +561,16 @@ static int hls_start(AVFormatContext *s)
                 }
                 av_free(fn_copy);
             }
-        } else if (av_get_frame_filename(oc->filename, sizeof(oc->filename),
-                                  c->basename, c->wrap ? c->sequence % c->wrap : c->sequence) < 0) {
+        } else if (av_get_frame_filename2(oc->filename, sizeof(oc->filename),
+                                  c->basename, c->wrap ? c->sequence % c->wrap : c->sequence,
+                                  AV_FRAME_FILENAME_FLAGS_MULTIPLE) < 0) {
             av_log(oc, AV_LOG_ERROR, "Invalid segment filename template '%s' you can try use -use_localtime 1 with it\n", c->basename);
             return AVERROR(EINVAL);
         }
         if( c->vtt_basename) {
-            if (av_get_frame_filename(vtt_oc->filename, sizeof(vtt_oc->filename),
-                              c->vtt_basename, c->wrap ? c->sequence % c->wrap : c->sequence) < 0) {
+            if (av_get_frame_filename2(vtt_oc->filename, sizeof(vtt_oc->filename),
+                              c->vtt_basename, c->wrap ? c->sequence % c->wrap : c->sequence,
+                              AV_FRAME_FILENAME_FLAGS_MULTIPLE) < 0) {
                 av_log(vtt_oc, AV_LOG_ERROR, "Invalid segment filename template '%s'\n", c->vtt_basename);
                 return AVERROR(EINVAL);
             }
@@ -813,7 +816,7 @@ static int hls_write_packet(AVFormatContext *s, AVPacket *pkt)
 
     if (hls->has_video) {
         can_split = st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO &&
-                    pkt->flags & AV_PKT_FLAG_KEY;
+                    ((pkt->flags & AV_PKT_FLAG_KEY) || (hls->flags & HLS_SPLIT_BY_TIME));
         is_ref_pkt = st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO;
     }
     if (pkt->pts == AV_NOPTS_VALUE)
@@ -923,6 +926,7 @@ static const AVOption options[] = {
     {"round_durations", "round durations in m3u8 to whole numbers", 0, AV_OPT_TYPE_CONST, {.i64 = HLS_ROUND_DURATIONS }, 0, UINT_MAX,   E, "flags"},
     {"discont_start", "start the playlist with a discontinuity tag", 0, AV_OPT_TYPE_CONST, {.i64 = HLS_DISCONT_START }, 0, UINT_MAX,   E, "flags"},
     {"omit_endlist", "Do not append an endlist when ending stream", 0, AV_OPT_TYPE_CONST, {.i64 = HLS_OMIT_ENDLIST }, 0, UINT_MAX,   E, "flags"},
+    {"split_by_time", "split the hls segment by time which user set by hls_time", 0, AV_OPT_TYPE_CONST, {.i64 = HLS_SPLIT_BY_TIME }, 0, UINT_MAX,   E, "flags"},
     {"use_localtime", "set filename expansion with strftime at segment creation", OFFSET(use_localtime), AV_OPT_TYPE_BOOL, {.i64 = 0 }, 0, 1, E },
     {"use_localtime_mkdir", "create last directory component in strftime-generated filename", OFFSET(use_localtime_mkdir), AV_OPT_TYPE_BOOL, {.i64 = 0 }, 0, 1, E },
     {"hls_playlist_type", "set the HLS playlist type", OFFSET(pl_type), AV_OPT_TYPE_INT, {.i64 = PLAYLIST_TYPE_NONE }, 0, PLAYLIST_TYPE_NB-1, E, "pl_type" },

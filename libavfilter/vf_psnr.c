@@ -43,6 +43,8 @@ typedef struct PSNRContext {
     uint64_t nb_frames;
     FILE *stats_file;
     char *stats_file_str;
+    int stats_version;
+    int stats_header_written;
     int max[4], average_max;
     int is_rgb;
     uint8_t rgba_map[4];
@@ -60,6 +62,7 @@ typedef struct PSNRContext {
 static const AVOption psnr_options[] = {
     {"stats_file", "Set file where to store per-frame difference information", OFFSET(stats_file_str), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, FLAGS },
     {"f",          "Set file where to store per-frame difference information", OFFSET(stats_file_str), AV_OPT_TYPE_STRING, {.str=NULL}, 0, 0, FLAGS },
+    {"stats_version", "Set the format version for the stats file.",               OFFSET(stats_version),  AV_OPT_TYPE_INT,    {.i64=1},    1, 2, FLAGS },
     { NULL }
 };
 
@@ -169,6 +172,19 @@ static AVFrame *do_psnr(AVFilterContext *ctx, AVFrame *main,
     set_meta(metadata, "lavfi.psnr.psnr_avg", 0, get_psnr(mse, 1, s->average_max));
 
     if (s->stats_file) {
+        if (s->stats_version == 2 && !s->stats_header_written) {
+            fprintf(s->stats_file, "psnr_log_version:2 fields:n");
+            fprintf(s->stats_file, ",mse_avg");
+            for (j = 0; j < s->nb_components; j++) {
+                fprintf(s->stats_file, ",mse_%c", s->comps[j]);
+            }
+            fprintf(s->stats_file, ",psnr_avg");
+            for (j = 0; j < s->nb_components; j++) {
+                fprintf(s->stats_file, ",psnr_%c", s->comps[j]);
+            }
+            fprintf(s->stats_file, "\n");
+            s->stats_header_written = 1;
+        }
         fprintf(s->stats_file, "n:%"PRId64" mse_avg:%0.2f ", s->nb_frames, mse);
         for (j = 0; j < s->nb_components; j++) {
             c = s->is_rgb ? s->rgba_map[j] : j;
@@ -241,6 +257,7 @@ static int config_input_ref(AVFilterLink *inlink)
     const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(inlink->format);
     AVFilterContext *ctx  = inlink->dst;
     PSNRContext *s = ctx->priv;
+    double average_max;
     unsigned sum;
     int j;
 
@@ -273,10 +290,12 @@ static int config_input_ref(AVFilterLink *inlink)
     sum = 0;
     for (j = 0; j < s->nb_components; j++)
         sum += s->planeheight[j] * s->planewidth[j];
+    average_max = 0;
     for (j = 0; j < s->nb_components; j++) {
         s->planeweight[j] = (double) s->planeheight[j] * s->planewidth[j] / sum;
-        s->average_max += s->max[j] * s->planeweight[j];
+        average_max += s->max[j] * s->planeweight[j];
     }
+    s->average_max = lrint(average_max);
 
     s->dsp.sse_line = desc->comp[0].depth > 8 ? sse_line_16bit : sse_line_8bit;
     if (ARCH_X86)

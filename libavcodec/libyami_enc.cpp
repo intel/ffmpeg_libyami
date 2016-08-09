@@ -38,7 +38,6 @@ extern "C" {
 #include "libyami.h"
 using namespace YamiMediaCodec;
 
-
 static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *to)
 {
     int pix_fmt = VA_FOURCC_NV12;
@@ -49,7 +48,8 @@ static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *t
     } else {
         av_log(avctx, AV_LOG_VERBOSE, "used the un-support format ... \n");
     }
-    to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, pix_fmt, avctx->width, avctx->height);
+    to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420,
+                                               pix_fmt, avctx->width, avctx->height);
     ff_vaapi_load_image(to->output_frame, from);
     if (from->key_frame)
         to->output_frame->flags |= VIDEO_FRAME_FLAGS_KEY;
@@ -108,12 +108,6 @@ static int ff_yami_encode_thread_init(YamiEncContext *s)
     return 0;
 }
 
-static int ff_yami_encode_thread_close(YamiEncContext *s)
-{
-    if (!s)
-        return -1;
-    return 0;
-}
 
 static bool
 ff_out_buffer_create(VideoEncOutputBuffer *enc_out_buf, int max_out_size)

@@ -31,6 +31,7 @@
 #include "internal.h"
 #include "avcodec.h"
 #include "h264.h"
+#include "h264dec.h"
 #include "golomb.h"
 #include "mpegutils.h"
 
@@ -305,7 +306,7 @@ int ff_h264_build_ref_list(H264Context *h, H264SliceContext *sl)
     h264_initialise_ref_list(h, sl);
 
     for (list = 0; list < sl->list_count; list++) {
-        int pred = h->curr_pic_num;
+        int pred = sl->curr_pic_num;
 
         for (index = 0; index < sl->nb_ref_modifications[list]; index++) {
             unsigned int modification_of_pic_nums_idc = sl->ref_modifications[list][index].op;
@@ -320,7 +321,7 @@ int ff_h264_build_ref_list(H264Context *h, H264SliceContext *sl)
                 const unsigned int abs_diff_pic_num = val + 1;
                 int frame_num;
 
-                if (abs_diff_pic_num > h->max_pic_num) {
+                if (abs_diff_pic_num > sl->max_pic_num) {
                     av_log(h->avctx, AV_LOG_ERROR,
                            "abs_diff_pic_num overflow\n");
                     return AVERROR_INVALIDDATA;
@@ -330,7 +331,7 @@ int ff_h264_build_ref_list(H264Context *h, H264SliceContext *sl)
                     pred -= abs_diff_pic_num;
                 else
                     pred += abs_diff_pic_num;
-                pred &= h->max_pic_num - 1;
+                pred &= sl->max_pic_num - 1;
 
                 frame_num = pic_num_extract(h, pred, &pic_structure);
 
@@ -368,6 +369,8 @@ int ff_h264_build_ref_list(H264Context *h, H264SliceContext *sl)
                 }
                 break;
             }
+            default:
+                av_assert1(0);
             }
 
             if (i < 0) {
@@ -415,7 +418,7 @@ int ff_h264_build_ref_list(H264Context *h, H264SliceContext *sl)
     return 0;
 }
 
-int ff_h264_decode_ref_pic_list_reordering(const H264Context *h, H264SliceContext *sl)
+int ff_h264_decode_ref_pic_list_reordering(H264SliceContext *sl, void *logctx)
 {
     int list, index;
 
@@ -433,10 +436,10 @@ int ff_h264_decode_ref_pic_list_reordering(const H264Context *h, H264SliceContex
                 break;
 
             if (index >= sl->ref_count[list]) {
-                av_log(h->avctx, AV_LOG_ERROR, "reference count overflow\n");
+                av_log(logctx, AV_LOG_ERROR, "reference count overflow\n");
                 return AVERROR_INVALIDDATA;
             } else if (op > 2) {
-                av_log(h->avctx, AV_LOG_ERROR,
+                av_log(logctx, AV_LOG_ERROR,
                        "illegal modification_of_pic_nums_idc %u\n",
                        op);
                 return AVERROR_INVALIDDATA;
@@ -579,26 +582,6 @@ void ff_h264_remove_all_refs(H264Context *h)
     h->short_ref_count = 0;
 
     memset(h->default_ref, 0, sizeof(h->default_ref));
-    for (i = 0; i < h->nb_slice_ctx; i++) {
-        H264SliceContext *sl = &h->slice_ctx[i];
-        sl->list_count = sl->ref_count[0] = sl->ref_count[1] = 0;
-        memset(sl->ref_list, 0, sizeof(sl->ref_list));
-    }
-}
-
-static int check_opcodes(MMCO *mmco1, MMCO *mmco2, int n_mmcos)
-{
-    int i;
-
-    for (i = 0; i < n_mmcos; i++) {
-        if (mmco1[i].opcode != mmco2[i].opcode) {
-            av_log(NULL, AV_LOG_ERROR, "MMCO opcode [%d, %d] at %d mismatches between slices\n",
-                   mmco1[i].opcode, mmco2[i].opcode, i);
-            return -1;
-        }
-    }
-
-    return 0;
 }
 
 static void generate_sliding_window_mmcos(H264Context *h)
@@ -838,14 +821,14 @@ int ff_h264_execute_ref_pic_marking(H264Context *h)
     return (h->avctx->err_recognition & AV_EF_EXPLODE) ? err : 0;
 }
 
-int ff_h264_decode_ref_pic_marking(const H264Context *h, H264SliceContext *sl,
-                                   GetBitContext *gb)
+int ff_h264_decode_ref_pic_marking(H264SliceContext *sl, GetBitContext *gb,
+                                   const H2645NAL *nal, void *logctx)
 {
     int i;
     MMCO *mmco = sl->mmco;
     int nb_mmco = 0;
 
-    if (h->nal_unit_type == NAL_IDR_SLICE) { // FIXME fields
+    if (nal->type == H264_NAL_IDR_SLICE) { // FIXME fields
         skip_bits1(gb); // broken_link
         if (get_bits1(gb)) {
             mmco[0].opcode   = MMCO_LONG;
@@ -862,8 +845,8 @@ int ff_h264_decode_ref_pic_marking(const H264Context *h, H264SliceContext *sl,
                 mmco[i].opcode = opcode;
                 if (opcode == MMCO_SHORT2UNUSED || opcode == MMCO_SHORT2LONG) {
                     mmco[i].short_pic_num =
-                        (h->curr_pic_num - get_ue_golomb_long(gb) - 1) &
-                            (h->max_pic_num - 1);
+                        (sl->curr_pic_num - get_ue_golomb_long(gb) - 1) &
+                            (sl->max_pic_num - 1);
 #if 0
                     if (mmco[i].short_pic_num >= h->short_ref_count ||
                         !h->short_ref[mmco[i].short_pic_num]) {
@@ -880,8 +863,8 @@ int ff_h264_decode_ref_pic_marking(const H264Context *h, H264SliceContext *sl,
                     if (long_arg >= 32 ||
                         (long_arg >= 16 && !(opcode == MMCO_SET_MAX_LONG &&
                                              long_arg == 16) &&
-                         !(opcode == MMCO_LONG2UNUSED && FIELD_PICTURE(h)))) {
-                        av_log(h->avctx, AV_LOG_ERROR,
+                         !(opcode == MMCO_LONG2UNUSED && FIELD_PICTURE(sl)))) {
+                        av_log(logctx, AV_LOG_ERROR,
                                "illegal long ref in memory management control "
                                "operation %d\n", opcode);
                         return -1;
@@ -890,7 +873,7 @@ int ff_h264_decode_ref_pic_marking(const H264Context *h, H264SliceContext *sl,
                 }
 
                 if (opcode > (unsigned) MMCO_LONG) {
-                    av_log(h->avctx, AV_LOG_ERROR,
+                    av_log(logctx, AV_LOG_ERROR,
                            "illegal memory management control operation %d\n",
                            opcode);
                     return -1;

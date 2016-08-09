@@ -2677,7 +2677,7 @@ static int init_output_stream(OutputStream *ost, char *error, int error_len)
         // copy timebase while removing common factors
         ost->st->time_base = av_add_q(ost->enc_ctx->time_base, (AVRational){0, 1});
         ost->st->codec->codec= ost->enc_ctx->codec;
-    } else {
+    } else if (ost->stream_copy) {
         ret = av_opt_set_dict(ost->st->codec, &ost->encoder_opts);
         if (ret < 0) {
            av_log(NULL, AV_LOG_FATAL,
@@ -3019,6 +3019,7 @@ static int transcode_init(void)
                 enc_ctx->width              = dec_ctx->width;
                 enc_ctx->height             = dec_ctx->height;
                 enc_ctx->has_b_frames       = dec_ctx->has_b_frames;
+                enc_ctx->profile            = dec_ctx->profile;
                 if (ost->frame_aspect_ratio.num) { // overridden by the -aspect cli option
                     sar =
                         av_mul_q(ost->frame_aspect_ratio,
@@ -3046,22 +3047,13 @@ static int transcode_init(void)
                 abort();
             }
         } else {
-            if (!ost->enc)
-                ost->enc = avcodec_find_encoder(enc_ctx->codec_id);
-            if (!ost->enc) {
-                /* should only happen when a default codec is not present. */
-                snprintf(error, sizeof(error), "Encoder (codec %s) not found for output stream #%d:%d",
-                         avcodec_get_name(ost->st->codec->codec_id), ost->file_index, ost->index);
-                ret = AVERROR(EINVAL);
-                goto dump_format;
-            }
-
             set_encoder_id(output_files[ost->file_index], ost);
 
 #if CONFIG_LIBMFX
             if (qsv_transcode_init(ost))
                 exit_program(1);
 #endif
+
 #if CONFIG_LIBYAMI
             if (yami_transcode_init(ist, ost))
                 exit_program(1);
@@ -3071,11 +3063,10 @@ static int transcode_init(void)
                 exit_program(1);
 #endif
 
-            if (!ost->filter &&
-                (enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO ||
-                 enc_ctx->codec_type == AVMEDIA_TYPE_AUDIO)) {
-                    FilterGraph *fg;
-                    fg = init_simple_filtergraph(ist, ost);
+            if ((enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO ||
+                 enc_ctx->codec_type == AVMEDIA_TYPE_AUDIO) &&
+                 filtergraph_is_simple(ost->filter->graph)) {
+                    FilterGraph *fg = ost->filter->graph;
                     if (configure_filtergraph(fg)) {
                         av_log(NULL, AV_LOG_FATAL, "Error opening filters!\n");
                         exit_program(1);
@@ -3295,7 +3286,7 @@ static int transcode_init(void)
         ist = input_streams[i];
 
         for (j = 0; j < ist->nb_filters; j++) {
-            if (ist->filters[j]->graph->graph_desc) {
+            if (!filtergraph_is_simple(ist->filters[j]->graph)) {
                 av_log(NULL, AV_LOG_INFO, "  Stream #%d:%d (%s) -> %s",
                        ist->file_index, ist->st->index, ist->dec ? ist->dec->name : "?",
                        ist->filters[j]->name);
@@ -3316,7 +3307,7 @@ static int transcode_init(void)
             continue;
         }
 
-        if (ost->filter && ost->filter->graph->graph_desc) {
+        if (ost->filter && !filtergraph_is_simple(ost->filter->graph)) {
             /* output from a complex graph */
             av_log(NULL, AV_LOG_INFO, "  %s", ost->filter->name);
             if (nb_filtergraphs > 1)
@@ -3502,12 +3493,12 @@ static int check_keyboard_interaction(int64_t cur_time)
                                                           key == 'c' ? AVFILTER_CMD_FLAG_ONE : 0);
                         fprintf(stderr, "Command reply for stream %d: ret:%d res:\n%s", i, ret, buf);
                     } else if (key == 'c') {
-                        fprintf(stderr, "Queing commands only on filters supporting the specific command is unsupported\n");
+                        fprintf(stderr, "Queuing commands only on filters supporting the specific command is unsupported\n");
                         ret = AVERROR_PATCHWELCOME;
                     } else {
                         ret = avfilter_graph_queue_command(fg->graph, target, command, arg, 0, time);
                         if (ret < 0)
-                            fprintf(stderr, "Queing command failed with error %s\n", av_err2str(ret));
+                            fprintf(stderr, "Queuing command failed with error %s\n", av_err2str(ret));
                     }
                 }
             }
@@ -4305,6 +4296,8 @@ int main(int argc, char **argv)
 {
     int ret;
     int64_t ti;
+
+    init_dynload();
 
     register_exit(ffmpeg_cleanup);
 

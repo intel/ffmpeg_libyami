@@ -50,7 +50,7 @@ VADisplay ff_vaapi_create_display(void)
     if (!display) {
 #if !HAVE_VAAPI_DRM
         const char *device = NULL;
-        // Try to open the device as an X11 display.
+        /* Try to open the device as an X11 display */
         Display *x11_display = XOpenDisplay(device);
         if (!x11_display) {
             return NULL;
@@ -199,7 +199,8 @@ bool ff_check_vaapi_status(VAStatus status, const char *msg)
     return true;
 }
 
-SharedPtr<VideoFrame> ff_vaapi_create_surface(uint32_t rt_fmt, int pix_fmt, uint32_t w, uint32_t h)
+SharedPtr<VideoFrame>
+ff_vaapi_create_surface(uint32_t rt_fmt, int pix_fmt, uint32_t w, uint32_t h)
 {
     SharedPtr<VideoFrame> frame;
     VAStatus status;
@@ -277,7 +278,8 @@ bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in)
         dest_linesize[1] = image.pitches[1];
         dest_linesize[2] = image.pitches[2];
     } else {
-        av_log(NULL, AV_LOG_ERROR, "Unsupported the pixel format : %s.\n", av_pix_fmt_desc_get((AVPixelFormat)in->format)->name);
+        av_log(NULL, AV_LOG_ERROR, "Unsupported the pixel format : %s.\n",
+               av_pix_fmt_desc_get((AVPixelFormat)in->format)->name);
         return false;
     }
 
@@ -312,10 +314,12 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
         image_format.fourcc = VA_FOURCC_I420;
         image_format.byte_order = 1;
         image_format.bits_per_pixel = 12;
-        status = vaCreateImage(m_vaDisplay, &image_format, frame->crop.width, frame->crop.height, &image);
+        status = vaCreateImage(m_vaDisplay, &image_format,
+                               frame->crop.width, frame->crop.height, &image);
         if (!ff_check_vaapi_status(status, "vaCreateImage"))
             return false;
-        status = vaGetImage(m_vaDisplay, surface, 0, 0, out->width, out->height, image.image_id);
+        status = vaGetImage(m_vaDisplay, surface, 0, 0,
+                            out->width, out->height, image.image_id);
         if (!ff_check_vaapi_status(status, "vaGetImage"))
             return false;
     }
@@ -359,7 +363,8 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
         src_linesize[1] = image.pitches[1];
         src_linesize[2] = image.pitches[2];
     } else {
-        av_log(NULL, AV_LOG_ERROR, "Unsupported the pixel format : %s.\n", av_pix_fmt_desc_get((AVPixelFormat)out->format)->name);
+        av_log(NULL, AV_LOG_ERROR, "Unsupported the pixel format : %s.\n",
+               av_pix_fmt_desc_get((AVPixelFormat)out->format)->name);
         return false;
     }
 
