@@ -33,6 +33,7 @@ extern "C" {
 #include "VideoCommonDefs.h"
 #include "libyami.h"
 
+#include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -48,7 +49,7 @@ VADisplay ff_vaapi_create_display(void)
 
     if (!display) {
 #if !HAVE_VAAPI_DRM
-        const char *device = NULL;/*FIXME*/
+        const char *device = NULL;
         // Try to open the device as an X11 display.
         Display *x11_display = XOpenDisplay(device);
         if (!x11_display) {
@@ -135,7 +136,7 @@ void *ff_copy_from_uswc(void *dst, void *src, size_t size)
     int i, round;
     uint8_t *pDst, *pSrc;
 
-    if (dst == NULL || src == NULL) {
+    if (dst == NULL || src == NULL || size == 0) {
         return NULL;
     }
 
@@ -275,6 +276,9 @@ bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in)
         dest_linesize[0] = image.pitches[0];
         dest_linesize[1] = image.pitches[1];
         dest_linesize[2] = image.pitches[2];
+    } else {
+        av_log(NULL, AV_LOG_ERROR, "Unsupported the pixel format : %s.\n", av_pix_fmt_desc_get((AVPixelFormat)in->format)->name);
+        return false;
     }
 
     av_image_copy(dest_data, (int *)dest_linesize, src_data,
@@ -354,6 +358,9 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
         src_linesize[0] = image.pitches[0];
         src_linesize[1] = image.pitches[1];
         src_linesize[2] = image.pitches[2];
+    } else {
+        av_log(NULL, AV_LOG_ERROR, "Unsupported the pixel format : %s.\n", av_pix_fmt_desc_get((AVPixelFormat)out->format)->name);
+        return false;
     }
 
     av_image_copy(dest_data, (int *)dest_linesize, src_data,
@@ -365,4 +372,54 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
     ff_check_vaapi_status(vaUnmapBuffer(m_vaDisplay, image.buf), "vaUnmapBuffer");
     ff_check_vaapi_status(vaDestroyImage(m_vaDisplay, image.image_id), "vaDestroyImage");
     return true;
+}
+
+YamiStatus ff_yami_alloc_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params)
+{
+    if (!params)
+        return YAMI_INVALID_PARAM;
+    uint32_t size = params->size;
+    uint32_t width = params->width;
+    uint32_t height = params->height;
+    if (!width || !height || !size)
+        return YAMI_INVALID_PARAM;
+
+    size += EXTRA_SIZE;
+
+    VASurfaceID* v = new VASurfaceID[size];
+    VAStatus status = vaCreateSurfaces(ff_vaapi_create_display(), VA_RT_FORMAT_YUV420, width,
+                                       height, &v[0], size, NULL, 0);
+    if (!ff_check_vaapi_status(status, "vaCreateSurfaces"))
+        return YAMI_FAIL;
+
+    params->surfaces = new intptr_t[size];
+    for (uint32_t i = 0; i < size; i++) {
+        params->surfaces[i] = (intptr_t)v[i];
+    }
+    params->size = size;
+    return YAMI_SUCCESS;
+}
+
+YamiStatus ff_yami_free_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params)
+{
+    if (!params || !params->size || !params->surfaces)
+        return YAMI_INVALID_PARAM;
+    uint32_t size = params->size;
+    VADisplay m_vaDisplay = ff_vaapi_create_display();
+    VASurfaceID *surfaces = new VASurfaceID[size];
+    for (uint32_t i = 0; i < size; i++) {
+        surfaces[i] = params->surfaces[i];
+    }
+    VAStatus status = vaDestroySurfaces((VADisplay) m_vaDisplay, &surfaces[0], size);
+    delete[] surfaces;
+    if (!ff_check_vaapi_status(status, "vaDestroySurfaces"))
+        return YAMI_FAIL;
+
+    delete[] params->surfaces;
+    return YAMI_SUCCESS;
+}
+
+void ff_yami_unref_surface (SurfaceAllocator* thiz)
+{
+    //TODO
 }

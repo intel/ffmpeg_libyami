@@ -24,9 +24,6 @@
 #ifndef LIBAVCODEC_LIBYAMI_ENC_H_
 #define LIBAVCODEC_LIBYAMI_ENC_H_
 
-
-#define ENCODE_QUEUE_SIZE 8
-
 typedef enum {
     ENCODE_THREAD_NOT_INIT = 0,
     ENCODE_THREAD_RUNING,
@@ -37,18 +34,11 @@ typedef enum {
 struct YamiEncContext {
     AVCodecContext *avctx;
 
-    pthread_mutex_t ctx_mutex; // mutex for encoder->getOutput() and YamiEncContext itself update (encode_status, etc)
     YamiMediaCodec::IVideoEncoder *encoder;
     VideoEncOutputBuffer enc_out_buf;
 
-    pthread_t encode_thread_id;
     uint32_t max_inqueue_size;
-    std::deque<AVFrame *> *in_queue;
-    std::deque<AVFrame *> *out_queue;
-    pthread_mutex_t in_mutex;  // mutex for in_queue
-    pthread_mutex_t out_mutex; // mutex for out_queue
-    pthread_cond_t in_cond;    // encode thread condition wait
-    EncodeThreadStatus encode_status;
+    YamiThreadContext<AVFrame*> *ytc;
 
     uint8_t *enc_frame_buf;
     uint32_t enc_frame_size;

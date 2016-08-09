@@ -22,10 +22,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <pthread.h>
-#include <unistd.h>
-#include <deque>
-
 extern "C" {
 #include "avcodec.h"
 #include "libavutil/avassert.h"
@@ -37,47 +33,11 @@ extern "C" {
 }
 
 #include "VideoEncoderHost.h"
-
+#include "libyami_thr.h"
 #include "libyami_enc.h"
 #include "libyami.h"
 using namespace YamiMediaCodec;
 
-static int ff_yami_encode_thread_init(YamiEncContext *s)
-{
-    int ret = 0;
-    if (!s)
-        return -1;
-    if ((ret = pthread_mutex_init(&s->ctx_mutex, NULL)) < 0)
-        return ret;
-    if ((ret = pthread_mutex_init(&s->in_mutex, NULL)) < 0)
-        return ret;
-    if ((ret = pthread_mutex_init(&s->out_mutex, NULL)) < 0)
-        return ret;
-    if ((ret = pthread_cond_init(&s->in_cond, NULL)) < 0)
-        return ret;
-    s->encode_status = ENCODE_THREAD_NOT_INIT;
-    return 0;
-}
-
-static int ff_yami_encode_thread_close(YamiEncContext *s)
-{
-    if (!s)
-        return -1;
-    pthread_mutex_lock(&s->ctx_mutex);
-    while (s->encode_status == ENCODE_THREAD_RUNING) {
-        // potential race condition on s->encode_status
-        s->encode_status = ENCODE_THREAD_GOT_EOS;
-        pthread_mutex_unlock(&s->ctx_mutex);
-        pthread_cond_signal(&s->in_cond);
-        av_usleep(10000);
-        pthread_mutex_lock(&s->ctx_mutex);
-    }
-    pthread_mutex_unlock(&s->ctx_mutex);
-    pthread_mutex_destroy(&s->in_mutex);
-    pthread_mutex_destroy(&s->out_mutex);
-    pthread_cond_destroy(&s->in_cond);
-    return 0;
-}
 
 static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *to)
 {
@@ -87,7 +47,7 @@ static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *t
     } else if (avctx->pix_fmt == AV_PIX_FMT_NV12) {
         pix_fmt =  VA_FOURCC_NV12;
     } else {
-        av_log(avctx, AV_LOG_VERBOSE, "yami used the un-support format ... \n");
+        av_log(avctx, AV_LOG_VERBOSE, "used the un-support format ... \n");
     }
     to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, pix_fmt, avctx->width, avctx->height);
     ff_vaapi_load_image(to->output_frame, from);
@@ -98,65 +58,61 @@ static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *t
     return 0;
 }
 
-static void *ff_yami_encode_thread(void *arg)
+static void ff_yami_encode_frame(void *handle, void *args)
 {
-    AVCodecContext *avctx = (AVCodecContext *)arg;
-    YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
-    while (1) {
-        AVFrame *frame;
-        // deque one input buffer
-        av_log(avctx, AV_LOG_VERBOSE, "encode thread runs one cycle start ... \n");
-        pthread_mutex_lock(&s->in_mutex);
-        if (s->in_queue->empty()) {
-            if (s->encode_status == ENCODE_THREAD_GOT_EOS) {
-                pthread_mutex_unlock(&s->in_mutex);
-                break;
-            } else {
-                av_log(avctx, AV_LOG_VERBOSE, "encode thread wait because s->in_queue is empty\n");
-                pthread_cond_wait(&s->in_cond, &s->in_mutex); // wait if no todo frame is available
-            }
-        }
-        if (s->in_queue->empty()) { // may wake up from EOS/Close
-            pthread_mutex_unlock(&s->in_mutex);
-            continue;
-        }
-        av_log(avctx, AV_LOG_VERBOSE, "encode s->in_queue->size()=%ld\n", s->in_queue->size());
-        frame = s->in_queue->front();
-        pthread_mutex_unlock(&s->in_mutex);
-        // encode one input in_buffer
-        Encode_Status status;
-        YamiImage *yami_image = NULL;
-        if (frame->format != AV_PIX_FMT_YAMI) { /* non zero-copy mode */
-            yami_image = (YamiImage *)av_mallocz(sizeof(YamiImage));
-            if (ff_convert_to_yami(avctx, frame, yami_image) < 0)
-                av_log(avctx, AV_LOG_ERROR,
-                   "av_convert_to_yami convert frame failed\n");
-            /* handle decoder busy case */
-        } else { /* zero-copy mode */
-            yami_image = (YamiImage *)frame->data[3];
-            /*encode use the AVFrame pts*/
-            yami_image->output_frame->timeStamp = frame->pts;
-        }
-        /* handle decoder busy case */
-        do {
-             status = s->encoder->encode(yami_image->output_frame);
-        } while (status == ENCODE_IS_BUSY);
-        av_log(avctx, AV_LOG_VERBOSE, "encode() status=%d, encode_count_yami=%d\n", status, s->encode_count_yami);
-        if (status < 0) {
+    YamiThreadContext<AVFrame *> *ytc = (YamiThreadContext<AVFrame *> *)handle;
+    YamiEncContext *s = (YamiEncContext *)ytc->user_data;
+    AVCodecContext *avctx = s->avctx;
+
+    AVFrame *frame = (AVFrame *)args;
+    /* deque one input buffer */
+    av_log(avctx, AV_LOG_VERBOSE, "encode thread runs one cycle start ... \n");
+    /* encode one input buffer */
+    Encode_Status status;
+    YamiImage *yami_image = NULL;
+    if (frame->format != AV_PIX_FMT_YAMI) { /* non zero-copy mode */
+        yami_image = (YamiImage *)av_mallocz(sizeof(YamiImage));
+        if (ff_convert_to_yami(avctx, frame, yami_image) < 0)
             av_log(avctx, AV_LOG_ERROR,
-                   "encode error %d frame %d\n", status , s->encode_count_yami);
-        }
-        s->encode_count_yami++;
-        pthread_mutex_lock(&s->out_mutex);
-        s->out_queue->push_back(frame);
-        pthread_mutex_unlock(&s->out_mutex);
-        s->in_queue->pop_front();
+               "av_convert_to_yami convert frame failed\n");
+    } else { /* zero-copy mode */
+        yami_image = (YamiImage *)frame->data[3];
+        /* encode use the AVFrame pts */
+        yami_image->output_frame->timeStamp = frame->pts;
     }
-    av_log(avctx, AV_LOG_VERBOSE, "encode thread exit\n");
-    pthread_mutex_lock(&s->ctx_mutex);
-    s->encode_status = ENCODE_THREAD_EXIT;
-    pthread_mutex_unlock(&s->ctx_mutex);
-    return NULL;
+    /* handle encoder busy case */
+    do {
+         status = s->encoder->encode(yami_image->output_frame);
+    } while (status == ENCODE_IS_BUSY);
+    av_log(avctx, AV_LOG_VERBOSE, "encode status %d, encode count %d\n",
+           status, s->encode_count_yami);
+    if (status < 0) {
+        av_log(avctx, AV_LOG_ERROR,
+               "encode error %d frame %d\n", status , s->encode_count_yami);
+    }
+    s->encode_count_yami++;
+    ff_yami_push_outdata(ytc, frame);
+}
+
+static int ff_yami_encode_thread_init(YamiEncContext *s)
+{
+    if (!s)
+        return -1;
+    s->ytc = (YamiThreadContext<AVFrame *> *)av_mallocz(sizeof(YamiThreadContext<AVFrame *>));
+    if (!s->ytc)
+        return -1;
+    s->ytc->yami_thread_process_data = ff_yami_encode_frame;
+    s->ytc->user_data = s;
+    s->ytc->max_queue_size = ENCODE_QUEUE_SIZE;
+    ff_yami_thread_init(s->ytc);
+    return 0;
+}
+
+static int ff_yami_encode_thread_close(YamiEncContext *s)
+{
+    if (!s)
+        return -1;
+    return 0;
 }
 
 static bool
@@ -183,11 +139,10 @@ static const char *get_mime(AVCodecID id)
     }
 }
 
-static bool ff_out_buffer_destroy(VideoEncOutputBuffer *enc_out_buf)
+static void ff_out_buffer_destroy(VideoEncOutputBuffer *enc_out_buf)
 {
     if (enc_out_buf->data)
         free(enc_out_buf->data);
-    return true;
 }
 
 static int yami_enc_init(AVCodecContext *avctx)
@@ -207,11 +162,12 @@ static int yami_enc_init(AVCodecContext *avctx)
             return ret;
         avctx->pix_fmt      = (AVPixelFormat)ret;
     }
+
     if (avctx->codec_id == AV_CODEC_ID_H264 && avctx->width % 2 != 0
-            || avctx->height % 2 != 0) {
+        || avctx->height % 2 != 0) {
         av_log(avctx, AV_LOG_ERROR,
-                "width or height not divisible by 2 (%dx%d) .\n", avctx->width,
-                avctx->height);
+                "width or height not divisible by 2 (%dx%d) .\n",
+               avctx->width,avctx->height);
         return AVERROR(EINVAL);
     }
     av_log(avctx, AV_LOG_VERBOSE, "yami_enc_init\n");
@@ -226,13 +182,14 @@ static int yami_enc_init(AVCodecContext *avctx)
     VADisplay va_display = ff_vaapi_create_display();
     native_display.handle = (intptr_t)va_display;
     s->encoder->setNativeDisplay(&native_display);
-    // configure encoding parameters
+
+    /* configure encoding parameters */
     VideoParamsCommon encVideoParams;
     encVideoParams.size = sizeof(VideoParamsCommon);
     s->encoder->getParameters(VideoParamsTypeCommon, &encVideoParams);
     encVideoParams.resolution.width  = avctx->width;
     encVideoParams.resolution.height = avctx->height;
-    // frame rate parameters.
+    /* frame rate setting */
     if (avctx->framerate.den > 0 && avctx->framerate.num > 0) {
         encVideoParams.frameRate.frameRateDenom = avctx->framerate.den;
         encVideoParams.frameRate.frameRateNum = avctx->framerate.num;
@@ -240,17 +197,22 @@ static int yami_enc_init(AVCodecContext *avctx)
         encVideoParams.frameRate.frameRateNum = avctx->time_base.den;
         encVideoParams.frameRate.frameRateDenom = avctx->time_base.num;
     }
-    // picture type and bitrate
+    /* picture type and bitrate setting */
     encVideoParams.intraPeriod = av_clip(avctx->gop_size, 1, 250);
     s->ip_period = encVideoParams.ipPeriod = avctx->max_b_frames < 2 ? 1 : 3;
     s->max_inqueue_size = FFMAX(encVideoParams.ipPeriod, ENCODE_QUEUE_SIZE);
 
     /* ratecontrol method selected
-    When ‘global_quality’ is specified, a quality-based mode is used. Specifically this means either
-        - CQP - constant quantizer scale, when the ‘qscale’ codec flag is also set (the ‘-qscale’ avconv option).
-    Otherwise, a bitrate-based mode is used. For all of those, you should specify at least the desired average bitrate with the ‘b’ option.
-        - CBR - constant bitrate, when ‘maxrate’ is specified and equal to the average bitrate.
-        - VBR - variable bitrate, when ‘maxrate’ is specified, but is higher than the average bitrate.
+    When ‘global_quality’ is specified, a quality-based mode is used.
+    Specifically this means either
+        - CQP - constant quantizer scale, when the ‘qscale’ codec
+        flag is also set (the ‘-qscale’ avconv option).
+    Otherwise, a bitrate-based mode is used. For all of those, you
+    should specify at least the desired average bitrate with the ‘b’ option.
+        - CBR - constant bitrate, when ‘maxrate’ is specified and
+        equal to the average bitrate.
+        - VBR - variable bitrate, when ‘maxrate’ is specified, but
+        is higher than the average bitrate.
      */
     const char *rc_desc;
     float quant;
@@ -269,7 +231,8 @@ static int yami_enc_init(AVCodecContext *avctx)
         encVideoParams.rcParams.targetPercentage = (100 * avctx->bit_rate)/avctx->rc_max_rate;
         rc_desc = "variable bitrate (VBR)";
 
-        av_log(avctx, AV_LOG_WARNING, "Using the %s ratecontrol method, but driver not support it.\n", rc_desc);
+        av_log(avctx, AV_LOG_WARNING,
+               "Using the %s ratecontrol method, but driver not support it.\n", rc_desc);
     } else if (avctx->rc_max_rate == avctx->bit_rate) {
         encVideoParams.rcMode = RATE_CONTROL_CBR;
         encVideoParams.rcParams.bitRate = avctx->bit_rate;
@@ -290,21 +253,24 @@ static int yami_enc_init(AVCodecContext *avctx)
     } else {
         encVideoParams.level = 40;
     }
-    /*libyami only support h264 main now*/
-//    if (s->profile){
-//        if (!strcmp(s->profile , "high"))
-//            encVideoParams.profile = VAProfileH264High;
-//        else if(!strcmp(s->profile , "main")){
-//            encVideoParams.profile = VAProfileH264Main;
-//        } else {
-//            encVideoParams.profile = VAProfileH264Baseline;
-//        }
-//    } else {
-//        encVideoParams.profile = VAProfileH264High;
-//    }
-    // s->encoder->setEncoderParameters(&encVideoParams);
+
+    if (avctx->codec_id == AV_CODEC_ID_H264) {
+        encVideoParams.profile = VAProfileH264Main;
+        if (s->profile) {
+            if (!strcmp(s->profile , "high")) {
+                encVideoParams.profile = VAProfileH264High;
+            } else if(!strcmp(s->profile , "main")) {
+                encVideoParams.profile = VAProfileH264Main;
+            } else if(!strcmp(s->profile , "baseline")) {
+                encVideoParams.profile = VAProfileH264Baseline;
+            }
+        } else {
+            av_log(avctx, AV_LOG_WARNING, "Using the main profile as default.\n");
+        }
+    }
     encVideoParams.size = sizeof(VideoParamsCommon);
     s->encoder->setParameters(VideoParamsTypeCommon, &encVideoParams);
+
     if (avctx->codec_id == AV_CODEC_ID_H264) {
         VideoConfigAVCStreamFormat streamFormat;
         streamFormat.size = sizeof(VideoConfigAVCStreamFormat);
@@ -324,17 +290,16 @@ static int yami_enc_init(AVCodecContext *avctx)
         av_log(avctx, AV_LOG_ERROR, "yami encoder fail to start\n");
         return AVERROR_BUG;
     }
-    // init output buffer
+    /* init encoder output buffer */
     s->encoder->getMaxOutSize(&(s->max_out_size));
 
     if (!ff_out_buffer_create(&s->enc_out_buf, s->max_out_size)) {
-        av_log(avctx, AV_LOG_ERROR,  "fail to create output\n");
+        av_log(avctx, AV_LOG_ERROR, "fail to create output\n");
         return AVERROR(ENOMEM);
     }
     s->enc_frame_size = FFALIGN(avctx->width, 32) * FFALIGN(avctx->height, 32) * 3;
     s->enc_frame_buf = static_cast<uint8_t *>(av_mallocz(s->enc_frame_size));
-    s->in_queue = new std::deque<AVFrame *>;
-    s->out_queue = new std::deque<AVFrame *>;
+
     s->encode_count = 0;
     s->encode_count_yami = 0;
     s->render_count = 0;
@@ -343,9 +308,10 @@ static int yami_enc_init(AVCodecContext *avctx)
 }
 
 static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
-                   const AVFrame *frame, int *got_packet)
+                          const AVFrame *frame, int *got_packet)
 {
     YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
+    s->avctx = avctx;
     Encode_Status status;
     int ret;
     if(!s->encoder)
@@ -359,60 +325,25 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
         ret = av_frame_ref(qframe, frame);
         if (ret < 0)
             return ret;
-        while (s->encode_status < ENCODE_THREAD_GOT_EOS) { // we need enque eos buffer more than once
-            pthread_mutex_lock(&s->in_mutex);
-            if (s->in_queue->size() < 2/*s->max_inqueue_size*/) {   /*FIXME libyami decode dpb will use 16 surfaces,total is 22 surfaces*/
-                s->in_queue->push_back(qframe);
-                av_log(avctx, AV_LOG_VERBOSE, "wakeup encode thread ...\n");
-                pthread_cond_signal(&s->in_cond);
-                pthread_mutex_unlock(&s->in_mutex);
-                break;
-            }
-            pthread_mutex_unlock(&s->in_mutex);
-            av_log(avctx, AV_LOG_DEBUG,
-                   "s->in_queue->size()=%ld, s->encode_count=%d, s->encode_count_yami=%d, too many buffer are under encoding, wait ...\n",
-                   s->in_queue->size(), s->encode_count, s->encode_count_yami);
-            av_usleep(1000);
-        };
+        ff_yami_push_data(s->ytc, qframe);
         s->encode_count++;
     }
-
-    // decode thread status update
-    pthread_mutex_lock(&s->ctx_mutex);
-    switch (s->encode_status) {
-    case ENCODE_THREAD_NOT_INIT:
-    case ENCODE_THREAD_EXIT:
-        if (frame) {
-            s->encode_status = ENCODE_THREAD_RUNING;
-            pthread_create(&s->encode_thread_id, NULL, &ff_yami_encode_thread, avctx);
-        }
-        break;
-    case ENCODE_THREAD_RUNING:
-        if (!frame) {
-            s->encode_status = ENCODE_THREAD_GOT_EOS; // call releaseLock for seek
-        }
-        break;
-    case ENCODE_THREAD_GOT_EOS:
-        if (s->in_queue->empty())
-            s->encode_status = ENCODE_THREAD_NOT_INIT;
-        break;
-    default:
-        break;
-    }
-    pthread_mutex_unlock(&s->ctx_mutex);
+    if (!frame  && ff_yami_read_thread_status(s->ytc) <= YAMI_THREAD_GOT_EOS)
+        ff_yami_set_stream_eof(s->ytc);
+    ff_yami_thread_create (s->ytc);
     do {
         status = s->encoder->getOutput(&s->enc_out_buf, true);
-    } while (!frame && status != ENCODE_SUCCESS && s->in_queue->size() > 0);
+    } while (!frame && status != ENCODE_SUCCESS && ff_yami_read_thread_status(s->ytc) != YAMI_THREAD_EXIT);
     if (status != ENCODE_SUCCESS)
         return 0;
     if ((ret = ff_alloc_packet2(avctx, pkt, s->enc_out_buf.dataSize, 0)) < 0)
         return ret;
-    pthread_mutex_lock(&s->out_mutex);
-    if (!s->out_queue->empty()) {
-        AVFrame *qframe = s->out_queue->front();
-        if (qframe) {
+
+    AVFrame *qframe = ff_yami_pop_outdata (s->ytc);
+    if (qframe) {
             pkt->pts = s->enc_out_buf.timeStamp;
-            pkt->dts = qframe->pts - s->ip_period; /* XXX: DTS must be smaller than PTS, used ip_period as offset */
+            /* XXX: DTS must be smaller than PTS, used ip_period as offset */
+            pkt->dts = qframe->pts - s->ip_period;
             if (qframe->format != AV_PIX_FMT_YAMI) {
                 YamiImage *yami_image = (YamiImage *)qframe->data[3];
                 ff_vaapi_destory_surface(yami_image->output_frame);
@@ -420,10 +351,8 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
                 av_free(yami_image);
             };
             av_frame_free(&qframe);
-        }
-        s->out_queue->pop_front();
     }
-    pthread_mutex_unlock(&s->out_mutex);
+
     s->render_count++;
     /* get extradata when build the first frame */
     int offset = 0;
@@ -433,26 +362,27 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
             uint8_t *ptr = s->enc_out_buf.data;
             for (uint32_t i = 0; i < s->enc_out_buf.dataSize; i++) {
                 if (*(ptr + i) == 0x0 && *(ptr + i + 1) == 0x0
-                        && *(ptr + i + 2) == 0x0 && *(ptr + i + 3) == 0x1
-                        && (*(ptr + i + 4) & 0x1f) == 5) {
+                    && *(ptr + i + 2) == 0x0 && *(ptr + i + 3) == 0x1
+                    && (*(ptr + i + 4) & 0x1f) == 5) {
                     offset = i;
                     break;
                 }
             }
             avctx->extradata = (uint8_t *) av_mallocz(
-                    offset + AV_INPUT_BUFFER_PADDING_SIZE);
+                offset + AV_INPUT_BUFFER_PADDING_SIZE);
             memcpy(avctx->extradata, s->enc_out_buf.data, offset);
             avctx->extradata_size = offset;
         }
     }
     void *p = pkt->data;
     memcpy(p, s->enc_out_buf.data + offset,
-            s->enc_out_buf.dataSize - offset);
+           s->enc_out_buf.dataSize - offset);
     pkt->size = s->enc_out_buf.dataSize - offset;
 
     if (s->enc_out_buf.flag & ENCODE_BUFFERFLAG_SYNCFRAME)
         pkt->flags |= AV_PKT_FLAG_KEY;
     *got_packet = 1;
+
     return 0;
 }
 
@@ -460,24 +390,12 @@ static int yami_enc_close(AVCodecContext *avctx)
 {
     YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
     ff_out_buffer_destroy(&s->enc_out_buf);
-    ff_yami_encode_thread_close(s);
+    ff_yami_thread_close(s->ytc);
     if (s->encoder) {
         s->encoder->stop();
         releaseVideoEncoder(s->encoder);
         s->encoder = NULL;
     }
-    while (!s->in_queue->empty()) {
-        AVFrame *in_buffer = s->in_queue->front();
-        s->in_queue->pop_front();
-        av_frame_free(&in_buffer);
-    }
-    while (!s->out_queue->empty()) {
-            AVFrame *out_buffer = s->out_queue->front();
-            s->out_queue->pop_front();
-            av_frame_free(&out_buffer);
-    }
-    delete s->in_queue;
-    delete s->out_queue;
     av_free(s->enc_frame_buf);
     s->enc_frame_size = 0;
     av_log(avctx, AV_LOG_DEBUG, "yami_enc_close\n");

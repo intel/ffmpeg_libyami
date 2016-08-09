@@ -42,8 +42,7 @@
 typedef struct {
     SharedPtr<VideoFrame> output_frame;
     VADisplay va_display;
-/*if map the output_frame to buffer will use follow value*/
-}YamiImage;
+} YamiImage;
 
 VADisplay ff_vaapi_create_display(void);
 SharedPtr<VideoFrame> ff_vaapi_create_surface(uint32_t rt_fmt, int pix_fmt, uint32_t w, uint32_t h);
@@ -51,5 +50,17 @@ bool ff_vaapi_destory_surface(SharedPtr<VideoFrame>& frame);
 bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in);
 bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out);
 bool ff_check_vaapi_status(VAStatus status, const char *msg);
+
+YamiStatus ff_yami_alloc_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params);
+YamiStatus ff_yami_free_surface (SurfaceAllocator* thiz, SurfaceAllocParams* params);
+void ff_yami_unref_surface (SurfaceAllocator* thiz);
+
+#define DECODE_QUEUE_SIZE 8
+#define ENCODE_QUEUE_SIZE 4
+
+/* EXTRA_SIZE must great than DEC_QUE+ENC_QUE+DBP-19 or the thread will be block
+ * because surfaceAlloc will allocate extra surfaces and SurfaceAllocParams size
+ * is always 19, so we just allocate DECODE_QUEUE_SIZE + ENCODE_QUEUE_SIZE + 2 surfaces*/
+#define EXTRA_SIZE (DECODE_QUEUE_SIZE + ENCODE_QUEUE_SIZE + 2)
 
 #endif /* LIBAVCODEC_LIBYAMI_H_ */
