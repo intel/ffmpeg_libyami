@@ -34,16 +34,11 @@ typedef enum {
 
 struct YamiDecContext {
     AVCodecContext *avctx;
-    pthread_mutex_t ctx_mutex; /* mutex for YamiContext */
 
     YamiMediaCodec::IVideoDecoder *decoder;
     const VideoFormatInfo *format_info;
-    pthread_t decode_thread_id;
-    std::deque<VideoDecodeBuffer *> *in_queue;
-    pthread_mutex_t in_mutex; /* mutex for in queue */
-    pthread_cond_t in_cond;   /* decode thread condition wait */
-    DecodeThreadStatus decode_status;
 
+    YamiThreadContext<VideoDecodeBuffer*> *ytc;
     SurfaceAllocator *p_alloc;
     /* the pts is no value use this value */
     int duration;

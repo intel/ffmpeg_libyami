@@ -783,12 +783,6 @@ again:
                 ret = -1;
                 goto end;
             }
-            if (nal->type != H264_NAL_IDR_SLICE) {
-                av_log(h->avctx, AV_LOG_ERROR,
-                       "Invalid mix of idr and non-idr slices\n");
-                ret = -1;
-                goto end;
-            }
             if(!idr_cleared) {
                 if (h->current_slice && (avctx->active_thread_type & FF_THREAD_SLICE)) {
                     av_log(h, AV_LOG_ERROR, "invalid mixed IDR / non IDR frames cannot be decoded in slice multithreading mode\n");
@@ -805,37 +799,8 @@ again:
             if ((err = ff_h264_decode_slice_header(h, sl, nal)))
                 break;
 
-            if (h->sei.recovery_point.recovery_frame_cnt >= 0) {
-                const int sei_recovery_frame_cnt = h->sei.recovery_point.recovery_frame_cnt;
-
-                if (h->poc.frame_num != sei_recovery_frame_cnt || sl->slice_type_nos != AV_PICTURE_TYPE_I)
-                    h->valid_recovery_point = 1;
-
-                if (   h->recovery_frame < 0
-                    || av_mod_uintp2(h->recovery_frame - h->poc.frame_num, h->ps.sps->log2_max_frame_num) > sei_recovery_frame_cnt) {
-                    h->recovery_frame = av_mod_uintp2(h->poc.frame_num + sei_recovery_frame_cnt, h->ps.sps->log2_max_frame_num);
-
-                    if (!h->valid_recovery_point)
-                        h->recovery_frame = h->poc.frame_num;
-                }
-            }
-
-            h->cur_pic_ptr->f->key_frame |= (nal->type == H264_NAL_IDR_SLICE);
-
-            if (nal->type == H264_NAL_IDR_SLICE ||
-                (h->recovery_frame == h->poc.frame_num && nal->ref_idc)) {
-                h->recovery_frame         = -1;
-                h->cur_pic_ptr->recovered = 1;
-            }
-            // If we have an IDR, all frames after it in decoded order are
-            // "recovered".
-            if (nal->type == H264_NAL_IDR_SLICE)
-                h->frame_recovered |= FRAME_RECOVERED_IDR;
-#if 1
-            h->cur_pic_ptr->recovered |= h->frame_recovered;
-#else
-            h->cur_pic_ptr->recovered |= !!(h->frame_recovered & FRAME_RECOVERED_IDR);
-#endif
+            if (sl->redundant_pic_count > 0)
+                break;
 
             if (h->current_slice == 1) {
                 if (!(avctx->flags2 & AV_CODEC_FLAG2_CHUNKS))
@@ -851,26 +816,24 @@ again:
 #endif
             }
 
-            if (sl->redundant_pic_count == 0) {
-                if (avctx->hwaccel) {
-                    ret = avctx->hwaccel->decode_slice(avctx,
-                                                       nal->raw_data,
-                                                       nal->raw_size);
-                    if (ret < 0)
-                        goto end;
+            if (avctx->hwaccel) {
+                ret = avctx->hwaccel->decode_slice(avctx,
+                                                   nal->raw_data,
+                                                   nal->raw_size);
+                if (ret < 0)
+                    goto end;
 #if FF_API_CAP_VDPAU
-                } else if (CONFIG_H264_VDPAU_DECODER &&
-                           h->avctx->codec->capabilities & AV_CODEC_CAP_HWACCEL_VDPAU) {
-                    ff_vdpau_add_data_chunk(h->cur_pic_ptr->f->data[0],
-                                            start_code,
-                                            sizeof(start_code));
-                    ff_vdpau_add_data_chunk(h->cur_pic_ptr->f->data[0],
-                                            nal->raw_data,
-                                            nal->raw_size);
+            } else if (CONFIG_H264_VDPAU_DECODER &&
+                       h->avctx->codec->capabilities & AV_CODEC_CAP_HWACCEL_VDPAU) {
+                ff_vdpau_add_data_chunk(h->cur_pic_ptr->f->data[0],
+                                        start_code,
+                                        sizeof(start_code));
+                ff_vdpau_add_data_chunk(h->cur_pic_ptr->f->data[0],
+                                        nal->raw_data,
+                                        nal->raw_size);
 #endif
-                } else
-                    context_count++;
-            }
+            } else
+                context_count++;
             break;
         case H264_NAL_DPA:
         case H264_NAL_DPB:

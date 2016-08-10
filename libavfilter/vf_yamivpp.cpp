@@ -64,6 +64,7 @@ typedef struct {
 
     int deinterlace;     // deinterlace mode : 0=off, 1=bob, 2=advanced
     int denoise;         // enable denoise algo. level is the optional value from the interval [0; 100]
+    int sharpless;       // enable sharpless. level is the optional value from the interval [0; 100]
 
     int cur_out_idx;     // current surface in index
 
@@ -99,7 +100,8 @@ static const AVOption yamivpp_options[] = {
         { "off",    "no deinterlacing",                        0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, .flags=FLAGS, .unit="deinterlace"},
         { "bob",    "bob deinterlacing(linear deinterlacing)", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, .flags=FLAGS, .unit="deinterlace"},
         { "advanced","advanced deinterlacing",                 0, AV_OPT_TYPE_CONST, {.i64=2}, 0, 0, .flags=FLAGS, .unit="deinterlace"},
-    {"denoise",     "denoise level [0, 100]",                     OFFSET(denoise),     AV_OPT_TYPE_INT, {.i64=0}, 0, 100, .flags = FLAGS},
+    {"denoise",     "denoise level [-1, 100]",                    OFFSET(denoise),     AV_OPT_TYPE_INT, {.i64=DENOISE_LEVEL_NONE}, -1, 100, .flags = FLAGS},
+    {"sharpless",   "sharpless level [-1, 100]",                  OFFSET(sharpless),   AV_OPT_TYPE_INT, {.i64=SHARPENING_LEVEL_NONE}, -1, 100, .flags = FLAGS},
     {"framerate",   "output frame rate",                          OFFSET(framerate),   AV_OPT_TYPE_RATIONAL, {.dbl=0.0},0, DBL_MAX, .flags = FLAGS},
     {"pipeline",    "yamivpp in hw pipeline: 0=off, 1=on",        OFFSET(pipeline),    AV_OPT_TYPE_INT, {.i64=0}, 0, 1, .flags = FLAGS, .unit = "pipeline"},
         { "off",    "don't put yamivpp in hw pipeline",        0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, .flags=FLAGS, .unit="pipeline"},
@@ -132,8 +134,59 @@ static av_cold int yamivpp_init(AVFilterContext *ctx)
         return -1;
     }
 
-    av_log(yamivpp, AV_LOG_VERBOSE, "w:%d, h:%d, deinterlace:%d, denoise:%d, framerate:%d/%d, pipeline:%d\n",
-           yamivpp->out_width, yamivpp->out_height, yamivpp->deinterlace, yamivpp->denoise, yamivpp->framerate.num, yamivpp->framerate.den, yamivpp->pipeline);
+    VPPDenoiseParameters denoise;
+    memset(&denoise, 0, sizeof(denoise));
+    denoise.size = sizeof(denoise);
+    denoise.level = yamivpp->denoise;
+    if (yamivpp->scaler->setParameters(VppParamTypeDenoise,
+                                       &denoise) != YAMI_SUCCESS) {
+        av_log(ctx, AV_LOG_ERROR, "denoise level should in range "
+               "[%d, %d] or %d for none",
+               DENOISE_LEVEL_MIN, DENOISE_LEVEL_MAX, DENOISE_LEVEL_NONE);
+        return -1;
+    }
+
+    VPPSharpeningParameters sharpening;
+    memset(&sharpening, 0, sizeof(sharpening));
+    sharpening.size = sizeof(sharpening);
+    sharpening.level = yamivpp->sharpless;
+    if (yamivpp->scaler->setParameters(VppParamTypeSharpening,
+                                       &sharpening) != YAMI_SUCCESS) {
+        av_log(ctx, AV_LOG_ERROR, "sharpening level should in range "
+               "[%d, %d] or %d for none",
+               SHARPENING_LEVEL_MIN, SHARPENING_LEVEL_MAX, SHARPENING_LEVEL_NONE);
+        return -1;
+    }
+
+    switch (yamivpp->deinterlace) {
+    case 0:
+        /* Do nothing */
+        break;
+    case 1:
+        VPPDeinterlaceParameters deinterlace;
+        memset(&deinterlace, 0, sizeof(deinterlace));
+        deinterlace.size = sizeof(deinterlace);
+        deinterlace.mode = DEINTERLACE_MODE_BOB;
+
+        if (yamivpp->scaler->setParameters(VppParamTypeDeinterlace,
+                                           &deinterlace) != YAMI_SUCCESS) {
+            av_log(ctx, AV_LOG_ERROR, "deinterlace failed for mode %d",
+                   yamivpp->deinterlace);
+            return -1;
+        }
+        break;
+    case 2:
+    default:
+        av_log(ctx, AV_LOG_WARNING, "Using the deinterlace mode %d, "
+               "but not support.\n", yamivpp->deinterlace);
+        break;
+    }
+
+    av_log(yamivpp, AV_LOG_VERBOSE, "w:%d, h:%d, deinterlace:%d, denoise:%d, "
+           "sharpless:%d, framerate:%d/%d, pipeline:%d\n",
+           yamivpp->out_width, yamivpp->out_height, yamivpp->deinterlace,
+           yamivpp->denoise, yamivpp->sharpless,yamivpp->framerate.num, yamivpp->framerate.den,
+           yamivpp->pipeline);
 
     return 0;
 }
@@ -168,8 +221,11 @@ static int config_props(AVFilterLink *inlink)
     else
         outlink->format = AV_PIX_FMT_NV12;
 
-    av_log(yamivpp, AV_LOG_VERBOSE, "out w:%d, h:%d, deinterlace:%d, denoise:%d, framerate:%d/%d, pipeline:%d\n",
-           yamivpp->out_width, yamivpp->out_height, yamivpp->deinterlace, yamivpp->denoise, yamivpp->framerate.num, yamivpp->framerate.den, yamivpp->pipeline);
+    av_log(yamivpp, AV_LOG_VERBOSE, "out w:%d, h:%d, deinterlace:%d,"
+           "denoise:%d, sharpless %d, framerate:%d/%d, pipeline:%d\n",
+           yamivpp->out_width, yamivpp->out_height,
+           yamivpp->deinterlace, yamivpp->denoise,yamivpp->sharpless,
+           yamivpp->framerate.num, yamivpp->framerate.den, yamivpp->pipeline);
 
 
     return 0;
@@ -202,7 +258,8 @@ static int map_fmt_to_fourcc(int fmt)
     return fourcc;
 }
 
-static SharedPtr<VideoFrame> ff_vaapi_create_nopipeline_surface(int fmt, uint32_t w, uint32_t h)
+static SharedPtr<VideoFrame>
+ff_vaapi_create_nopipeline_surface(int fmt, uint32_t w, uint32_t h)
 {
     SharedPtr<VideoFrame> src;
     int fourcc = map_fmt_to_fourcc(fmt);
@@ -212,7 +269,8 @@ static SharedPtr<VideoFrame> ff_vaapi_create_nopipeline_surface(int fmt, uint32_
     return src;
 }
 
-static SharedPtr<VideoFrame> ff_vaapi_create_pipeline_src_surface(int fmt, uint32_t w, uint32_t h, AVFrame *frame)
+static SharedPtr<VideoFrame>
+ff_vaapi_create_pipeline_src_surface(int fmt, uint32_t w, uint32_t h, AVFrame *frame)
 {
     YamiImage *yami_image = NULL;
     yami_image = (YamiImage *)frame->data[3];
@@ -220,7 +278,8 @@ static SharedPtr<VideoFrame> ff_vaapi_create_pipeline_src_surface(int fmt, uint3
     return yami_image->output_frame;
 }
 
-static SharedPtr<VideoFrame> ff_vaapi_create_pipeline_dest_surface(int fmt, uint32_t w, uint32_t h, AVFrame *frame)
+static SharedPtr<VideoFrame>
+ff_vaapi_create_pipeline_dest_surface(int fmt, uint32_t w, uint32_t h, AVFrame *frame)
 {
     SharedPtr<VideoFrame> dest;
     int fourcc = map_fmt_to_fourcc(fmt);
@@ -339,8 +398,8 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         yami_image->va_display = m_display;
         out->data[3] = reinterpret_cast<uint8_t *>(yami_image);
         out->buf[0] = av_buffer_create((uint8_t *)out->data[3],
-                                   sizeof(YamiImage),
-                                   av_recycle_surface, NULL, 0);
+                                       sizeof(YamiImage),
+                                       av_recycle_surface, NULL, 0);
 
         status = yamivpp->scaler->process(yamivpp->src, yamivpp->dest);
         if (status != YAMI_SUCCESS) {
