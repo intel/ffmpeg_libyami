@@ -38,7 +38,7 @@ struct YamiEncContext {
     VideoEncOutputBuffer enc_out_buf;
 
     uint32_t max_inqueue_size;
-    YamiThreadContext<AVFrame*> *ytc;
+    YamiThreadContext<AVFrame*> *ctx;
 
     uint8_t *enc_frame_buf;
     uint32_t enc_frame_size;

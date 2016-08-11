@@ -38,7 +38,7 @@ struct YamiDecContext {
     YamiMediaCodec::IVideoDecoder *decoder;
     const VideoFormatInfo *format_info;
 
-    YamiThreadContext<VideoDecodeBuffer*> *ytc;
+    YamiThreadContext<VideoDecodeBuffer*> *ctx;
     SurfaceAllocator *p_alloc;
     /* the pts is no value use this value */
     int duration;
