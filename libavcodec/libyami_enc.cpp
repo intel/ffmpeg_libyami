@@ -33,7 +33,7 @@ extern "C" {
 }
 
 #include "VideoEncoderHost.h"
-#include "libyami_thr.h"
+#include "libyami_internal.h"
 #include "libyami_enc.h"
 #include "libyami.h"
 using namespace YamiMediaCodec;
@@ -61,7 +61,7 @@ static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *t
 static void ff_yami_encode_frame(void *handle, void *args)
 {
     YamiThreadContext<AVFrame *> *ytc = (YamiThreadContext<AVFrame *> *)handle;
-    YamiEncContext *s = (YamiEncContext *)ytc->user_data;
+    YamiEncContext *s = (YamiEncContext *)ytc->priv;
     AVCodecContext *avctx = s->avctx;
 
     AVFrame *frame = (AVFrame *)args;
@@ -91,20 +91,23 @@ static void ff_yami_encode_frame(void *handle, void *args)
                "encode error %d frame %d\n", status , s->encode_count_yami);
     }
     s->encode_count_yami++;
-    ff_yami_push_outdata(ytc, frame);
+    if (ff_yami_push_outdata(ytc, frame) != 0)
+        av_log(avctx, AV_LOG_ERROR,
+                     "ff_yami_push_outdata failed\n");
 }
 
 static int ff_yami_encode_thread_init(YamiEncContext *s)
 {
     if (!s)
         return -1;
-    s->ytc = (YamiThreadContext<AVFrame *> *)av_mallocz(sizeof(YamiThreadContext<AVFrame *>));
-    if (!s->ytc)
+    s->ctx = (YamiThreadContext<AVFrame *> *)av_mallocz(sizeof(YamiThreadContext<AVFrame *>));
+    if (!s->ctx)
         return -1;
-    s->ytc->yami_thread_process_data = ff_yami_encode_frame;
-    s->ytc->user_data = s;
-    s->ytc->max_queue_size = ENCODE_QUEUE_SIZE;
-    ff_yami_thread_init(s->ytc);
+    s->ctx->process_data_cb = ff_yami_encode_frame;
+    s->ctx->priv = s;
+    s->ctx->max_queue_size = ENCODE_QUEUE_SIZE;
+    if (ff_yami_thread_init(s->ctx) != 0)
+        return -1;
     return 0;
 }
 
@@ -319,21 +322,21 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
         ret = av_frame_ref(qframe, frame);
         if (ret < 0)
             return ret;
-        ff_yami_push_data(s->ytc, qframe);
+        ff_yami_push_data(s->ctx, qframe);
         s->encode_count++;
     }
-    if (!frame  && ff_yami_read_thread_status(s->ytc) <= YAMI_THREAD_GOT_EOS)
-        ff_yami_set_stream_eof(s->ytc);
-    ff_yami_thread_create (s->ytc);
+    if (!frame  && ff_yami_read_thread_status(s->ctx) <= YAMI_THREAD_GOT_EOS)
+        ff_yami_set_stream_eof(s->ctx);
+    ff_yami_thread_create (s->ctx);
     do {
         status = s->encoder->getOutput(&s->enc_out_buf, true);
-    } while (!frame && status != ENCODE_SUCCESS && ff_yami_read_thread_status(s->ytc) != YAMI_THREAD_EXIT);
+    } while (!frame && status != ENCODE_SUCCESS && ff_yami_read_thread_status(s->ctx) != YAMI_THREAD_EXIT);
     if (status != ENCODE_SUCCESS)
         return 0;
     if ((ret = ff_alloc_packet2(avctx, pkt, s->enc_out_buf.dataSize, 0)) < 0)
         return ret;
 
-    AVFrame *qframe = ff_yami_pop_outdata (s->ytc);
+    AVFrame *qframe = ff_yami_pop_outdata (s->ctx);
     if (qframe) {
             pkt->pts = s->enc_out_buf.timeStamp;
             /* XXX: DTS must be smaller than PTS, used ip_period as offset */
@@ -384,7 +387,9 @@ static int yami_enc_close(AVCodecContext *avctx)
 {
     YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
     ff_out_buffer_destroy(&s->enc_out_buf);
-    ff_yami_thread_close(s->ytc);
+    if (ff_yami_thread_close(s->ctx) != 0) {
+            av_log(avctx, AV_LOG_ERROR, "ff_yami_thread_close failed\n");
+    }
     if (s->encoder) {
         s->encoder->stop();
         releaseVideoEncoder(s->encoder);
