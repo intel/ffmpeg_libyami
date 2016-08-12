@@ -54,6 +54,9 @@ void ff_yami_unref_surface (SurfaceAllocator* thiz);
 #define DECODE_QUEUE_SIZE 8
 #define ENCODE_QUEUE_SIZE 4
 
-/* EXTRA_SIZE must great than DEC_QUE+ENC_QUE+DBP-19 or the thread will be block */
+/* EXTRA_SIZE must great than DEC_QUE+ENC_QUE+DBP-19 or the thread will be block
+ * because surfaceAlloc will allocate extra surfaces and SurfaceAllocParams size
+ * is always 19, so we just allocate DECODE_QUEUE_SIZE + ENCODE_QUEUE_SIZE + 2 surfaces*/
 #define EXTRA_SIZE (DECODE_QUEUE_SIZE + ENCODE_QUEUE_SIZE + 2)
+
 #endif /* LIBAVCODEC_LIBYAMI_H_ */

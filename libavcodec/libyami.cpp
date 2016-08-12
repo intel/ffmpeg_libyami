@@ -33,6 +33,7 @@ extern "C" {
 #include "VideoCommonDefs.h"
 #include "libyami.h"
 
+#include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
 
