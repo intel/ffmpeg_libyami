@@ -22,10 +22,6 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-#include <pthread.h>
-#include <unistd.h>
-#include <deque>
-
 extern "C" {
 #include "avcodec.h"
 #include "libavutil/avassert.h"
@@ -37,46 +33,10 @@ extern "C" {
 }
 
 #include "VideoEncoderHost.h"
-
+#include "libyami_internal.h"
 #include "libyami_enc.h"
 #include "libyami.h"
 using namespace YamiMediaCodec;
-
-static int ff_yami_encode_thread_init(YamiEncContext *s)
-{
-    int ret = 0;
-    if (!s)
-        return -1;
-    if ((ret = pthread_mutex_init(&s->ctx_mutex, NULL)) < 0)
-        return ret;
-    if ((ret = pthread_mutex_init(&s->in_mutex, NULL)) < 0)
-        return ret;
-    if ((ret = pthread_mutex_init(&s->out_mutex, NULL)) < 0)
-        return ret;
-    if ((ret = pthread_cond_init(&s->in_cond, NULL)) < 0)
-        return ret;
-    s->encode_status = ENCODE_THREAD_NOT_INIT;
-    return 0;
-}
-
-static int ff_yami_encode_thread_close(YamiEncContext *s)
-{
-    if (!s)
-        return -1;
-    pthread_mutex_lock(&s->ctx_mutex);
-    while (s->encode_status == ENCODE_THREAD_RUNING) {
-        s->encode_status = ENCODE_THREAD_GOT_EOS;
-        pthread_mutex_unlock(&s->ctx_mutex);
-        pthread_cond_signal(&s->in_cond);
-        av_usleep(10000);
-        pthread_mutex_lock(&s->ctx_mutex);
-    }
-    pthread_mutex_unlock(&s->ctx_mutex);
-    pthread_mutex_destroy(&s->in_mutex);
-    pthread_mutex_destroy(&s->out_mutex);
-    pthread_cond_destroy(&s->in_cond);
-    return 0;
-}
 
 static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *to)
 {
@@ -88,7 +48,8 @@ static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *t
     } else {
         av_log(avctx, AV_LOG_VERBOSE, "used the un-support format ... \n");
     }
-    to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, pix_fmt, avctx->width, avctx->height);
+    to->output_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420,
+                                               pix_fmt, avctx->width, avctx->height);
     ff_vaapi_load_image(to->output_frame, from);
     if (from->key_frame)
         to->output_frame->flags |= VIDEO_FRAME_FLAGS_KEY;
@@ -97,67 +58,59 @@ static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *t
     return 0;
 }
 
-static void *ff_yami_encode_thread(void *arg)
+static void ff_yami_encode_frame(void *handle, void *args)
 {
-    AVCodecContext *avctx = (AVCodecContext *)arg;
-    YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
-    while (1) {
-        AVFrame *frame;
-        /* deque one input buffer */
-        av_log(avctx, AV_LOG_VERBOSE, "encode thread runs one cycle start ... \n");
-        pthread_mutex_lock(&s->in_mutex);
-        if (s->in_queue->empty()) {
-            if (s->encode_status == ENCODE_THREAD_GOT_EOS) {
-                pthread_mutex_unlock(&s->in_mutex);
-                break;
-            }
+    YamiThreadContext<AVFrame *> *ytc = (YamiThreadContext<AVFrame *> *)handle;
+    YamiEncContext *s = (YamiEncContext *)ytc->priv;
+    AVCodecContext *avctx = s->avctx;
 
-            av_log(avctx, AV_LOG_VERBOSE, "encode thread wait because in queue is empty\n");
-            pthread_cond_wait(&s->in_cond, &s->in_mutex);
-            pthread_mutex_unlock(&s->in_mutex);
-            continue;
-        }
-
-        av_log(avctx, AV_LOG_VERBOSE, "encode in queue size %ld\n", s->in_queue->size());
-        frame = s->in_queue->front();
-        pthread_mutex_unlock(&s->in_mutex);
-        /* encode one input buffer */
-        Encode_Status status;
-        YamiImage *yami_image = NULL;
-        if (frame->format != AV_PIX_FMT_YAMI) { /* non zero-copy mode */
-            yami_image = (YamiImage *)av_mallocz(sizeof(YamiImage));
-            if (ff_convert_to_yami(avctx, frame, yami_image) < 0)
-                av_log(avctx, AV_LOG_ERROR,
-                   "av_convert_to_yami convert frame failed\n");
-        } else { /* zero-copy mode */
-            yami_image = (YamiImage *)frame->data[3];
-            /* encode use the AVFrame pts */
-            yami_image->output_frame->timeStamp = frame->pts;
-        }
-
-        /* handle encoder busy case */
-        do {
-             status = s->encoder->encode(yami_image->output_frame);
-        } while (status == ENCODE_IS_BUSY);
-        av_log(avctx, AV_LOG_VERBOSE, "encode status %d, encode count %d\n",
-               status, s->encode_count_yami);
-        if (status < 0) {
+    AVFrame *frame = (AVFrame *)args;
+    /* deque one input buffer */
+    av_log(avctx, AV_LOG_VERBOSE, "encode thread runs one cycle start ... \n");
+    /* encode one input buffer */
+    Encode_Status status;
+    YamiImage *yami_image = NULL;
+    if (frame->format != AV_PIX_FMT_YAMI) { /* non zero-copy mode */
+        yami_image = (YamiImage *)av_mallocz(sizeof(YamiImage));
+        if (ff_convert_to_yami(avctx, frame, yami_image) < 0)
             av_log(avctx, AV_LOG_ERROR,
-                   "encode error %d frame %d\n", status , s->encode_count_yami);
-        }
-        s->encode_count_yami++;
-        pthread_mutex_lock(&s->out_mutex);
-        s->out_queue->push_back(frame);
-        pthread_mutex_unlock(&s->out_mutex);
-        s->in_queue->pop_front();
+               "av_convert_to_yami convert frame failed\n");
+    } else { /* zero-copy mode */
+        yami_image = (YamiImage *)frame->data[3];
+        /* encode use the AVFrame pts */
+        yami_image->output_frame->timeStamp = frame->pts;
     }
-    av_log(avctx, AV_LOG_VERBOSE, "encode thread exit\n");
-    pthread_mutex_lock(&s->ctx_mutex);
-    s->encode_status = ENCODE_THREAD_EXIT;
-    pthread_mutex_unlock(&s->ctx_mutex);
-
-    return NULL;
+    /* handle encoder busy case */
+    do {
+         status = s->encoder->encode(yami_image->output_frame);
+    } while (status == ENCODE_IS_BUSY);
+    av_log(avctx, AV_LOG_VERBOSE, "encode status %d, encode count %d\n",
+           status, s->encode_count_yami);
+    if (status < 0) {
+        av_log(avctx, AV_LOG_ERROR,
+               "encode error %d frame %d\n", status , s->encode_count_yami);
+    }
+    s->encode_count_yami++;
+    if (ff_yami_push_outdata(ytc, frame) != 0)
+        av_log(avctx, AV_LOG_ERROR,
+                     "ff_yami_push_outdata failed\n");
 }
+
+static int ff_yami_encode_thread_init(YamiEncContext *s)
+{
+    if (!s)
+        return -1;
+    s->ctx = (YamiThreadContext<AVFrame *> *)av_mallocz(sizeof(YamiThreadContext<AVFrame *>));
+    if (!s->ctx)
+        return -1;
+    s->ctx->process_data_cb = ff_yami_encode_frame;
+    s->ctx->priv = s;
+    s->ctx->max_queue_size = ENCODE_QUEUE_SIZE;
+    if (ff_yami_thread_init(s->ctx) != 0)
+        return -1;
+    return 0;
+}
+
 
 static bool
 ff_out_buffer_create(VideoEncOutputBuffer *enc_out_buf, int max_out_size)
@@ -343,8 +296,6 @@ static int yami_enc_init(AVCodecContext *avctx)
     }
     s->enc_frame_size = FFALIGN(avctx->width, 32) * FFALIGN(avctx->height, 32) * 3;
     s->enc_frame_buf = static_cast<uint8_t *>(av_mallocz(s->enc_frame_size));
-    s->in_queue = new std::deque<AVFrame *>;
-    s->out_queue = new std::deque<AVFrame *>;
 
     s->encode_count = 0;
     s->encode_count_yami = 0;
@@ -357,6 +308,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
                           const AVFrame *frame, int *got_packet)
 {
     YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
+    s->avctx = avctx;
     Encode_Status status;
     int ret;
     if(!s->encoder)
@@ -370,61 +322,22 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
         ret = av_frame_ref(qframe, frame);
         if (ret < 0)
             return ret;
-        while (s->encode_status < ENCODE_THREAD_GOT_EOS) {
-            pthread_mutex_lock(&s->in_mutex);
-            if (s->in_queue->size() < 2/*s->max_inqueue_size*/) {
-                /* XXX : libyami decode dpb will use 16 surfaces */
-                s->in_queue->push_back(qframe);
-                av_log(avctx, AV_LOG_VERBOSE, "wakeup encode thread ...\n");
-                pthread_cond_signal(&s->in_cond);
-                pthread_mutex_unlock(&s->in_mutex);
-                break;
-            }
-            pthread_mutex_unlock(&s->in_mutex);
-            av_log(avctx, AV_LOG_DEBUG,
-                   "in queue size %ld, encode count %d, encoded count %d, too many buffer are under encoding, wait ...\n",
-                   s->in_queue->size(), s->encode_count, s->encode_count_yami);
-            av_usleep(1000);
-        };
+        ff_yami_push_data(s->ctx, qframe);
         s->encode_count++;
     }
-
-    /* encode thread status update */
-    pthread_mutex_lock(&s->ctx_mutex);
-    switch (s->encode_status) {
-    case ENCODE_THREAD_NOT_INIT:
-    case ENCODE_THREAD_EXIT:
-        if (frame) {
-            s->encode_status = ENCODE_THREAD_RUNING;
-            pthread_create(&s->encode_thread_id, NULL, &ff_yami_encode_thread, avctx);
-        }
-        break;
-    case ENCODE_THREAD_RUNING:
-        if (!frame) {
-            s->encode_status = ENCODE_THREAD_GOT_EOS;
-        }
-        break;
-    case ENCODE_THREAD_GOT_EOS:
-        if (s->in_queue->empty())
-            s->encode_status = ENCODE_THREAD_NOT_INIT;
-        break;
-    default:
-        break;
-    }
-
-    pthread_mutex_unlock(&s->ctx_mutex);
+    if (!frame  && ff_yami_read_thread_status(s->ctx) <= YAMI_THREAD_GOT_EOS)
+        ff_yami_set_stream_eof(s->ctx);
+    ff_yami_thread_create (s->ctx);
     do {
         status = s->encoder->getOutput(&s->enc_out_buf, true);
-    } while (!frame && status != ENCODE_SUCCESS && s->in_queue->size() > 0);
+    } while (!frame && status != ENCODE_SUCCESS && ff_yami_read_thread_status(s->ctx) != YAMI_THREAD_EXIT);
     if (status != ENCODE_SUCCESS)
         return 0;
     if ((ret = ff_alloc_packet2(avctx, pkt, s->enc_out_buf.dataSize, 0)) < 0)
         return ret;
 
-    pthread_mutex_lock(&s->out_mutex);
-    if (!s->out_queue->empty()) {
-        AVFrame *qframe = s->out_queue->front();
-        if (qframe) {
+    AVFrame *qframe = ff_yami_pop_outdata (s->ctx);
+    if (qframe) {
             pkt->pts = s->enc_out_buf.timeStamp;
             /* XXX: DTS must be smaller than PTS, used ip_period as offset */
             pkt->dts = qframe->pts - s->ip_period;
@@ -435,10 +348,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
                 av_free(yami_image);
             };
             av_frame_free(&qframe);
-        }
-        s->out_queue->pop_front();
     }
-    pthread_mutex_unlock(&s->out_mutex);
 
     s->render_count++;
     /* get extradata when build the first frame */
@@ -477,24 +387,14 @@ static int yami_enc_close(AVCodecContext *avctx)
 {
     YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
     ff_out_buffer_destroy(&s->enc_out_buf);
-    ff_yami_encode_thread_close(s);
+    if (ff_yami_thread_close(s->ctx) != 0) {
+            av_log(avctx, AV_LOG_ERROR, "ff_yami_thread_close failed\n");
+    }
     if (s->encoder) {
         s->encoder->stop();
         releaseVideoEncoder(s->encoder);
         s->encoder = NULL;
     }
-    while (!s->in_queue->empty()) {
-        AVFrame *in_buffer = s->in_queue->front();
-        s->in_queue->pop_front();
-        av_frame_free(&in_buffer);
-    }
-    while (!s->out_queue->empty()) {
-            AVFrame *out_buffer = s->out_queue->front();
-            s->out_queue->pop_front();
-            av_frame_free(&out_buffer);
-    }
-    delete s->in_queue;
-    delete s->out_queue;
     av_free(s->enc_frame_buf);
     s->enc_frame_size = 0;
     av_log(avctx, AV_LOG_DEBUG, "yami_enc_close\n");
