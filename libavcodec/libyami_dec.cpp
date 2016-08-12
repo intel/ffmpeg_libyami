@@ -243,7 +243,6 @@ static int yami_dec_init(AVCodecContext *avctx)
         return AVERROR_BUG;
     }
 
-//    s->avctx = avctx;
 #if HAVE_PTHREADS
     if (ff_yami_decode_thread_init(s) < 0)
         return AVERROR(ENOMEM);
