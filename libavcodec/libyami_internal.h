@@ -269,6 +269,7 @@ int ff_yami_thread_close (YamiThreadContext<T> *ctx)
     pthread_mutex_destroy(&ctx->in_queue_lock);
     pthread_mutex_destroy(&ctx->out_queue_lock);
     pthread_cond_destroy(&ctx->in_cond);
+    pthread_mutex_destroy(&ctx->priv_lock);
     delete ctx->in_queue;
     delete ctx->out_queue;
     return 0;
