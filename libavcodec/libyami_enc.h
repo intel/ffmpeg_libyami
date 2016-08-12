@@ -34,7 +34,7 @@ typedef enum {
 struct YamiEncContext {
     AVCodecContext *avctx;
 
-    pthread_mutex_t ctx_mutex; // mutex for YamiEncContext
+    pthread_mutex_t ctx_mutex; // mutex for encoder->getOutput() and YamiEncContext itself update (encode_status, etc)
     YamiMediaCodec::IVideoEncoder *encoder;
     VideoEncOutputBuffer enc_out_buf;
 
@@ -54,7 +54,7 @@ struct YamiEncContext {
     uint32_t frame_rate;    // frame rate trasfer the time stamp
     char *rcmod;            // rate control mode CQP|CBR|VBR
     uint32_t gop;           // group of picture 1-250
-    uint32_t ip_period;     // max b frame 0-only I 1-IP 3-IPBB
+    uint32_t ip_period;      //max b frame 0-only I 1-IP 3-IPBB
     char *level;            // level 40|41|50|51
     char *profile;          // profile main|baseline|high
     /*******************/

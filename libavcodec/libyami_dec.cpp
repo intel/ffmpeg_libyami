@@ -68,8 +68,8 @@ static int ff_yami_decode_thread_close(YamiDecContext *s)
         s->decode_status = DECODE_THREAD_GOT_EOS;
         pthread_mutex_unlock(&s->ctx_mutex);
         pthread_cond_signal(&s->in_cond);
-        pthread_mutex_lock(&s->ctx_mutex);
         av_usleep(10000);
+        pthread_mutex_lock(&s->ctx_mutex);
     }
     pthread_mutex_unlock(&s->ctx_mutex);
     pthread_mutex_destroy(&s->in_mutex);
