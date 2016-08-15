@@ -258,6 +258,7 @@ External library support:
   --enable-libspeex        enable Speex de/encoding via libspeex [no]
   --enable-libssh          enable SFTP protocol via libssh [no]
   --enable-libtesseract    enable Tesseract, needed for ocr filter [no]
+  --enable-libyami         enable Libyami video encoding/decoding/post-processing [no]
   --enable-libtheora       enable Theora encoding via libtheora [no]
   --enable-libtwolame      enable MP2 encoding via libtwolame [no]
   --enable-libv4l2         enable libv4l2/v4l-utils [no]
@@ -1519,6 +1520,7 @@ EXTERNAL_LIBRARY_LIST="
     libspeex
     libssh
     libtesseract
+    libyami
     libtheora
     libtwolame
     libv4l2
@@ -2787,6 +2789,26 @@ libshine_encoder_select="audio_frame_queue"
 libspeex_decoder_deps="libspeex"
 libspeex_encoder_deps="libspeex"
 libspeex_encoder_select="audio_frame_queue"
+libyami_decoder_deps="libyami pthreads"
+libyami_decoder_extralibs="-lstdc++"
+libyami_encoder_deps="libyami pthreads"
+libyami_encoder_extralibs="-lstdc++"
+libyami_h264_decoder_deps="libyami"
+libyami_h264_decoder_select="libyami_decoder"
+libyami_hevc_decoder_deps="libyami"
+libyami_hevc_decoder_select="libyami_decoder"
+libyami_vp8_decoder_deps="libyami"
+libyami_vp8_decoder_select="libyami_decoder"
+libyami_mpeg2_decoder_deps="libyami"
+libyami_mpeg2_decoder_select="libyami_decoder"
+libyami_vc1_decoder_deps="libyami"
+libyami_vc1_decoder_select="libyami_decoder"
+libyami_vp9_decoder_deps="libyami"
+libyami_vp9_decoder_select="libyami_decoder"
+libyami_vp8_encoder_deps="libyami"
+libyami_vp8_encoder_select="libyami_encoder"
+libyami_h264_encoder_deps="libyami"
+libyami_h264_encoder_select="libyami_encoder"
 libtheora_encoder_deps="libtheora"
 libtwolame_encoder_deps="libtwolame"
 libvo_amrwbenc_encoder_deps="libvo_amrwbenc"
@@ -3080,6 +3102,8 @@ zmq_filter_deps="libzmq"
 zoompan_filter_deps="swscale"
 zscale_filter_deps="libzimg"
 scale_vaapi_filter_deps="vaapi VAProcPipelineParameterBuffer"
+yamivpp_filter_deps="libyami"
+yamivpp_filter_extralibs="-lstdc++"
 
 # examples
 avcodec_example_deps="avcodec avutil"
@@ -5056,6 +5080,7 @@ die_license_disabled version3 libopencore_amrnb
 die_license_disabled version3 libopencore_amrwb
 die_license_disabled version3 libsmbclient
 die_license_disabled version3 libvo_amrwbenc
+die_license_disabled version3 libyami
 
 enabled version3 && { enabled gpl && enable gplv3 || enable lgplv3; }
 
@@ -5706,6 +5731,7 @@ enabled libsoxr           && require libsoxr soxr.h soxr_create -lsoxr && LIBSOX
 enabled libssh            && require_pkg_config libssh libssh/sftp.h sftp_init
 enabled libspeex          && require_pkg_config speex speex/speex.h speex_decoder_init -lspeex
 enabled libtesseract      && require_pkg_config tesseract tesseract/capi.h TessBaseAPICreate
+enabled libyami           && require_pkg_config libyami VideoDecoderDefs.h "" -lstdc++
 enabled libtheora         && require libtheora theora/theoraenc.h th_info_init -ltheoraenc -ltheoradec -logg
 enabled libtwolame        && require libtwolame twolame.h twolame_init -ltwolame &&
                              { check_lib twolame.h twolame_encode_buffer_float32_interleaved -ltwolame ||
@@ -6346,6 +6372,7 @@ enabled smartblur_filter    && prepend avfilter_deps "swscale"
 enabled spectrumsynth_filter && prepend avfilter_deps "avcodec"
 enabled subtitles_filter    && prepend avfilter_deps "avformat avcodec"
 enabled uspp_filter         && prepend avfilter_deps "avcodec"
+
 
 enabled lavfi_indev         && prepend avdevice_deps "avfilter"
 

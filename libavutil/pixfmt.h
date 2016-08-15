@@ -293,6 +293,11 @@ enum AVPixelFormat {
     AV_PIX_FMT_AYUV64BE,    ///< packed AYUV 4:4:4,64bpp (1 Cr & Cb sample per 1x1 Y & A samples), big-endian
 
     AV_PIX_FMT_VIDEOTOOLBOX, ///< hardware decoding through Videotoolbox
+    /**
+     *  HW acceleration through libyami, data[3] contains a pointer to the
+     *  VideoFrameRawData structure.
+     */
+    AV_PIX_FMT_YAMI,
 
     AV_PIX_FMT_P010LE, ///< like NV12, with 10bpp per component, data in the high bits, zeros in the low bits, little-endian
     AV_PIX_FMT_P010BE, ///< like NV12, with 10bpp per component, data in the high bits, zeros in the low bits, big-endian

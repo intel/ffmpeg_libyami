@@ -642,6 +642,12 @@ void avcodec_register_all(void)
     REGISTER_ENCODER(LIBKVAZAAR,        libkvazaar);
     REGISTER_ENCODER(MJPEG_VAAPI,       mjpeg_vaapi);
     REGISTER_ENCODER(MPEG2_QSV,         mpeg2_qsv);
+    REGISTER_ENCDEC (LIBYAMI_H264,      libyami_h264);
+    REGISTER_DECODER(LIBYAMI_HEVC,      libyami_hevc);
+    REGISTER_ENCDEC(LIBYAMI_VP8,        libyami_vp8);
+    REGISTER_DECODER(LIBYAMI_MPEG2,     libyami_mpeg2);
+    REGISTER_DECODER(LIBYAMI_VC1,       libyami_vc1);
+    REGISTER_DECODER(LIBYAMI_VP9,       libyami_vp9);
     REGISTER_DECODER(VC1_CUVID,         vc1_cuvid);
     REGISTER_DECODER(VP8_CUVID,         vp8_cuvid);
     REGISTER_DECODER(VP9_CUVID,         vp9_cuvid);
