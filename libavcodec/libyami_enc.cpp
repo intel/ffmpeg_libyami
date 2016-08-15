@@ -190,7 +190,7 @@ static void ff_out_buffer_destroy(VideoEncOutputBuffer *enc_out_buf)
         free(enc_out_buf->data);
 }
 
-static int yami_enc_init(AVCodecContext *avctx)
+static av_cold int yami_enc_init(AVCodecContext *avctx)
 {
     YamiEncContext *s = (YamiEncContext *) avctx->priv_data;
     Encode_Status status;
@@ -474,7 +474,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     return 0;
 }
 
-static int yami_enc_close(AVCodecContext *avctx)
+static av_cold int yami_enc_close(AVCodecContext *avctx)
 {
     YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
     ff_out_buffer_destroy(&s->enc_out_buf);

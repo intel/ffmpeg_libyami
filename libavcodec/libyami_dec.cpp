@@ -237,7 +237,7 @@ static const char *get_mime(AVCodecID id)
     }
 }
 
-static int yami_dec_init(AVCodecContext *avctx)
+static av_cold int yami_dec_init(AVCodecContext *avctx)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     Decode_Status status;
@@ -459,7 +459,7 @@ fail:
     return ret;
 }
 
-static int yami_dec_close(AVCodecContext *avctx)
+static av_cold int yami_dec_close(AVCodecContext *avctx)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
 
