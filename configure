@@ -4236,7 +4236,7 @@ case "$arch" in
     sh4|sh)
         arch="sh4"
     ;;
-    sun4u|sparc*)
+    sun4*|sparc*)
         arch="sparc"
     ;;
     tilegx|tile-gx)
@@ -5480,7 +5480,7 @@ check_func  ${malloc_prefix}memalign            && enable memalign
 check_func  ${malloc_prefix}posix_memalign      && enable posix_memalign
 
 check_func  access
-check_func  arc4random
+check_func_headers stdlib.h arc4random
 check_func_headers time.h clock_gettime || { check_func_headers time.h clock_gettime -lrt && add_extralibs -lrt && LIBRT="-lrt"; }
 check_func  fcntl
 check_func  fork
