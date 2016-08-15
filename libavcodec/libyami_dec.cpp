@@ -72,6 +72,7 @@ static int ff_yami_decode_thread_close(YamiDecContext *s)
         pthread_mutex_lock(&s->ctx_mutex);
     }
     pthread_mutex_unlock(&s->ctx_mutex);
+    pthread_mutex_destroy(&s->ctx_mutex);
     pthread_mutex_destroy(&s->in_mutex);
     pthread_cond_destroy(&s->in_cond);
     return 0;

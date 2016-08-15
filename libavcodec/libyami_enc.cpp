@@ -72,6 +72,7 @@ static int ff_yami_encode_thread_close(YamiEncContext *s)
         pthread_mutex_lock(&s->ctx_mutex);
     }
     pthread_mutex_unlock(&s->ctx_mutex);
+    pthread_mutex_destroy(&s->ctx_mutex);
     pthread_mutex_destroy(&s->in_mutex);
     pthread_mutex_destroy(&s->out_mutex);
     pthread_cond_destroy(&s->in_cond);
