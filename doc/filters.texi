@@ -13973,6 +13973,12 @@ Zoom-in up to 1.5 and pan always at center of picture:
 @example
 zoompan=z='min(zoom+0.0015,1.5)':d=700:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'
 @end example
+
+@item
+Same as above but without pausing:
+@example
+zoompan=z='min(max(zoom,pzoom)+0.0015,1.5)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'
+@end example
 @end itemize
 
 @section zscale
@@ -16512,6 +16518,10 @@ It accepts the following values:
 @item lanczos
 @item gauss
 @item tukey
+@item dolph
+@item cauchy
+@item parzen
+@item poisson
 @end table
 Default is @code{hanning}.
 
@@ -16659,6 +16669,10 @@ It accepts the following values:
 @item lanczos
 @item gauss
 @item tukey
+@item dolph
+@item cauchy
+@item parzen
+@item poisson
 @end table
 
 Default value is @code{hann}.
@@ -16802,6 +16816,10 @@ It accepts the following values:
 @item lanczos
 @item gauss
 @item tukey
+@item dolph
+@item cauchy
+@item parzen
+@item poisson
 @end table
 Default value is @code{hann}.
 
