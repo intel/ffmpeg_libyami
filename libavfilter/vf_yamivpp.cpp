@@ -134,54 +134,6 @@ static av_cold int yamivpp_init(AVFilterContext *ctx)
         return -1;
     }
 
-    VPPDenoiseParameters denoise;
-    memset(&denoise, 0, sizeof(denoise));
-    denoise.size = sizeof(denoise);
-    denoise.level = yamivpp->denoise;
-    if (yamivpp->scaler->setParameters(VppParamTypeDenoise,
-                                       &denoise) != YAMI_SUCCESS) {
-        av_log(ctx, AV_LOG_ERROR, "denoise level should in range "
-               "[%d, %d] or %d for none",
-               DENOISE_LEVEL_MIN, DENOISE_LEVEL_MAX, DENOISE_LEVEL_NONE);
-        return -1;
-    }
-
-    VPPSharpeningParameters sharpening;
-    memset(&sharpening, 0, sizeof(sharpening));
-    sharpening.size = sizeof(sharpening);
-    sharpening.level = yamivpp->sharpless;
-    if (yamivpp->scaler->setParameters(VppParamTypeSharpening,
-                                       &sharpening) != YAMI_SUCCESS) {
-        av_log(ctx, AV_LOG_ERROR, "sharpening level should in range "
-               "[%d, %d] or %d for none",
-               SHARPENING_LEVEL_MIN, SHARPENING_LEVEL_MAX, SHARPENING_LEVEL_NONE);
-        return -1;
-    }
-
-    switch (yamivpp->deinterlace) {
-    case 0:
-        /* Do nothing */
-        break;
-    case 1:
-        VPPDeinterlaceParameters deinterlace;
-        memset(&deinterlace, 0, sizeof(deinterlace));
-        deinterlace.size = sizeof(deinterlace);
-        deinterlace.mode = DEINTERLACE_MODE_BOB;
-
-        if (yamivpp->scaler->setParameters(VppParamTypeDeinterlace,
-                                           &deinterlace) != YAMI_SUCCESS) {
-            av_log(ctx, AV_LOG_ERROR, "deinterlace failed for mode %d",
-                   yamivpp->deinterlace);
-            return -1;
-        }
-        break;
-    case 2:
-    default:
-        av_log(ctx, AV_LOG_WARNING, "Using the deinterlace mode %d, "
-               "but not support.\n", yamivpp->deinterlace);
-        break;
-    }
-
     av_log(yamivpp, AV_LOG_VERBOSE, "w:%d, h:%d, deinterlace:%d, denoise:%d, "
            "sharpless:%d, framerate:%d/%d, pipeline:%d\n",
            yamivpp->out_width, yamivpp->out_height, yamivpp->deinterlace,
@@ -334,6 +286,54 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             native_display.handle = (intptr_t)m_display;
             yamivpp->scaler->setNativeDisplay(native_display);
 
+            VPPDenoiseParameters denoise;
+            memset(&denoise, 0, sizeof(denoise));
+            denoise.size = sizeof(denoise);
+            denoise.level = yamivpp->denoise;
+            if (yamivpp->scaler->setParameters(VppParamTypeDenoise,
+                                               &denoise) != YAMI_SUCCESS) {
+                av_log(ctx, AV_LOG_ERROR, "denoise level should in range "
+                       "[%d, %d] or %d for none",
+                       DENOISE_LEVEL_MIN, DENOISE_LEVEL_MAX, DENOISE_LEVEL_NONE);
+                return -1;
+            }
+
+            VPPSharpeningParameters sharpening;
+            memset(&sharpening, 0, sizeof(sharpening));
+            sharpening.size = sizeof(sharpening);
+            sharpening.level = yamivpp->sharpless;
+            if (yamivpp->scaler->setParameters(VppParamTypeSharpening,
+                                               &sharpening) != YAMI_SUCCESS) {
+                av_log(ctx, AV_LOG_ERROR, "sharpening level should in range "
+                       "[%d, %d] or %d for none",
+                       SHARPENING_LEVEL_MIN, SHARPENING_LEVEL_MAX, SHARPENING_LEVEL_NONE);
+                return -1;
+            }
+
+            switch (yamivpp->deinterlace) {
+            case 0:
+                /* Do nothing */
+                break;
+            case 1:
+                VPPDeinterlaceParameters deinterlace;
+                memset(&deinterlace, 0, sizeof(deinterlace));
+                deinterlace.size = sizeof(deinterlace);
+                deinterlace.mode = DEINTERLACE_MODE_BOB;
+
+                if (yamivpp->scaler->setParameters(VppParamTypeDeinterlace,
+                                                   &deinterlace) != YAMI_SUCCESS) {
+                    av_log(ctx, AV_LOG_ERROR, "deinterlace failed for mode %d",
+                           yamivpp->deinterlace);
+                    return -1;
+                }
+                break;
+            case 2:
+            default:
+                av_log(ctx, AV_LOG_WARNING, "Using the deinterlace mode %d, "
+                       "but not support.\n", yamivpp->deinterlace);
+                break;
+            }
+
             /* create src/dest surface, then load yuv to src surface and get
            yuv from dest surfcace */
             yamivpp->src  = ff_vaapi_create_nopipeline_surface(in->format, in->width, in->height);
@@ -384,6 +384,55 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             native_display.type = NATIVE_DISPLAY_VA;
             native_display.handle = (intptr_t)m_display;
             yamivpp->scaler->setNativeDisplay(native_display);
+
+                       VPPDenoiseParameters denoise;
+            memset(&denoise, 0, sizeof(denoise));
+            denoise.size = sizeof(denoise);
+            denoise.level = yamivpp->denoise;
+            if (yamivpp->scaler->setParameters(VppParamTypeDenoise,
+                                               &denoise) != YAMI_SUCCESS) {
+                av_log(ctx, AV_LOG_ERROR, "denoise level should in range "
+                       "[%d, %d] or %d for none",
+                       DENOISE_LEVEL_MIN, DENOISE_LEVEL_MAX, DENOISE_LEVEL_NONE);
+                return -1;
+            }
+
+            VPPSharpeningParameters sharpening;
+            memset(&sharpening, 0, sizeof(sharpening));
+            sharpening.size = sizeof(sharpening);
+            sharpening.level = yamivpp->sharpless;
+            if (yamivpp->scaler->setParameters(VppParamTypeSharpening,
+                                               &sharpening) != YAMI_SUCCESS) {
+                av_log(ctx, AV_LOG_ERROR, "sharpening level should in range "
+                       "[%d, %d] or %d for none",
+                       SHARPENING_LEVEL_MIN, SHARPENING_LEVEL_MAX, SHARPENING_LEVEL_NONE);
+                return -1;
+            }
+
+            switch (yamivpp->deinterlace) {
+            case 0:
+                /* Do nothing */
+                break;
+            case 1:
+                VPPDeinterlaceParameters deinterlace;
+                memset(&deinterlace, 0, sizeof(deinterlace));
+                deinterlace.size = sizeof(deinterlace);
+                deinterlace.mode = DEINTERLACE_MODE_BOB;
+
+                if (yamivpp->scaler->setParameters(VppParamTypeDeinterlace,
+                                                   &deinterlace) != YAMI_SUCCESS) {
+                    av_log(ctx, AV_LOG_ERROR, "deinterlace failed for mode %d",
+                           yamivpp->deinterlace);
+                    return -1;
+                }
+                break;
+            case 2:
+            default:
+                av_log(ctx, AV_LOG_WARNING, "Using the deinterlace mode %d, "
+                       "but not support.\n", yamivpp->deinterlace);
+                break;
+            }
+
         }
 
         if (in->format == AV_PIX_FMT_YAMI) {
