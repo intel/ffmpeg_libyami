@@ -266,7 +266,9 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
 
     if (in->width == outlink->w
         && in->height == outlink->h
-        && in->format == outlink->format)
+        && in->format == outlink->format
+        && yamivpp->denoise != -1
+        && yamivpp->sharpless != -1)
          return ff_filter_frame(outlink, in);
 
     if (in->format != AV_PIX_FMT_YAMI && yamivpp->pipeline == 0) {
