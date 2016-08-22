@@ -570,6 +570,61 @@ FATE_SAMPLES_AVCONV-$(CONFIG_LIBYAMI_VP8_DECODER) += $(FATE_LIBYAMI_VP8-yes)
 fate-libyami-vp8: $(FATE_LIBYAMI_VP8-yes)
 
 
+define FATE_LIBYAMI_VP9_SUITE
+FATE_LIBYAMI_VP9-$(CONFIG_MATROSKA_DEMUXER) += fate-libyami-vp9$(2)-$(1)
+fate-libyami-vp9$(2)-$(1): CMD = framemd5 $(3) -i $(TARGET_SAMPLES)/vp9-test-vectors/vp90-2-$(1).webm
+fate-libyami-vp9$(2)-$(1): REF = $(SRC_PATH)/tests/ref/fate/vp9-$(1)
+endef
+
+define FATE_LIBYAMI_VP9_PROFILE_SUITE
+FATE_LIBYAMI_VP9-$(CONFIG_MATROSKA_DEMUXER) += fate-vp9p$(2)-$(1)
+fate-libyami-vp9p$(2)-$(1): CMD = framemd5 -i $(TARGET_SAMPLES)/vp9-test-vectors/vp9$(2)-2-$(1).webm $(3)
+fate-libyami-vp9p$(2)-$(1): REF = $(SRC_PATH)/tests/ref/fate/vp9p$(2)-$(1)
+endef
+
+VP9_LIBYAMI_Q = 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 \
+        16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 \
+        32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 \
+        48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63
+VP9_LIBYAMI_SHARP = 1 2 3 4 5 6 7
+VP9_LIBYAMI_SIZE_A = 08 10 16 18 32 34 64 66
+VP9_LIBYAMI_SIZE_B = 196 198 200 202 208 210 224 226
+VP9_LIBYAMI_CHROMA_SUBSAMPLE = 
+VP9_LIBYAMI_HIGH_BITDEPTH = 
+
+define FATE_LIBYAMI_VP9_FULL
+$(foreach Q,$(VP9_LIBYAMI_Q),$(eval $(call FATE_LIBYAMI_VP9_SUITE,00-quantizer-$(Q))))
+$(foreach SHARP,$(VP9_LIBYAMI_SHARP),$(eval $(call FATE_LIBYAMI_VP9_SUITE,01-sharpness-$(SHARP))))
+$(foreach W,$(VP9_LIBYAMI_SIZE_A),$(eval $(foreach H,$(VP9_LIBYAMI_SIZE_A),$(eval $(call FATE_LIBYAMI_VP9_SUITE,02-size-$(W)x$(H))))))
+$(foreach W,$(VP9_LIBYAMI_SIZE_B),$(eval $(foreach H,$(VP9_LIBYAMI_SIZE_B),$(eval $(call FATE_LIBYAMI_VP9_SUITE,03-size-$(W)x$(H))))))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,03-deltaq))
+$(foreach SS,$(VP9_LIBYAMI_CHROMA_SUBSAMPLE),$(eval $(call FATE_LIBYAMI_VP9_PROFILE_SUITE,04-yuv$(SS),1,)))
+$(foreach BD,$(VP9_LIBYAMI_HIGH_BITDEPTH),$(eval $(call FATE_LIBYAMI_VP9_PROFILE_SUITE,20-$(BD)bit-yuv420,2,-pix_fmt yuv420p$(BD)le)))
+$(foreach BD,$(VP9_LIBYAMI_HIGH_BITDEPTH),$(eval $(foreach SS,$(VP9_LIBYAMI_CHROMA_SUBSAMPLE),$(eval $(call FATE_LIBYAMI_VP9_PROFILE_SUITE,20-$(BD)bit-yuv$(SS),3,-pix_fmt yuv$(SS)p$(BD)le)))))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,06-bilinear))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,09-lf_deltas))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,10-show-existing-frame))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,10-show-existing-frame2))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,15-segkey_adpq))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,16-intra-only))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,2pass-akiyo))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,parallelmode-akiyo))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,segmentation-aq-akiyo))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,segmentation-sf-akiyo))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,tiling-pedestrian))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,trac3849))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,trac4359))
+endef
+
+$(eval $(call FATE_LIBYAMI_VP9_FULL))
+FATE_VP9-$(CONFIG_IVF_DEMUXER) += fate-libyami-vp9-05-resize
+fate-libyami-vp9-05-resize: CMD = framemd5 -i $(TARGET_SAMPLES)/vp9-test-vectors/vp90-2-05-resize.ivf -s 352x288 -sws_flags bitexact+bilinear
+fate-libyami-vp9-05-resize: REF = $(SRC_PATH)/tests/ref/fate/vp9-05-resize
+
+FATE_SAMPLES_AVCONV-$(CONFIG_LIBYAMI_VP9_DECODER) += $(FATE_LIBYAMI_VP9-yes)
+fate-libyami-vp9: $(FATE_LIBYAMI_VP9-yes)
+
+
 FATE_LIBYAMI_MICROSOFT-$(call DEMDEC, AVI, LIBYAMI_VC1) += fate-libyami-msmpeg4v1
 fate-libyami-msmpeg4v1: CMD = framecrc -c:v libyami_vc1 -flags +bitexact -idct simple -i $(TARGET_SAMPLES)/msmpeg4v1/mpg4.avi -an
 fate-libyami-msmpeg4v1: REF = $(SRC_PATH)/tests/ref/fate/msmpeg4v1
