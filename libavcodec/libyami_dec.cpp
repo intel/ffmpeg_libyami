@@ -236,6 +236,8 @@ static int yami_dec_init(AVCodecContext *avctx)
         config_buffer.data = avctx->extradata;
         config_buffer.size = avctx->extradata_size;
     }
+    config_buffer.width = avctx->width;
+    config_buffer.height = avctx->height;
     config_buffer.profile = VAProfileNone;
     status = s->decoder->start(&config_buffer);
     if (status != DECODE_SUCCESS && status != DECODE_FORMAT_CHANGE) {
