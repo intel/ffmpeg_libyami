@@ -266,6 +266,11 @@ static int scale_vaapi_filter_frame(AVFilterLink *inlink, AVFrame *input_frame)
            av_get_pix_fmt_name(input_frame->format),
            input_frame->width, input_frame->height, input_frame->pts);
 
+    if (input_frame->width == ctx->output_width &&
+        input_frame->height == ctx->output_height &&
+        ctx->input_frames->sw_format == ctx->output_format)
+        return ff_filter_frame(outlink, input_frame);
+
     if (ctx->va_context == VA_INVALID_ID)
         return AVERROR(EINVAL);
 
