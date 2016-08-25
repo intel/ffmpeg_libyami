@@ -441,6 +441,64 @@ ffmpeg -i first.flac -i second.flac -filter_complex acrossfade=d=10:o=0:c1=exp:c
 @end example
 @end itemize
 
+@section acrusher
+
+Reduce audio bit resolution.
+
+This filter is bit crusher with enhanced functionality. A bit crusher
+is used to audibly reduce number of bits an audio signal is sampled
+with. This doesn't change the bit depth at all, it just produces the
+effect. Material reduced in bit depth sounds more harsh and "digital".
+This filter is able to even round to continous values instead of discrete
+bit depths.
+Additionally it has a D/C offset which results in different crushing of
+the lower and the upper half of the signal.
+An Anti-Aliasing setting is able to produce "softer" crushing sounds.
+
+Another feature of this filter is the logarithmic mode.
+This setting switches from linear distances between bits to logarithmic ones.
+The result is a much more "natural" sounding crusher which doesn't gate low
+signals for example. The human ear has a logarithmic perception, too
+so this kind of crushing is much more pleasant.
+Logarithmic crushing is also able to get anti-aliased.
+
+The filter accepts the following options:
+
+@table @option
+@item level_in
+Set level in.
+
+@item level_out
+Set level out.
+
+@item bits
+Set bit reduction.
+
+@item mix
+Set mixing ammount.
+
+@item mode
+Can be linear: @code{lin} or logarithmic: @code{log}.
+
+@item dc
+Set DC.
+
+@item aa
+Set anti-aliasing.
+
+@item samples
+Set sample reduction.
+
+@item lfo
+Enable LFO. By default disabled.
+
+@item lforange
+Set LFO range.
+
+@item lforate
+Set LFO rate.
+@end table
+
 @section adelay
 
 Delay one or more audio channels.
@@ -455,6 +513,7 @@ Set list of delays in milliseconds for each channel separated by '|'.
 At least one delay greater than 0 should be provided.
 Unused delays will be silently ignored. If number of given delays is
 smaller than number of channels all remaining channels will not be delayed.
+If you want to delay exact number of samples, append 'S' to number.
 @end table
 
 @subsection Examples
@@ -465,6 +524,13 @@ Delay first channel by 1.5 seconds, the third channel by 0.5 seconds and leave
 the second channel (and any other channels that may be present) unchanged.
 @example
 adelay=1500|0|500
+@end example
+
+@item
+Delay second channel by 500 samples, the third channel by 700 samples and leave
+the first channel (and any other channels that may be present) unchanged.
+@example
+adelay=0|500S|700S
 @end example
 @end itemize
 
@@ -2563,6 +2629,64 @@ Set delay-line interpolation, @var{linear} or @var{quadratic}.
 Default is @var{linear}.
 @end table
 
+@section hdcd
+
+Decodes High Definition Compatible Digital (HDCD) data. A 16-bit PCM stream with
+embedded HDCD codes is expanded into a 20-bit PCM stream.
+
+The filter supports the Peak Extend and Low-level Gain Adjustment features
+of HDCD, and detects the Transient Filter flag.
+
+@example
+ffmpeg -i HDCD16.flac -af hdcd OUT24.flac
+@end example
+
+When using the filter with wav, note the default encoding for wav is 16-bit,
+so the resulting 20-bit stream will be truncated back to 16-bit. Use something
+like @command{-acodec pcm_s24le} after the filter to get 24-bit PCM output.
+@example
+ffmpeg -i HDCD16.wav -af hdcd OUT16.wav
+ffmpeg -i HDCD16.wav -af hdcd -acodec pcm_s24le OUT24.wav
+@end example
+
+The filter accepts the following options:
+
+@table @option
+@item disable_autoconvert
+Disable any automatic format conversion or resampling in the filter graph.
+
+@item process_stereo
+Process the stereo channels together. If target_gain does not match between
+channels, consider it invalid and use the last valid target_gain.
+
+@item cdt_ms
+Set the code detect timer period in ms.
+
+@item force_pe
+Always extend peaks above -3dBFS even if PE isn't signaled.
+
+@item analyze_mode
+Replace audio with a solid tone and adjust the amplitude to signal some
+specific aspect of the decoding process. The output file can be loaded in
+an audio editor alongside the original to aid analysis.
+
+@code{analyze_mode=pe:force_pe=true} can be used to see all samples above the PE level.
+
+Modes are:
+@table @samp
+@item 0, off
+Disabled
+@item 1, lle
+Gain adjustment level at each sample
+@item 2, pe
+Samples where peak extend occurs
+@item 3, cdt
+Samples where the code detect timer is active
+@item 4, tgm
+Samples where the target gain does not match between channels
+@end table
+@end table
+
 @section highpass
 
 Apply a high-pass filter with 3dB point frequency.
@@ -4292,6 +4416,21 @@ The filter accepts the following option:
 Set the minimal luminance value. Default is @code{16}.
 @end table
 
+@section bitplanenoise
+
+Show and measure bit plane noise.
+
+The filter accepts the following options:
+
+@table @option
+@item bitplane
+Set which plane to analyze. Default is @code{1}.
+
+@item filter
+Filter out noisy pixels from @code{bitplane} set above.
+Default is disabled.
+@end table
+
 @section blackdetect
 
 Detect video intervals that are (almost) completely black. Can be
@@ -5500,6 +5639,11 @@ This expression is evaluated per-frame.
 If set to 1 will force the output display aspect ratio
 to be the same of the input, by changing the output sample aspect
 ratio. It defaults to 0.
+
+@item exact
+Enable exact cropping. If enabled, subsampled videos will be cropped at exact
+width/height/x/y as specified and will not be rounded to nearest smaller value.
+It defaults to 0.
 @end table
 
 The @var{out_w}, @var{out_h}, @var{x}, @var{y} parameters are
@@ -8336,58 +8480,6 @@ Then, the effect of this Hald CLUT can be visualized with:
 ffplay input.mkv -vf "movie=clut.png, [in] haldclut"
 @end example
 
-@section hdcd
-
-Decodes High Definition Compatible Digital (HDCD) data. A 16-bit PCM stream with
-embedded HDCD codes is expanded into a 20-bit PCM stream.
-
-The filter supports the Peak Extend and Low-level Gain Adjustment features
-of HDCD, and detects the Transient Filter flag.
-
-@example
-ffmpeg -i HDCD16.flac -af hdcd OUT24.flac
-@end example
-
-When using the filter with wav, note the default encoding for wav is 16-bit,
-so the resulting 20-bit stream will be truncated back to 16-bit. Use something
-like @command{-acodec pcm_s24le} after the filter to get 24-bit PCM output.
-@example
-ffmpeg -i HDCD16.wav -af hdcd OUT16.wav
-ffmpeg -i HDCD16.wav -af hdcd -acodec pcm_s24le OUT24.wav
-@end example
-
-The filter accepts the following options:
-
-@table @option
-@item process_stereo
-Process the stereo channels together. If target_gain does not match between
-channels, consider it invalid and use the last valid target_gain.
-
-@item force_pe
-Always extend peaks above -3dBFS even if PE isn't signaled.
-
-@item analyze_mode
-Replace audio with a solid tone and adjust the amplitude to signal some
-specific aspect of the decoding process. The output file can be loaded in
-an audio editor alongside the original to aid analysis.
-
-@code{analyze_mode=pe:force_pe=1} can be used to see all samples above the PE level.
-
-Modes are:
-@table @samp
-@item 0, off
-Disabled
-@item 1, lle
-Gain adjustment level at each sample
-@item 2, pe
-Samples where peak extend occurs
-@item 3, cdt
-Samples where the code detect timer is active
-@item 4, tgm
-Samples where the target gain does not match between channels
-@end table
-@end table
-
 @section hflip
 
 Flip the input video horizontally.
@@ -8474,6 +8566,12 @@ Default is @code{linear}.
 @item components
 Set what color components to display.
 Default is @code{7}.
+
+@item fgopacity
+Set foreground opacity. Default is @code{0.7}.
+
+@item bgopacity
+Set background opacity. Default is @code{0.5}.
 @end table
 
 @subsection Examples
@@ -8666,6 +8764,25 @@ The command accepts the same syntax of the corresponding option.
 
 If the specified expression is not valid, it is kept at its current
 value.
+@end table
+
+@section hysteresis
+
+Grow first stream into second stream by connecting components.
+This allows to build more robust edge masks.
+
+This filter accepts the following options:
+
+@table @option
+@item planes
+Set which planes will be processed as bitmap, unprocessed planes will be
+copied from first stream.
+By default value 0xf, all planes will be processed.
+
+@item threshold
+Set threshold which is used in filtering. If pixel component value is higher than
+this value filter algorithm for connecting components is activated.
+By default value is 0.
 @end table
 
 @section idet
@@ -9135,6 +9252,27 @@ Technicolor like effect:
 lutyuv=u='(val-maxval/2)*2+maxval/2':v='(val-maxval/2)*2+maxval/2'
 @end example
 @end itemize
+
+@section maskedclamp
+
+Clamp the first input stream with the second input and third input stream.
+
+Returns the value of first stream to be between second input
+stream - @code{undershoot} and third input stream + @code{overshoot}.
+
+This filter accepts the following options:
+@table @option
+@item undershoot
+Default value is @code{0}.
+
+@item overshoot
+Default value is @code{0}.
+
+@item planes
+Set which planes will be processed as bitmap, unprocessed planes will be
+copied from first stream.
+By default value 0xf, all planes will be processed.
+@end table
 
 @section maskedmerge
 
@@ -11880,6 +12018,18 @@ Expressed in range of [0-255].
 Display the average of sample value difference between all values of the V
 plane in the current frame and corresponding values of the previous input frame.
 Expressed in range of [0-255].
+
+@item YBITDEPTH
+Display bit depth of Y plane in current frame.
+Expressed in range of [0-16].
+
+@item UBITDEPTH
+Display bit depth of U plane in current frame.
+Expressed in range of [0-16].
+
+@item VBITDEPTH
+Display bit depth of V plane in current frame.
+Expressed in range of [0-16].
 @end table
 
 The filter accepts the following options:
@@ -13895,6 +14045,12 @@ Zoom-in up to 1.5 and pan always at center of picture:
 @example
 zoompan=z='min(zoom+0.0015,1.5)':d=700:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'
 @end example
+
+@item
+Same as above but without pausing:
+@example
+zoompan=z='min(max(zoom,pzoom)+0.0015,1.5)':d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'
+@end example
 @end itemize
 
 @section zscale
@@ -15002,6 +15158,25 @@ Draw line between previous and current sample.
 @end table
 
 Default value is @samp{dot}.
+
+@item scale
+Specify amplitude scale of audio samples.
+
+Available values are:
+@table @samp
+@item lin
+Linear.
+
+@item sqrt
+Square root.
+
+@item cbrt
+Cubic root.
+
+@item log
+Logarithmic.
+@end table
+
 @end table
 
 @subsection Examples
@@ -16415,6 +16590,10 @@ It accepts the following values:
 @item lanczos
 @item gauss
 @item tukey
+@item dolph
+@item cauchy
+@item parzen
+@item poisson
 @end table
 Default is @code{hanning}.
 
@@ -16440,6 +16619,9 @@ It accepts the following values:
 @item separate
 @end table
 Default is @code{combined}.
+
+@item minamp
+Set minimum amplitude used in @code{log} amplitude scaler.
 
 @end table
 
@@ -16562,6 +16744,10 @@ It accepts the following values:
 @item lanczos
 @item gauss
 @item tukey
+@item dolph
+@item cauchy
+@item parzen
+@item poisson
 @end table
 
 Default value is @code{hann}.
@@ -16705,6 +16891,10 @@ It accepts the following values:
 @item lanczos
 @item gauss
 @item tukey
+@item dolph
+@item cauchy
+@item parzen
+@item poisson
 @end table
 Default value is @code{hann}.
 
@@ -16765,6 +16955,9 @@ The expression can use the following variables:
 @table @option
 @item VOLUME
 Current max volume of channel in dB.
+
+@item PEAK
+Current peak.
 
 @item CHANNEL
 Current channel number, starting from 0.
