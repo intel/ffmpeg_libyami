@@ -380,7 +380,7 @@ static int config_output(AVFilterLink *outlink)
         if (!s->color_buffer)
             return AVERROR(ENOMEM);
         for (i = 0; i < s->nb_display_channels; i++) {
-            s->color_buffer[i] = av_malloc_array(s->orientation == VERTICAL ? s->h * 3 : s->w * 3, sizeof(**s->color_buffer));
+            s->color_buffer[i] = av_calloc(s->orientation == VERTICAL ? s->h * 3 : s->w * 3, sizeof(**s->color_buffer));
             if (!s->color_buffer[i])
                 return AVERROR(ENOMEM);
         }
@@ -730,8 +730,7 @@ static int plot_spectrum_column(AVFilterLink *inlink, AVFrame *insamples)
     ctx->internal->execute(ctx, plot_channel, NULL, NULL, s->nb_display_channels);
 
     for (y = 0; y < z * 3; y++) {
-        s->combine_buffer[y] += s->color_buffer[0][y];
-        for (x = 1; x < s->nb_display_channels; x++) {
+        for (x = 0; x < s->nb_display_channels; x++) {
             s->combine_buffer[y] += s->color_buffer[x][y];
         }
     }
@@ -1233,9 +1232,13 @@ static int showspectrumpic_request_frame(AVFilterLink *outlink)
                     for (chn = 0; chn < (s->mode == SEPARATE ? 1 : s->nb_display_channels); chn++) {
                         float yf, uf, vf;
                         int channel = (multi) ? s->nb_display_channels - ch - 1 : chn;
+                        float lout[3];
 
                         color_range(s, channel, &yf, &uf, &vf);
-                        pick_color(s, yf, uf, vf, y / (float)h, out);
+                        pick_color(s, yf, uf, vf, y / (float)h, lout);
+                        out[0] += lout[0];
+                        out[1] += lout[1];
+                        out[2] += lout[2];
                     }
                     memset(s->outpicref->data[0]+(s->start_y + h * (ch + 1) - y - 1) * s->outpicref->linesize[0] + s->w + s->start_x + 20, av_clip_uint8(out[0]), 10);
                     memset(s->outpicref->data[1]+(s->start_y + h * (ch + 1) - y - 1) * s->outpicref->linesize[1] + s->w + s->start_x + 20, av_clip_uint8(out[1]), 10);

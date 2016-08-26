@@ -2652,9 +2652,15 @@ ffmpeg -i HDCD16.wav -af hdcd -acodec pcm_s24le OUT24.wav
 The filter accepts the following options:
 
 @table @option
+@item disable_autoconvert
+Disable any automatic format conversion or resampling in the filter graph.
+
 @item process_stereo
 Process the stereo channels together. If target_gain does not match between
 channels, consider it invalid and use the last valid target_gain.
+
+@item cdt_ms
+Set the code detect timer period in ms.
 
 @item force_pe
 Always extend peaks above -3dBFS even if PE isn't signaled.
@@ -2664,7 +2670,7 @@ Replace audio with a solid tone and adjust the amplitude to signal some
 specific aspect of the decoding process. The output file can be loaded in
 an audio editor alongside the original to aid analysis.
 
-@code{analyze_mode=pe:force_pe=1} can be used to see all samples above the PE level.
+@code{analyze_mode=pe:force_pe=true} can be used to see all samples above the PE level.
 
 Modes are:
 @table @samp
@@ -4410,6 +4416,21 @@ The filter accepts the following option:
 Set the minimal luminance value. Default is @code{16}.
 @end table
 
+@section bitplanenoise
+
+Show and measure bit plane noise.
+
+The filter accepts the following options:
+
+@table @option
+@item bitplane
+Set which plane to analyze. Default is @code{1}.
+
+@item filter
+Filter out noisy pixels from @code{bitplane} set above.
+Default is disabled.
+@end table
+
 @section blackdetect
 
 Detect video intervals that are (almost) completely black. Can be
@@ -5618,6 +5639,11 @@ This expression is evaluated per-frame.
 If set to 1 will force the output display aspect ratio
 to be the same of the input, by changing the output sample aspect
 ratio. It defaults to 0.
+
+@item exact
+Enable exact cropping. If enabled, subsampled videos will be cropped at exact
+width/height/x/y as specified and will not be rounded to nearest smaller value.
+It defaults to 0.
 @end table
 
 The @var{out_w}, @var{out_h}, @var{x}, @var{y} parameters are
@@ -8540,6 +8566,12 @@ Default is @code{linear}.
 @item components
 Set what color components to display.
 Default is @code{7}.
+
+@item fgopacity
+Set foreground opacity. Default is @code{0.7}.
+
+@item bgopacity
+Set background opacity. Default is @code{0.5}.
 @end table
 
 @subsection Examples
@@ -8732,6 +8764,25 @@ The command accepts the same syntax of the corresponding option.
 
 If the specified expression is not valid, it is kept at its current
 value.
+@end table
+
+@section hysteresis
+
+Grow first stream into second stream by connecting components.
+This allows to build more robust edge masks.
+
+This filter accepts the following options:
+
+@table @option
+@item planes
+Set which planes will be processed as bitmap, unprocessed planes will be
+copied from first stream.
+By default value 0xf, all planes will be processed.
+
+@item threshold
+Set threshold which is used in filtering. If pixel component value is higher than
+this value filter algorithm for connecting components is activated.
+By default value is 0.
 @end table
 
 @section idet
@@ -9201,6 +9252,27 @@ Technicolor like effect:
 lutyuv=u='(val-maxval/2)*2+maxval/2':v='(val-maxval/2)*2+maxval/2'
 @end example
 @end itemize
+
+@section maskedclamp
+
+Clamp the first input stream with the second input and third input stream.
+
+Returns the value of first stream to be between second input
+stream - @code{undershoot} and third input stream + @code{overshoot}.
+
+This filter accepts the following options:
+@table @option
+@item undershoot
+Default value is @code{0}.
+
+@item overshoot
+Default value is @code{0}.
+
+@item planes
+Set which planes will be processed as bitmap, unprocessed planes will be
+copied from first stream.
+By default value 0xf, all planes will be processed.
+@end table
 
 @section maskedmerge
 
@@ -16548,6 +16620,9 @@ It accepts the following values:
 @end table
 Default is @code{combined}.
 
+@item minamp
+Set minimum amplitude used in @code{log} amplitude scaler.
+
 @end table
 
 @anchor{showspectrum}
@@ -16880,6 +16955,9 @@ The expression can use the following variables:
 @table @option
 @item VOLUME
 Current max volume of channel in dB.
+
+@item PEAK
+Current peak.
 
 @item CHANNEL
 Current channel number, starting from 0.
