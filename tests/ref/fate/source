@@ -29,3 +29,4 @@ compat/float/limits.h
 libavcodec/libyami.h
 libavcodec/libyami_dec.h
 libavcodec/libyami_enc.h
+compat/nvenc/nvEncodeAPI.h
