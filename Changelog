@@ -20,6 +20,9 @@ version <next>:
 - fifo muxer
 - maskedclamp filter
 - hysteresis filter
+- lut2 filter
+- yuvtestsrc filter
+- vaguedenoiser filter
 
 
 version 3.1:

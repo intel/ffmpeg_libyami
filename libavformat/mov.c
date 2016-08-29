@@ -997,7 +997,7 @@ static int mov_read_adrm(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     av_log(c->fc, AV_LOG_INFO, "[aax] file checksum == "); // required by external tools
     for (i = 0; i < 20; i++)
-        av_log(sha, AV_LOG_INFO, "%02x", file_checksum[i]);
+        av_log(c->fc, AV_LOG_INFO, "%02x", file_checksum[i]);
     av_log(c->fc, AV_LOG_INFO, "\n");
 
     /* verify activation data */
@@ -1156,17 +1156,10 @@ static int mov_read_moof(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
 static void mov_metadata_creation_time(AVDictionary **metadata, int64_t time)
 {
-    char buffer[32];
     if (time) {
-        struct tm *ptm, tmbuf;
-        time_t timet;
         if(time >= 2082844800)
             time -= 2082844800;  /* seconds between 1904-01-01 and Epoch */
-        timet = time;
-        ptm = gmtime_r(&timet, &tmbuf);
-        if (!ptm) return;
-        if (strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", ptm))
-            av_dict_set(metadata, "creation_time", buffer, 0);
+        avpriv_dict_set_timestamp(metadata, "creation_time", time * 1000000);
     }
 }
 
@@ -2801,13 +2794,6 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
                 empty_duration = av_rescale(empty_duration, sc->time_scale, mov->time_scale);
             sc->time_offset = start_time - empty_duration;
             current_dts = -sc->time_offset;
-            if (sc->ctts_count>0 && sc->stts_count>0 &&
-                sc->ctts_data[0].duration / FFMAX(sc->stts_data[0].duration, 1) > 16) {
-                /* more than 16 frames delay, dts are likely wrong
-                   this happens with files created by iMovie */
-                sc->wrong_dts = 1;
-                st->codecpar->video_delay = 1;
-            }
         }
 
         if (!unsupported && st->codecpar->codec_id == AV_CODEC_ID_AAC && start_time > 0)
@@ -5352,8 +5338,6 @@ static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
             sc->ctts_index++;
             sc->ctts_sample = 0;
         }
-        if (sc->wrong_dts)
-            pkt->dts = AV_NOPTS_VALUE;
     } else {
         int64_t next_dts = (sc->current_sample < st->nb_index_entries) ?
             st->index_entries[sc->current_sample].timestamp : st->duration;
