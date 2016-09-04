@@ -1923,6 +1923,7 @@ SYSTEM_FUNCS="
     isatty
     jack_port_get_latency_range
     kbhit
+    LoadLibrary
     localtime_r
     lstat
     lzo1x_999_compress
@@ -2678,6 +2679,7 @@ vaapi_encode_deps="vaapi"
 hwupload_cuda_filter_deps="cuda"
 scale_npp_filter_deps="cuda libnpp"
 
+nvenc_deps_any="dlopen LoadLibrary"
 nvenc_encoder_deps="nvenc"
 h264_cuvid_decoder_deps="cuda cuvid CUVIDH264PICPARAMS"
 h264_cuvid_decoder_select="h264_mp4toannexb_bsf h264_cuvid_hwaccel"
@@ -3229,7 +3231,7 @@ enable audiotoolbox
 enable d3d11va dxva2 vaapi vda vdpau videotoolbox_hwaccel xvmc
 enable xlib
 
-enable vda_framework videotoolbox videotoolbox_encoder
+enable nvenc vda_framework videotoolbox videotoolbox_encoder
 
 # build settings
 SHFLAGS='-shared -Wl,-soname,$$(@F)'
@@ -5402,9 +5404,9 @@ check_code cc arm_neon.h "int16x8_t test = vdupq_n_s16(0)" && enable intrinsics_
 check_ldflags -Wl,--as-needed
 check_ldflags -Wl,-z,noexecstack
 
-if check_func dlopen; then
+if check_func dlopen && check_func dlsym; then
     ldl=
-elif check_func dlopen -ldl; then
+elif check_func dlopen -ldl && check_func dlsym -ldl; then
     ldl=-ldl
 fi
 
@@ -5413,7 +5415,7 @@ decklink_indev_extralibs="$decklink_indev_extralibs $ldl"
 frei0r_filter_extralibs='$ldl'
 frei0r_src_filter_extralibs='$ldl'
 ladspa_filter_extralibs='$ldl'
-nvenc_encoder_extralibs='$ldl'
+nvenc_extralibs='$ldl'
 coreimage_filter_extralibs="-framework QuartzCore -framework AppKit -framework OpenGL"
 coreimagesrc_filter_extralibs="-framework QuartzCore -framework AppKit -framework OpenGL"
 
@@ -5517,6 +5519,7 @@ check_func_headers windows.h CoTaskMemFree -lole32
 check_func_headers windows.h GetProcessAffinityMask
 check_func_headers windows.h GetProcessTimes
 check_func_headers windows.h GetSystemTimeAsFileTime
+check_func_headers windows.h LoadLibrary
 check_func_headers windows.h MapViewOfFile
 check_func_headers windows.h PeekNamedPipe
 check_func_headers windows.h SetConsoleTextAttribute
@@ -6018,21 +6021,25 @@ enabled vdpau && enabled xlib &&
     check_lib2 "vdpau/vdpau.h vdpau/vdpau_x11.h" vdp_device_create_x11 -lvdpau &&
     enable vdpau_x11
 
-case $target_os in
-    mingw32*|mingw64*|win32|win64|linux|cygwin*)
-        disabled nvenc || enable nvenc
-        ;;
-    *)
-        disable nvenc
-        ;;
-esac
-
-if enabled nvenc; then
-    {
-        echo '#include "compat/nvenc/nvEncodeAPI.h"'
-        echo 'int main(void) { return 0; }'
-    } | check_cc -I$source_path || disable nvenc
+if enabled x86; then
+    case $target_os in
+        mingw32*|mingw64*|win32|win64|linux|cygwin*)
+            ;;
+        *)
+            disable nvenc
+            ;;
+    esac
+else
+    disable nvenc
 fi
+
+enabled nvenc &&
+    check_cc -I$source_path <<EOF || disable nvenc
+#include "compat/nvenc/nvEncodeAPI.h"
+NV_ENCODE_API_FUNCTION_LIST flist;
+void f(void) { struct { const GUID guid; } s[] = { { NV_ENC_PRESET_HQ_GUID } }; }
+int main(void) { return 0; }
+EOF
 
 # Funny iconv installations are not unusual, so check it after all flags have been set
 disabled iconv || check_func_headers iconv.h iconv || check_lib2 iconv.h iconv -liconv || disable iconv
