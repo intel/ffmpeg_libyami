@@ -34,11 +34,12 @@ typedef enum {
     YAMI_THREAD_NOT_INIT = 0,
     YAMI_THREAD_RUNING,
     YAMI_THREAD_GOT_EOS,
+    YAMI_THREAD_FLUSH_OUT,
     YAMI_THREAD_EXIT,
 } YamiThreadStatus;
 
 typedef void (*yami_process_data_func)(void *handle, void *data);
-typedef void (*yami_flush_func)();
+typedef void (*yami_flush_func)(void *handle);
 
 
 #include <deque>
@@ -75,12 +76,13 @@ void * ff_yami_thread(void *args)
             if (ctx->status == YAMI_THREAD_GOT_EOS) {
                 /* flush the decode buffer with NULL when get EOS */
                 if (ctx->flush_cb)
-                    ctx->flush_cb();
+                    ctx->flush_cb(ctx);
                 pthread_mutex_unlock(&ctx->in_queue_lock);
-                break;
+                ctx->status = YAMI_THREAD_FLUSH_OUT;
             }
-
             pthread_cond_wait(&ctx->in_cond, &ctx->in_queue_lock); // wait the packet to decode
+            if (ctx->status == YAMI_THREAD_EXIT)
+                break;
             pthread_mutex_unlock(&ctx->in_queue_lock);
             usleep(100);
             continue;
@@ -96,7 +98,7 @@ void * ff_yami_thread(void *args)
             break;
     }
     pthread_mutex_lock(&ctx->priv_lock);
-    ctx->status = YAMI_THREAD_EXIT;
+    ctx->status = YAMI_THREAD_NOT_INIT;
     pthread_mutex_unlock(&ctx->priv_lock);
     return NULL;
 }
@@ -196,6 +198,7 @@ int ff_yami_thread_create (YamiThreadContext<T> *ctx)
         return -1;
     pthread_mutex_lock(&ctx->priv_lock);
     switch (ctx->status) {
+    case YAMI_THREAD_EXIT:
     case YAMI_THREAD_NOT_INIT:
         ctx->status = YAMI_THREAD_RUNING;
         pthread_create(&ctx->thread_id, NULL, &ff_yami_thread<T>, ctx);
@@ -204,8 +207,6 @@ int ff_yami_thread_create (YamiThreadContext<T> *ctx)
         break;
     case YAMI_THREAD_GOT_EOS:
         pthread_cond_signal(&ctx->in_cond);
-        break;
-    case YAMI_THREAD_EXIT:
         break;
     default:
         break;
@@ -247,6 +248,22 @@ int ff_yami_set_stream_eof (YamiThreadContext<T> *ctx)
 }
 
 /*
+ * user can use ff_yami_set_stream_run tell thread continue proccess the stream
+ * */
+
+template <typename T>
+int ff_yami_set_stream_run (YamiThreadContext<T> *ctx)
+{
+    if (!ctx)
+        return -1;
+    YamiThreadStatus status;
+    pthread_mutex_lock (&ctx->priv_lock);
+    ctx->status = YAMI_THREAD_RUNING;
+    pthread_mutex_unlock (&ctx->priv_lock);
+    return 0;
+}
+
+/*
  * user should call ff_yami_thread_close function thread the end of code
  * */
 
@@ -257,7 +274,8 @@ int ff_yami_thread_close (YamiThreadContext<T> *ctx)
         return -1;
     pthread_mutex_lock(&ctx->priv_lock);
     while (ctx->status != YAMI_THREAD_EXIT
-           && ctx->status != YAMI_THREAD_NOT_INIT) { // if decode thread do not create do not loop
+           && ctx->status != YAMI_THREAD_NOT_INIT
+           && ctx->status != YAMI_THREAD_FLUSH_OUT) { // if decode thread do not create do not loop
         // potential race condition on ctx->status
         ctx->status = YAMI_THREAD_GOT_EOS;
         pthread_mutex_unlock(&ctx->priv_lock);
@@ -265,7 +283,12 @@ int ff_yami_thread_close (YamiThreadContext<T> *ctx)
         usleep(10000);
         pthread_mutex_lock(&ctx->priv_lock);
     }
+    ctx->status = YAMI_THREAD_EXIT;
+    pthread_cond_signal(&ctx->in_cond);
     pthread_mutex_unlock(&ctx->priv_lock);
+
+    pthread_join (ctx->thread_id, NULL);
+
     pthread_mutex_destroy(&ctx->in_queue_lock);
     pthread_mutex_destroy(&ctx->out_queue_lock);
     pthread_cond_destroy(&ctx->in_cond);

@@ -326,10 +326,12 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     }
     if (!frame  && ff_yami_read_thread_status(s->ctx) <= YAMI_THREAD_GOT_EOS)
         ff_yami_set_stream_eof(s->ctx);
+    if (frame  && ff_yami_read_thread_status(s->ctx) >= YAMI_THREAD_GOT_EOS)
+        ff_yami_set_stream_run(s->ctx);
     ff_yami_thread_create (s->ctx);
     do {
         status = s->encoder->getOutput(&s->enc_out_buf, true);
-    } while (!frame && status != ENCODE_SUCCESS && ff_yami_read_thread_status(s->ctx) != YAMI_THREAD_EXIT);
+    } while (!frame && status != ENCODE_SUCCESS && ff_yami_read_thread_status(s->ctx) != YAMI_THREAD_FLUSH_OUT);
     if (status != ENCODE_SUCCESS)
         return 0;
     if ((ret = ff_alloc_packet2(avctx, pkt, s->enc_out_buf.dataSize, 0)) < 0)
