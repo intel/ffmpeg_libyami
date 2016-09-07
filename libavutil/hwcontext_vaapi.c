@@ -40,6 +40,9 @@
 #include "mem.h"
 #include "pixdesc.h"
 #include "pixfmt.h"
+#include "fastcopy.h"
+
+extern void ff_lock_unlock_mem_from_uswc();
 
 typedef struct VAAPIDevicePriv {
 #if HAVE_VAAPI_X11
@@ -341,6 +344,8 @@ static int vaapi_device_init(AVHWDeviceContext *hwdev)
             av_log(hwdev, AV_LOG_DEBUG, "Format %#x -> unknown.\n", fourcc);
         }
     }
+
+    av_fastcopy_uswc_init();
 
     av_free(image_list);
     av_hwframe_constraints_free(&constraints);
@@ -658,6 +663,55 @@ static void vaapi_unmap_frame(void *opaque, uint8_t *data)
     av_free(map);
 }
 
+static void *vaapi_copy_from_uswc(void *dst, void *src, size_t size)
+{
+    char aligned;
+    int remain, i, round;
+    uint8_t *pdst, *psrc;
+    FastCopyAccel *fc = NULL;
+
+    if (dst == NULL || src == NULL || size == 0) {
+        return NULL;
+    }
+
+    fc = av_fastcopy_uswc_get_fn();
+
+    // If doesn't support instruction acceleration,  We would like to
+    // choose memcpy.
+    if (fc == NULL || fc->fastcopy_fn == NULL) {
+        return memcpy(dst, src, size);
+    }
+
+    aligned = (((size_t) dst) | ((size_t) src)) & fc->align_bits;
+
+    if (aligned != 0) {
+        return NULL;
+    }
+
+    pdst = (uint8_t *) dst;
+    psrc = (uint8_t *) src;
+    remain = size & (fc->register_bits - 1);
+    round = size >> (fc->offset_bits);
+
+    ff_lock_unlock_mem_from_uswc();
+
+    for (i = 0; i < round; i++) {
+        fc->fastcopy_fn(pdst, psrc, fc->register_bits);
+        psrc += fc->register_bits;
+        pdst += fc->register_bits;
+    }
+
+    ff_lock_unlock_mem_from_uswc();
+
+    // We would like to use memcpy to copy a small number of bytes
+    // that are not aligned
+    if (remain > 0) {
+        memcpy(pdst, psrc, remain);
+    }
+
+    return dst;
+}
+
 static int vaapi_map_frame(AVHWFramesContext *hwfc,
                            AVFrame *dst, const AVFrame *src, int flags)
 {
@@ -668,7 +722,7 @@ static int vaapi_map_frame(AVHWFramesContext *hwfc,
     VAAPISurfaceMap *map;
     VAStatus vas;
     void *address = NULL;
-    int err, i;
+    int err, i, plane_size;
 
     surface_id = (VASurfaceID)(uintptr_t)src->data[3];
     av_log(hwfc, AV_LOG_DEBUG, "Map surface %#x.\n", surface_id);
@@ -714,7 +768,7 @@ static int vaapi_map_frame(AVHWFramesContext *hwfc,
     // assume for now that the user is not aware of that and would therefore
     // prefer not to be given direct-mapped memory if they request read access.
     if (ctx->derive_works &&
-        ((flags & VAAPI_MAP_DIRECT) || !(flags & VAAPI_MAP_READ))) {
+        ((flags & VAAPI_MAP_DIRECT) || !(flags & VAAPI_MAP_READ) || (dst->format == AV_PIX_FMT_NV12))) {
         vas = vaDeriveImage(hwctx->display, surface_id, &map->image);
         if (vas != VA_STATUS_SUCCESS) {
             av_log(hwfc, AV_LOG_ERROR, "Failed to derive image from "
@@ -765,8 +819,13 @@ static int vaapi_map_frame(AVHWFramesContext *hwfc,
     dst->width  = src->width;
     dst->height = src->height;
 
+    plane_size = map->image.data_size;
+    dst->opaque = av_malloc(FFMAX(map->image.width * map->image.height * 3, plane_size));
+
+    vaapi_copy_from_uswc((void *)dst->opaque, (void *)address, plane_size);
+
     for (i = 0; i < map->image.num_planes; i++) {
-        dst->data[i] = (uint8_t*)address + map->image.offsets[i];
+        dst->data[i] = (uint8_t*)dst->opaque + map->image.offsets[i];
         dst->linesize[i] = map->image.pitches[i];
     }
     if (
@@ -819,6 +878,7 @@ static int vaapi_transfer_data_from(AVHWFramesContext *hwfc,
 
     err = 0;
 fail:
+    av_free(map->opaque);
     av_frame_free(&map);
     return err;
 }
