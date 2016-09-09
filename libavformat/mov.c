@@ -997,7 +997,7 @@ static int mov_read_adrm(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     av_log(c->fc, AV_LOG_INFO, "[aax] file checksum == "); // required by external tools
     for (i = 0; i < 20; i++)
-        av_log(sha, AV_LOG_INFO, "%02x", file_checksum[i]);
+        av_log(c->fc, AV_LOG_INFO, "%02x", file_checksum[i]);
     av_log(c->fc, AV_LOG_INFO, "\n");
 
     /* verify activation data */
@@ -1156,17 +1156,10 @@ static int mov_read_moof(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
 static void mov_metadata_creation_time(AVDictionary **metadata, int64_t time)
 {
-    char buffer[32];
     if (time) {
-        struct tm *ptm, tmbuf;
-        time_t timet;
         if(time >= 2082844800)
             time -= 2082844800;  /* seconds between 1904-01-01 and Epoch */
-        timet = time;
-        ptm = gmtime_r(&timet, &tmbuf);
-        if (!ptm) return;
-        if (strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", ptm))
-            av_dict_set(metadata, "creation_time", buffer, 0);
+        avpriv_dict_set_timestamp(metadata, "creation_time", time * 1000000);
     }
 }
 
@@ -1325,38 +1318,16 @@ static int mov_read_colr(MOVContext *c, AVIOContext *pb, MOVAtom atom)
             st->codecpar->color_range = AVCOL_RANGE_JPEG;
         else
             st->codecpar->color_range = AVCOL_RANGE_MPEG;
-        /* 14496-12 references JPEG XR specs (rather than the more complete
-         * 23001-8) so some adjusting is required */
-        if (color_primaries >= AVCOL_PRI_FILM)
-            color_primaries = AVCOL_PRI_UNSPECIFIED;
-        if ((color_trc >= AVCOL_TRC_LINEAR &&
-             color_trc <= AVCOL_TRC_LOG_SQRT) ||
-            color_trc >= AVCOL_TRC_BT2020_10)
-            color_trc = AVCOL_TRC_UNSPECIFIED;
-        if (color_matrix >= AVCOL_SPC_BT2020_NCL)
-            color_matrix = AVCOL_SPC_UNSPECIFIED;
-        st->codecpar->color_primaries = color_primaries;
-        st->codecpar->color_trc       = color_trc;
-        st->codecpar->color_space     = color_matrix;
-    } else if (!strncmp(color_parameter_type, "nclc", 4)) {
-        /* color primaries, Table 4-4 */
-        switch (color_primaries) {
-        case 1: st->codecpar->color_primaries = AVCOL_PRI_BT709; break;
-        case 5: st->codecpar->color_primaries = AVCOL_PRI_SMPTE170M; break;
-        case 6: st->codecpar->color_primaries = AVCOL_PRI_SMPTE240M; break;
-        }
-        /* color transfer, Table 4-5 */
-        switch (color_trc) {
-        case 1: st->codecpar->color_trc = AVCOL_TRC_BT709; break;
-        case 7: st->codecpar->color_trc = AVCOL_TRC_SMPTE240M; break;
-        }
-        /* color matrix, Table 4-6 */
-        switch (color_matrix) {
-        case 1: st->codecpar->color_space = AVCOL_SPC_BT709; break;
-        case 6: st->codecpar->color_space = AVCOL_SPC_BT470BG; break;
-        case 7: st->codecpar->color_space = AVCOL_SPC_SMPTE240M; break;
-        }
     }
+    if (color_primaries >= AVCOL_PRI_NB)
+        color_primaries = AVCOL_PRI_UNSPECIFIED;
+    if (color_trc >= AVCOL_TRC_NB)
+        color_trc = AVCOL_TRC_UNSPECIFIED;
+    if (color_matrix >= AVCOL_SPC_NB)
+        color_matrix = AVCOL_SPC_UNSPECIFIED;
+    st->codecpar->color_primaries = color_primaries;
+    st->codecpar->color_trc       = color_trc;
+    st->codecpar->color_space     = color_matrix;
     av_log(c->fc, AV_LOG_TRACE, "\n");
 
     return 0;
@@ -2322,6 +2293,7 @@ static int mov_read_stsd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     AVStream *st;
     MOVStreamContext *sc;
     int ret;
+    int entries;
 
     if (c->fc->nb_streams < 1)
         return 0;
@@ -2330,20 +2302,30 @@ static int mov_read_stsd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     avio_r8(pb); /* version */
     avio_rb24(pb); /* flags */
-    sc->stsd_count = avio_rb32(pb); /* entries */
+    entries = avio_rb32(pb); /* entries */
 
+    if (entries <= 0) {
+        av_log(c->fc, AV_LOG_ERROR, "invalid STSD entries %d\n", entries);
+        return AVERROR_INVALIDDATA;
+    }
+
+    if (sc->extradata) {
+        av_log(c->fc, AV_LOG_ERROR, "Duplicate STSD\n");
+        return AVERROR_INVALIDDATA;
+    }
     /* Prepare space for hosting multiple extradata. */
-    sc->extradata = av_mallocz_array(sc->stsd_count, sizeof(*sc->extradata));
-    if (!sc->extradata)
-        return AVERROR(ENOMEM);
+    sc->extradata = av_mallocz_array(entries, sizeof(*sc->extradata));
+    sc->extradata_size = av_mallocz_array(entries, sizeof(*sc->extradata_size));
+    if (!sc->extradata_size || !sc->extradata) {
+        ret = AVERROR(ENOMEM);
+        goto fail;
+    }
 
-    sc->extradata_size = av_mallocz_array(sc->stsd_count, sizeof(*sc->extradata_size));
-    if (!sc->extradata_size)
-        return AVERROR(ENOMEM);
-
-    ret = ff_mov_read_stsd_entries(c, pb, sc->stsd_count);
+    ret = ff_mov_read_stsd_entries(c, pb, entries);
     if (ret < 0)
         return ret;
+
+    sc->stsd_count = entries;
 
     /* Restore back the primary extradata. */
     av_freep(&st->codecpar->extradata);
@@ -2356,6 +2338,10 @@ static int mov_read_stsd(MOVContext *c, AVIOContext *pb, MOVAtom atom)
     }
 
     return 0;
+fail:
+    av_freep(&sc->extradata);
+    av_freep(&sc->extradata_size);
+    return ret;
 }
 
 static int mov_read_stsc(MOVContext *c, AVIOContext *pb, MOVAtom atom)
@@ -2808,13 +2794,6 @@ static void mov_build_index(MOVContext *mov, AVStream *st)
                 empty_duration = av_rescale(empty_duration, sc->time_scale, mov->time_scale);
             sc->time_offset = start_time - empty_duration;
             current_dts = -sc->time_offset;
-            if (sc->ctts_count>0 && sc->stts_count>0 &&
-                sc->ctts_data[0].duration / FFMAX(sc->stts_data[0].duration, 1) > 16) {
-                /* more than 16 frames delay, dts are likely wrong
-                   this happens with files created by iMovie */
-                sc->wrong_dts = 1;
-                st->codecpar->video_delay = 1;
-            }
         }
 
         if (!unsupported && st->codecpar->codec_id == AV_CODEC_ID_AAC && start_time > 0)
@@ -3299,7 +3278,7 @@ static int mov_read_keys(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     avio_skip(pb, 4);
     count = avio_rb32(pb);
-    if (count > UINT_MAX / sizeof(*c->meta_keys)) {
+    if (count > UINT_MAX / sizeof(*c->meta_keys) - 1) {
         av_log(c->fc, AV_LOG_ERROR,
                "The 'keys' atom with the invalid key count: %d\n", count);
         return AVERROR_INVALIDDATA;
@@ -5359,8 +5338,6 @@ static int mov_read_packet(AVFormatContext *s, AVPacket *pkt)
             sc->ctts_index++;
             sc->ctts_sample = 0;
         }
-        if (sc->wrong_dts)
-            pkt->dts = AV_NOPTS_VALUE;
     } else {
         int64_t next_dts = (sc->current_sample < st->nb_index_entries) ?
             st->index_entries[sc->current_sample].timestamp : st->duration;

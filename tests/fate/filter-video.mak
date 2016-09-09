@@ -264,6 +264,11 @@ FATE_FILTER_VSYNTH-$(call ALLYES, SETPTS_FILTER  SETTB_FILTER) += fate-filter-se
 fate-filter-setpts: tests/data/filtergraphs/setpts
 fate-filter-setpts: CMD = framecrc -c:v pgmyuv -i $(SRC) -filter_script $(TARGET_PATH)/tests/data/filtergraphs/setpts
 
+FATE_SHUFFLEFRAMES += fate-filter-shuffleframes
+fate-filter-shuffleframes: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf shuffleframes="2|1|0"
+
+FATE_FILTER_VSYNTH-$(CONFIG_SHUFFLEFRAMES_FILTER) += $(FATE_SHUFFLEFRAMES)
+
 FATE_SHUFFLEPLANES += fate-filter-shuffleplanes-dup-luma
 fate-filter-shuffleplanes-dup-luma: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf format=yuva444p,shuffleplanes=0:0:0:0
 
@@ -271,6 +276,11 @@ FATE_SHUFFLEPLANES += fate-filter-shuffleplanes-swapuv
 fate-filter-shuffleplanes-swapuv: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf shuffleplanes=0:2:1
 
 FATE_FILTER_VSYNTH-$(CONFIG_SHUFFLEPLANES_FILTER) += $(FATE_SHUFFLEPLANES)
+
+FATE_SWAPRECT += fate-filter-swaprect
+fate-filter-swaprect: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf swaprect
+
+FATE_FILTER_VSYNTH-$(CONFIG_SWAPRECT_FILTER) += $(FATE_SWAPRECT)
 
 FATE_FILTER_VSYNTH-$(CONFIG_TBLEND_FILTER) += fate-filter-tblend
 fate-filter-tblend: CMD = framecrc -c:v pgmyuv -i $(SRC) -vf tblend=all_mode=difference128

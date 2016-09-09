@@ -1169,7 +1169,7 @@ Each equalizer band is separated by '|'.
 Set channel number to which equalization will be applied.
 If input doesn't have that channel the entry is ignored.
 
-@item cf
+@item f
 Set central frequency for band.
 If input doesn't have that frequency the entry is ignored.
 
@@ -1179,7 +1179,7 @@ Set band width in hertz.
 @item g
 Set band gain in dB.
 
-@item f
+@item t
 Set filter type for band, optional, can be:
 
 @table @samp
@@ -2652,9 +2652,15 @@ ffmpeg -i HDCD16.wav -af hdcd -acodec pcm_s24le OUT24.wav
 The filter accepts the following options:
 
 @table @option
+@item disable_autoconvert
+Disable any automatic format conversion or resampling in the filter graph.
+
 @item process_stereo
 Process the stereo channels together. If target_gain does not match between
 channels, consider it invalid and use the last valid target_gain.
+
+@item cdt_ms
+Set the code detect timer period in ms.
 
 @item force_pe
 Always extend peaks above -3dBFS even if PE isn't signaled.
@@ -2664,7 +2670,7 @@ Replace audio with a solid tone and adjust the amplitude to signal some
 specific aspect of the decoding process. The output file can be loaded in
 an audio editor alongside the original to aid analysis.
 
-@code{analyze_mode=pe:force_pe=1} can be used to see all samples above the PE level.
+@code{analyze_mode=pe:force_pe=true} can be used to see all samples above the PE level.
 
 Modes are:
 @table @samp
@@ -4391,6 +4397,27 @@ threshold B is designed to react on continuous changes in the input signal.
 @item s
 Set number of frames filter will use for averaging. Default is 33. Must be odd
 number in range [5, 129].
+
+@item p
+Set what planes of frame filter will use for averaging. Default is all.
+@end table
+
+@section avgblur
+
+Apply average blur filter.
+
+The filter accepts the following options:
+
+@table @option
+@item sizeX
+Set horizontal kernel size.
+
+@item planes
+Set which planes to filter. By default all planes are filtered.
+
+@item sizeY
+Set vertical kernel size, if zero it will be same as @code{sizeX}.
+Default is @code{0}.
 @end table
 
 @section bbox
@@ -4408,6 +4435,21 @@ The filter accepts the following option:
 @table @option
 @item min_val
 Set the minimal luminance value. Default is @code{16}.
+@end table
+
+@section bitplanenoise
+
+Show and measure bit plane noise.
+
+The filter accepts the following options:
+
+@table @option
+@item bitplane
+Set which plane to analyze. Default is @code{1}.
+
+@item filter
+Filter out noisy pixels from @code{bitplane} set above.
+Default is disabled.
 @end table
 
 @section blackdetect
@@ -5211,6 +5253,7 @@ Convert colorspace, transfer characteristics or color primaries.
 The filter accepts the following options:
 
 @table @option
+@anchor{all}
 @item all
 Specify all color properties at once.
 
@@ -5242,6 +5285,7 @@ BT.2020
 
 @end table
 
+@anchor{space}
 @item space
 Specify output colorspace.
 
@@ -5267,6 +5311,7 @@ BT.2020 with non-constant luminance
 
 @end table
 
+@anchor{trc}
 @item trc
 Specify output transfer characteristics.
 
@@ -5295,6 +5340,7 @@ BT.2020 for 12-bits content
 
 @end table
 
+@anchor{primaries}
 @item primaries
 Specify output color primaries.
 
@@ -5320,6 +5366,7 @@ BT.2020
 
 @end table
 
+@anchor{range}
 @item range
 Specify output color range.
 
@@ -5398,6 +5445,21 @@ von Kries whitepoint adaptation
 @item identity
 identity whitepoint adaptation (i.e. no whitepoint adaptation)
 @end table
+
+@item iall
+Override all input properties at once. Same accepted values as @ref{all}.
+
+@item ispace
+Override input colorspace. Same accepted values as @ref{space}.
+
+@item iprimaries
+Override input color primaries. Same accepted values as @ref{primaries}.
+
+@item itrc
+Override input transfer characteristics. Same accepted values as @ref{trc}.
+
+@item irange
+Override input color range. Same accepted values as @ref{range}.
 
 @end table
 
@@ -5618,6 +5680,11 @@ This expression is evaluated per-frame.
 If set to 1 will force the output display aspect ratio
 to be the same of the input, by changing the output sample aspect
 ratio. It defaults to 0.
+
+@item exact
+Enable exact cropping. If enabled, subsampled videos will be cropped at exact
+width/height/x/y as specified and will not be rounded to nearest smaller value.
+It defaults to 0.
 @end table
 
 The @var{out_w}, @var{out_h}, @var{x}, @var{y} parameters are
@@ -5968,6 +6035,9 @@ the text color is picked in such way so its always visible.
 
 @item axis
 Draw rows and columns numbers on left and top of video.
+
+@item opacity
+Set background opacity.
 @end table
 
 @section dctdnoiz
@@ -8202,6 +8272,27 @@ option may cause flicker since the B-Frames have often larger QP. Default is
 
 @end table
 
+@section gblur
+
+Apply Gaussian blur filter.
+
+The filter accepts the following options:
+
+@table @option
+@item sigma
+Set horizontal sigma, standard deviation of Gaussian blur. Default is @code{0.5}.
+
+@item steps
+Set number of steps for Gaussian approximation. Defauls is @code{1}.
+
+@item planes
+Set which planes to filter. By default all planes are filtered.
+
+@item sigmaV
+Set vertical sigma, if negative it will be same as @code{sigma}.
+Default is @code{-1}.
+@end table
+
 @section geq
 
 The filter accepts the following options:
@@ -8540,6 +8631,12 @@ Default is @code{linear}.
 @item components
 Set what color components to display.
 Default is @code{7}.
+
+@item fgopacity
+Set foreground opacity. Default is @code{0.7}.
+
+@item bgopacity
+Set background opacity. Default is @code{0.5}.
 @end table
 
 @subsection Examples
@@ -8732,6 +8829,25 @@ The command accepts the same syntax of the corresponding option.
 
 If the specified expression is not valid, it is kept at its current
 value.
+@end table
+
+@section hysteresis
+
+Grow first stream into second stream by connecting components.
+This allows to build more robust edge masks.
+
+This filter accepts the following options:
+
+@table @option
+@item planes
+Set which planes will be processed as bitmap, unprocessed planes will be
+copied from first stream.
+By default value 0xf, all planes will be processed.
+
+@item threshold
+Set threshold which is used in filtering. If pixel component value is higher than
+this value filter algorithm for connecting components is activated.
+By default value is 0.
 @end table
 
 @section idet
@@ -9202,6 +9318,65 @@ lutyuv=u='(val-maxval/2)*2+maxval/2':v='(val-maxval/2)*2+maxval/2'
 @end example
 @end itemize
 
+@section lut2
+
+Compute and apply a lookup table from two video inputs.
+
+This filter accepts the following parameters:
+@table @option
+@item c0
+set first pixel component expression
+@item c1
+set second pixel component expression
+@item c2
+set third pixel component expression
+@item c3
+set fourth pixel component expression, corresponds to the alpha component
+@end table
+
+Each of them specifies the expression to use for computing the lookup table for
+the corresponding pixel component values.
+
+The exact component associated to each of the @var{c*} options depends on the
+format in inputs.
+
+The expressions can contain the following constants:
+
+@table @option
+@item w
+@item h
+The input width and height.
+
+@item x
+The first input value for the pixel component.
+
+@item y
+The second input value for the pixel component.
+@end table
+
+All expressions default to "x".
+
+@section maskedclamp
+
+Clamp the first input stream with the second input and third input stream.
+
+Returns the value of first stream to be between second input
+stream - @code{undershoot} and third input stream + @code{overshoot}.
+
+This filter accepts the following options:
+@table @option
+@item undershoot
+Default value is @code{0}.
+
+@item overshoot
+Default value is @code{0}.
+
+@item planes
+Set which planes will be processed as bitmap, unprocessed planes will be
+copied from first stream.
+By default value 0xf, all planes will be processed.
+@end table
+
 @section maskedmerge
 
 Merge the first input stream with the second input stream using per pixel
@@ -9323,6 +9498,134 @@ Cast a rgb24 clip to yuv444p:
 format=rgb24,mergeplanes=0x000102:yuv444p
 @end example
 @end itemize
+
+@section mestimate
+
+Estimate and export motion vectors using block matching algorithms.
+Motion vectors are stored in frame side data to be used by other filters.
+
+This filter accepts the following options:
+@table @option
+@item method
+Specify the motion estimation method. Accepts one of the following values:
+
+@table @samp
+@item esa
+Exhaustive search algorithm.
+@item tss
+Three step search algorithm.
+@item tdls
+Two dimensional logarithmic search algorithm.
+@item ntss
+New three step search algorithm.
+@item fss
+Four step search algorithm.
+@item ds
+Diamond search algorithm.
+@item hexbs
+Hexagon-based search algorithm.
+@item epzs
+Enhanced predictive zonal search algorithm.
+@item umh
+Uneven multi-hexagon search algorithm.
+@end table
+Default value is @samp{esa}.
+
+@item mb_size
+Macroblock size. Default @code{16}.
+
+@item search_param
+Search parameter. Default @code{7}.
+@end table
+
+@section minterpolate
+
+Convert the video to specified frame rate using motion interpolation.
+
+This filter accepts the following options:
+@table @option
+@item fps
+Specify the output frame rate. This can be rational e.g. @code{60000/1001}. Frames are dropped if @var{fps} is lower than source fps. Default @code{60}.
+
+@item mi_mode
+Motion interpolation mode. Following values are accepted:
+@table @samp
+@item dup
+Duplicate previous or next frame for interpolating new ones.
+@item blend
+Blend source frames. Interpolated frame is mean of previous and next frames.
+@item mci
+Motion compensated interpolation. Following options are effective when this mode is selected:
+
+@table @samp
+@item mc_mode
+Motion compensation mode. Following values are accepted:
+@table @samp
+@item obmc
+Overlapped block motion compensation.
+@item aobmc
+Adaptive overlapped block motion compensation. Window weighting coefficients are controlled adaptively according to the reliabilities of the neighboring motion vectors to reduce oversmoothing.
+@end table
+Default mode is @samp{obmc}.
+
+@item me_mode
+Motion estimation mode. Following values are accepted:
+@table @samp
+@item bidir
+Bidirectional motion estimation. Motion vectors are estimated for each source frame in both forward and backward directions.
+@item bilat
+Bilateral motion estimation. Motion vectors are estimated directly for interpolated frame.
+@end table
+Default mode is @samp{bilat}.
+
+@item me
+The algorithm to be used for motion estimation. Following values are accepted:
+@table @samp
+@item esa
+Exhaustive search algorithm.
+@item tss
+Three step search algorithm.
+@item tdls
+Two dimensional logarithmic search algorithm.
+@item ntss
+New three step search algorithm.
+@item fss
+Four step search algorithm.
+@item ds
+Diamond search algorithm.
+@item hexbs
+Hexagon-based search algorithm.
+@item epzs
+Enhanced predictive zonal search algorithm.
+@item umh
+Uneven multi-hexagon search algorithm.
+@end table
+Default algorithm is @samp{epzs}.
+
+@item mb_size
+Macroblock size. Default @code{16}.
+
+@item search_param
+Motion estimation search parameter. Default @code{32}.
+
+@item vsmbc
+Enable variable-size block motion compensation. Motion estimation is applied with smaller block sizes at object boundaries in order to make the them less blur. Default is @code{0} (disabled).
+@end table
+@end table
+
+@item scd
+Scene change detection method. Scene change leads motion vectors to be in random direction. Scene change detection replace interpolated frames by duplicate ones. May not be needed for other modes. Following values are accepted:
+@table @samp
+@item none
+Disable scene change detection.
+@item fdiff
+Frame difference. Corresponding pixel values are compared and if it statisfies @var{scd_threshold} scene change is detected.
+@end table
+Default method is @samp{fdiff}.
+
+@item scd_threshold
+Scene change detection threshold. Default is @code{5.0}.
+@end table
 
 @section mpdecimate
 
@@ -10591,6 +10894,12 @@ standard output.
 Specifies which version of the stats file format to use. Details of
 each format are written below.
 Default value is 1.
+
+@item stats_add_max
+Determines whether the max value is output to the stats log.
+Default value is 0.
+Requires stats_version >= 2. If this is set and stats_version < 2,
+the filter will return an error.
 @end table
 
 The file printed if @var{stats_file} is selected, contains a sequence of
@@ -10627,6 +10936,10 @@ frames for the component specified by the suffix.
 @item psnr_y, psnr_u, psnr_v, psnr_r, psnr_g, psnr_b, psnr_a
 Peak Signal to Noise ratio of the compared frames for the component
 specified by the suffix.
+
+@item max_avg, max_y, max_u, max_v
+Maximum allowed value for each channel, and average over all
+channels.
 @end table
 
 For example:
@@ -11573,6 +11886,7 @@ selectivecolor=psfile=MySelectiveColorPresets/Misty.asv
 @end example
 @end itemize
 
+@anchor{separatefields}
 @section separatefields
 
 The @code{separatefields} takes a frame-based video input and splits
@@ -11802,10 +12116,21 @@ frames. Number of indexes also sets maximal value that each index may have.
 
 The first frame has the index 0. The default is to keep the input unchanged.
 
+@subsection Examples
+
+@itemize
+@item
 Swap second and third frame of every three frames of the input:
 @example
 ffmpeg -i INPUT -vf "shuffleframes=0 2 1" OUTPUT
 @end example
+
+@item
+Swap 10th and 1st frame of every ten frames of the input:
+@example
+ffmpeg -i INPUT -vf "shuffleframes=9 1 2 3 4 5 6 7 8 0" OUTPUT
+@end example
+@end itemize
 
 @section shuffleplanes
 
@@ -11831,10 +12156,15 @@ The index of the input plane to be used as the fourth output plane.
 
 The first plane has the index 0. The default is to keep the input unchanged.
 
+@subsection Examples
+
+@itemize
+@item
 Swap the second and third planes of the input:
 @example
 ffmpeg -i INPUT -vf shuffleplanes=0:2:1:3 OUTPUT
 @end example
+@end itemize
 
 @anchor{signalstats}
 @section signalstats
@@ -13141,6 +13471,53 @@ Force a constant quantization parameter. If not set, the filter will use the QP
 from the video stream (if available).
 @end table
 
+@section vaguedenoiser
+
+Apply a wavelet based denoiser.
+
+It transforms each frame from the video input into the wavelet domain,
+using Cohen-Daubechies-Feauveau 9/7. Then it applies some filtering to
+the obtained coefficients. It does an inverse wavelet transform after.
+Due to wavelet properties, it should give a nice smoothed result, and
+reduced noise, without blurring picture features.
+
+This filter accepts the following options:
+
+@table @option
+@item threshold
+The filtering strength. The higher, the more filtered the video will be.
+Hard thresholding can use a higher threshold than soft thresholding
+before the video looks overfiltered.
+
+@item method
+The filtering method the filter will use.
+
+It accepts the following values:
+@table @samp
+@item hard
+All values under the threshold will be zeroed.
+
+@item soft
+All values under the threshold will be zeroed. All values above will be
+reduced by the threshold.
+
+@item garrote
+Scales or nullifies coefficients - intermediary between (more) soft and
+(less) hard thresholding.
+@end table
+
+@item nsteps
+Number of times, the wavelet will decompose the picture. Picture can't
+be decomposed beyond a particular point (typically, 8 for a 640x480
+frame - as 2^9 = 512 > 480)
+
+@item percent
+Partial of full denoising (limited coefficients shrinking), from 0 to 100.
+
+@item planes
+A list of the planes to process. By default all planes are processed.
+@end table
+
 @section vectorscope
 
 Display 2 color component values in the two dimensional graph (which is called
@@ -13804,7 +14181,41 @@ Set scale used for displaying graticule.
 @item ire
 @end table
 Default is digital.
+
+@item bgopacity, b
+Set background opacity.
 @end table
+
+@section weave
+
+The @code{weave} takes a field-based video input and join
+each two sequential fields into single frame, producing a new double
+height clip with half the frame rate and half the frame count.
+
+It accepts the following option:
+
+@table @option
+@item first_field
+Set first field. Available values are:
+
+@table @samp
+@item top, t
+Set the frame as top-field-first.
+
+@item bottom, b
+Set the frame as bottom-field-first.
+@end table
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Interlace video using @ref{select} and @ref{separatefields} filter:
+@example
+separatefields,select=eq(mod(n,4),0)+eq(mod(n,4),3),weave
+@end example
+@end itemize
 
 @section xbr
 Apply the xBR high-quality magnification filter which is designed for pixel
@@ -14163,6 +14574,34 @@ Possible value are:
 @item 170m
 @item 2020_ncl
 @item 2020_cl
+@end table
+
+@item chromal, c
+Set the output chroma location.
+
+Possible values are:
+@table @var
+@item input
+@item left
+@item center
+@item topleft
+@item top
+@item bottomleft
+@item bottom
+@end table
+
+@item chromalin, cin
+Set the input chroma location.
+
+Possible values are:
+@table @var
+@item input
+@item left
+@item center
+@item topleft
+@item top
+@item bottomleft
+@item bottom
 @end table
 @end table
 
@@ -14757,7 +15196,8 @@ ffplay -f lavfi life=s=300x200:mold=10:r=60:ratio=0.1:death_color=#C83232:life_c
 @anchor{smptehdbars}
 @anchor{testsrc}
 @anchor{testsrc2}
-@section allrgb, allyuv, color, haldclutsrc, nullsrc, rgbtestsrc, smptebars, smptehdbars, testsrc, testsrc2
+@anchor{yuvtestsrc}
+@section allrgb, allyuv, color, haldclutsrc, nullsrc, rgbtestsrc, smptebars, smptehdbars, testsrc, testsrc2, yuvtestsrc
 
 The @code{allrgb} source returns frames of size 4096x4096 of all rgb colors.
 
@@ -14789,6 +15229,9 @@ intended for testing purposes.
 The @code{testsrc2} source is similar to testsrc, but supports more
 pixel formats instead of just @code{rgb24}. This allows using it as an
 input for other tests without requiring a format conversion.
+
+The @code{yuvtestsrc} source generates an YUV test pattern. You should
+see a y, cb and cr stripe from top to bottom.
 
 The sources accept the following parameters:
 
@@ -15658,6 +16101,7 @@ Time limit for the pauses. Any pause longer than that will be considered
 a timestamp discontinuity and reset the timer. Default is 2 seconds.
 @end table
 
+@anchor{select}
 @section select, aselect
 
 Select frames to pass in output.
@@ -16548,6 +16992,9 @@ It accepts the following values:
 @end table
 Default is @code{combined}.
 
+@item minamp
+Set minimum amplitude used in @code{log} amplitude scaler.
+
 @end table
 
 @anchor{showspectrum}
@@ -16573,10 +17020,10 @@ It accepts the following values:
 the samples start again on the left when they reach the right
 @item scroll
 the samples scroll from right to left
-@item rscroll
-the samples scroll from left to right
 @item fullframe
 frames are only produced when the samples reach the right
+@item rscroll
+the samples scroll from left to right
 @end table
 
 Default value is @code{replace}.
@@ -16632,12 +17079,12 @@ linear
 square root, default
 @item cbrt
 cubic root
+@item log
+logarithmic
 @item 4thrt
 4th root
 @item 5thrt
 5th root
-@item log
-logarithmic
 @end table
 
 Default value is @samp{sqrt}.
@@ -16780,12 +17227,12 @@ linear
 square root, default
 @item cbrt
 cubic root
+@item log
+logarithmic
 @item 4thrt
 4th root
 @item 5thrt
 5th root
-@item log
-logarithmic
 @end table
 Default value is @samp{log}.
 
@@ -16880,6 +17327,9 @@ The expression can use the following variables:
 @table @option
 @item VOLUME
 Current max volume of channel in dB.
+
+@item PEAK
+Current peak.
 
 @item CHANNEL
 Current channel number, starting from 0.
