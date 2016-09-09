@@ -4402,6 +4402,24 @@ number in range [5, 129].
 Set what planes of frame filter will use for averaging. Default is all.
 @end table
 
+@section avgblur
+
+Apply average blur filter.
+
+The filter accepts the following options:
+
+@table @option
+@item sizeX
+Set horizontal kernel size.
+
+@item planes
+Set which planes to filter. By default all planes are filtered.
+
+@item sizeY
+Set vertical kernel size, if zero it will be same as @code{sizeX}.
+Default is @code{0}.
+@end table
+
 @section bbox
 
 Compute the bounding box for the non-black pixels in the input frame
@@ -6017,6 +6035,9 @@ the text color is picked in such way so its always visible.
 
 @item axis
 Draw rows and columns numbers on left and top of video.
+
+@item opacity
+Set background opacity.
 @end table
 
 @section dctdnoiz
@@ -12095,10 +12116,21 @@ frames. Number of indexes also sets maximal value that each index may have.
 
 The first frame has the index 0. The default is to keep the input unchanged.
 
+@subsection Examples
+
+@itemize
+@item
 Swap second and third frame of every three frames of the input:
 @example
 ffmpeg -i INPUT -vf "shuffleframes=0 2 1" OUTPUT
 @end example
+
+@item
+Swap 10th and 1st frame of every ten frames of the input:
+@example
+ffmpeg -i INPUT -vf "shuffleframes=9 1 2 3 4 5 6 7 8 0" OUTPUT
+@end example
+@end itemize
 
 @section shuffleplanes
 
@@ -12124,10 +12156,15 @@ The index of the input plane to be used as the fourth output plane.
 
 The first plane has the index 0. The default is to keep the input unchanged.
 
+@subsection Examples
+
+@itemize
+@item
 Swap the second and third planes of the input:
 @example
 ffmpeg -i INPUT -vf shuffleplanes=0:2:1:3 OUTPUT
 @end example
+@end itemize
 
 @anchor{signalstats}
 @section signalstats
@@ -14144,6 +14181,9 @@ Set scale used for displaying graticule.
 @item ire
 @end table
 Default is digital.
+
+@item bgopacity, b
+Set background opacity.
 @end table
 
 @section weave
