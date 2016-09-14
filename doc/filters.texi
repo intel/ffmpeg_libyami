@@ -10419,6 +10419,8 @@ Compute full frame histograms.
 Compute histograms only for the part that differs from previous frame. This
 might be relevant to give more importance to the moving part of your input if
 the background is static.
+@item single
+Compute new histogram for each frame.
 @end table
 
 Default value is @var{full}.
@@ -10490,6 +10492,9 @@ much, and as a result less moving noise and better GIF compression).
 @end table
 
 Default is @var{none}.
+
+@item new
+Take new palette for each output frame.
 @end table
 
 @subsection Examples
@@ -10853,6 +10858,23 @@ Set soft thresholding (better de-ringing effect, but likely blurrier).
 @item medium
 Set medium thresholding (good results, default).
 @end table
+@end table
+
+@section prewitt
+Apply prewitt operator to input video stream.
+
+The filter accepts the following option:
+
+@table @option
+@item planes
+Set which planes will be processed, unprocessed planes will be copied.
+By default value 0xf, all planes will be processed.
+
+@item scale
+Set value which will be multiplied with filtered result.
+
+@item delta
+Set value which will be added to filtered result.
 @end table
 
 @section psnr
@@ -12708,6 +12730,23 @@ Same as above, but for audio:
 asendcmd='5.0 astreamselect map 1',astreamselect=inputs=2:map=0
 @end example
 @end itemize
+
+@section sobel
+Apply sobel operator to input video stream.
+
+The filter accepts the following option:
+
+@table @option
+@item planes
+Set which planes will be processed, unprocessed planes will be copied.
+By default value 0xf, all planes will be processed.
+
+@item scale
+Set value which will be multiplied with filtered result.
+
+@item delta
+Set value which will be added to filtered result.
+@end table
 
 @anchor{spp}
 @section spp
