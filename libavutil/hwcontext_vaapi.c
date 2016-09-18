@@ -447,7 +447,11 @@ static int vaapi_frames_init(AVHWFramesContext *hwfc)
     }
 
     if (!hwfc->pool) {
+#ifdef VPG_DRIVER
+        int need_memory_type = 0, need_pixel_format = 1;
+#else
         int need_memory_type = 1, need_pixel_format = 1;
+#endif
         for (i = 0; i < avfc->nb_attributes; i++) {
             if (ctx->attributes[i].type == VASurfaceAttribMemoryType)
                 need_memory_type  = 0;
