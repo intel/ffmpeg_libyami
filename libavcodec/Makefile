@@ -316,7 +316,7 @@ OBJS-$(CONFIG_H264_DECODER)            += h264dec.o h264_cabac.o h264_cavlc.o \
                                           h264_slice.o h264data.o h264_parse.o \
                                           h2645_parse.o
 OBJS-$(CONFIG_H264_CUVID_DECODER)      += cuvid.o
-OBJS-$(CONFIG_H264_MEDIACODEC_DECODER) += mediacodecdec_h264.o
+OBJS-$(CONFIG_H264_MEDIACODEC_DECODER) += mediacodecdec_h2645.o
 OBJS-$(CONFIG_H264_MMAL_DECODER)       += mmaldec.o
 OBJS-$(CONFIG_H264_NVENC_ENCODER)      += nvenc_h264.o
 OBJS-$(CONFIG_NVENC_ENCODER)           += nvenc_h264.o
@@ -333,6 +333,7 @@ OBJS-$(CONFIG_HEVC_DECODER)            += hevc.o hevc_mvs.o hevc_ps.o hevc_sei.o
                                           hevc_cabac.o hevc_refs.o hevcpred.o    \
                                           hevcdsp.o hevc_filter.o h2645_parse.o hevc_data.o
 OBJS-$(CONFIG_HEVC_CUVID_DECODER)      += cuvid.o
+OBJS-$(CONFIG_HEVC_MEDIACODEC_DECODER) += mediacodecdec_h2645.o hevc_parse.o
 OBJS-$(CONFIG_HEVC_NVENC_ENCODER)      += nvenc_hevc.o
 OBJS-$(CONFIG_NVENC_HEVC_ENCODER)      += nvenc_hevc.o
 OBJS-$(CONFIG_HEVC_QSV_DECODER)        += qsvdec_h2645.o
@@ -382,6 +383,7 @@ OBJS-$(CONFIG_MJPEG_ENCODER)           += mjpegenc.o mjpegenc_common.o
 OBJS-$(CONFIG_MJPEGB_DECODER)          += mjpegbdec.o
 OBJS-$(CONFIG_MJPEG_VAAPI_ENCODER)     += vaapi_encode_mjpeg.o
 OBJS-$(CONFIG_MLP_DECODER)             += mlpdec.o mlpdsp.o
+OBJS-$(CONFIG_MLP_ENCODER)             += mlpenc.o
 OBJS-$(CONFIG_MMVIDEO_DECODER)         += mmvideo.o
 OBJS-$(CONFIG_MOTIONPIXELS_DECODER)    += motionpixels.o
 OBJS-$(CONFIG_MOVTEXT_DECODER)         += movtextdec.o ass.o
@@ -545,6 +547,7 @@ OBJS-$(CONFIG_TIFF_DECODER)            += tiff.o lzw.o faxcompr.o tiff_data.o ti
 OBJS-$(CONFIG_TIFF_ENCODER)            += tiffenc.o rle.o lzwenc.o tiff_data.o
 OBJS-$(CONFIG_TMV_DECODER)             += tmv.o cga_data.o
 OBJS-$(CONFIG_TRUEHD_DECODER)          += mlpdec.o mlpdsp.o
+OBJS-$(CONFIG_TRUEHD_ENCODER)          += mlpenc.o
 OBJS-$(CONFIG_TRUEMOTION1_DECODER)     += truemotion1.o
 OBJS-$(CONFIG_TRUEMOTION2_DECODER)     += truemotion2.o
 OBJS-$(CONFIG_TRUEMOTION2RT_DECODER)   += truemotion2rt.o

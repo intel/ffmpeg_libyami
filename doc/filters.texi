@@ -9352,9 +9352,31 @@ The first input value for the pixel component.
 
 @item y
 The second input value for the pixel component.
+
+@item bdx
+The first input video bit depth.
+
+@item bdy
+The second input video bit depth.
 @end table
 
 All expressions default to "x".
+
+@subsection Examples
+
+@itemize
+@item
+Highlight differences between two RGB video streams:
+@example
+lut2='ifnot(x-y,0,pow(2,bdx)-1):ifnot(x-y,0,pow(2,bdx)-1):ifnot(x-y,0,pow(2,bdx)-1)'
+@end example
+
+@item
+Highlight differences between two YUV video streams:
+@example
+lut2='ifnot(x-y,0,pow(2,bdx)-1):ifnot(x-y,pow(2,bdx-1),pow(2,bdx)-1):ifnot(x-y,pow(2,bdx-1),pow(2,bdx)-1)'
+@end example
+@end itemize
 
 @section maskedclamp
 
@@ -13428,11 +13450,11 @@ It accepts the following parameters:
 @table @option
 @item luma_msize_x, lx
 Set the luma matrix horizontal size. It must be an odd integer between
-3 and 63. The default value is 5.
+3 and 23. The default value is 5.
 
 @item luma_msize_y, ly
 Set the luma matrix vertical size. It must be an odd integer between 3
-and 63. The default value is 5.
+and 23. The default value is 5.
 
 @item luma_amount, la
 Set the luma effect strength. It must be a floating point number, reasonable
@@ -13445,11 +13467,11 @@ Default value is 1.0.
 
 @item chroma_msize_x, cx
 Set the chroma matrix horizontal size. It must be an odd integer
-between 3 and 63. The default value is 5.
+between 3 and 23. The default value is 5.
 
 @item chroma_msize_y, cy
 Set the chroma matrix vertical size. It must be an odd integer
-between 3 and 63. The default value is 5.
+between 3 and 23. The default value is 5.
 
 @item chroma_amount, ca
 Set the chroma effect strength. It must be a floating point number, reasonable
