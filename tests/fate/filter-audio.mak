@@ -127,6 +127,12 @@ fate-filter-tremolo: tests/data/asynth-44100-2.wav
 fate-filter-tremolo: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
 fate-filter-tremolo: CMD = framecrc -i $(SRC) -aframes 20 -af tremolo
 
+FATE_AFILTER-$(call FILTERDEMDECENCMUX, COMPAND, WAV, PCM_S16LE, PCM_S16LE, WAV) += fate-filter-compand
+fate-filter-compand: tests/data/asynth-44100-2.wav
+fate-filter-compand: tests/data/filtergraphs/compand
+fate-filter-compand: SRC = $(TARGET_PATH)/tests/data/asynth-44100-2.wav
+fate-filter-compand: CMD = framecrc -i $(SRC) -aframes 20 -filter_complex_script $(TARGET_PATH)/tests/data/filtergraphs/compand
+
 tests/data/hls-list.m3u8: TAG = GEN
 tests/data/hls-list.m3u8: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data
 	$(M)$(TARGET_EXEC) $(TARGET_PATH)/$< \
@@ -136,6 +142,20 @@ tests/data/hls-list.m3u8: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data
 FATE_AFILTER-$(call ALLYES, HLS_DEMUXER MPEGTS_MUXER MPEGTS_DEMUXER AEVALSRC_FILTER LAVFI_INDEV MP2FIXED_ENCODER) += fate-filter-hls
 fate-filter-hls: tests/data/hls-list.m3u8
 fate-filter-hls: CMD = framecrc -flags +bitexact -i $(TARGET_PATH)/tests/data/hls-list.m3u8
+
+tests/data/hls-list-append.m3u8: TAG = GEN
+tests/data/hls-list-append.m3u8: ffmpeg$(PROGSSUF)$(EXESUF) | tests/data
+	$(M)$(TARGET_EXEC) $(TARGET_PATH)/$< \
+        -f lavfi -i "aevalsrc=cos(2*PI*t)*sin(2*PI*(440+4*t)*t)::d=20" -f segment -segment_time 10 -map 0 -flags +bitexact -codec:a mp2fixed \
+        -segment_list $(TARGET_PATH)/$@ -y $(TARGET_PATH)/tests/data/hls-append-out-%03d.ts 2>/dev/null; \
+        $(TARGET_EXEC) $(TARGET_PATH)/$< \
+        -f lavfi -i "aevalsrc=cos(2*PI*t)*sin(2*PI*(440+4*t)*t)::d=20" -f hls -hls_time 10 -map 0 -flags +bitexact \
+        -hls_flags append_list -codec:a mp2fixed -hls_segment_filename $(TARGET_PATH)/tests/data/hls-append-out-%03d.ts \
+        $(TARGET_PATH)/tests/data/hls-list-append.m3u8 2>/dev/null
+
+FATE_AFILTER-$(call ALLYES, HLS_DEMUXER MPEGTS_MUXER MPEGTS_DEMUXER AEVALSRC_FILTER LAVFI_INDEV MP2FIXED_ENCODER) += fate-filter-hls-append
+fate-filter-hls-append: tests/data/hls-list-append.m3u8
+fate-filter-hls-append: CMD = framecrc -flags +bitexact -i $(TARGET_PATH)/tests/data/hls-list-append.m3u8 -af asetpts=RTCTIME
 
 FATE_AMIX += fate-filter-amix-simple
 fate-filter-amix-simple: CMD = ffmpeg -filter_complex amix -i $(SRC) -ss 3 -i $(SRC1) -f f32le -
@@ -231,6 +251,12 @@ fate-filter-hdcd: SRC = $(TARGET_SAMPLES)/filter/hdcd.flac
 fate-filter-hdcd: CMD = md5 -i $(SRC) -af hdcd -f s24le
 fate-filter-hdcd: CMP = oneline
 fate-filter-hdcd: REF = 5db465a58d2fd0d06ca944b883b33476
+
+FATE_AFILTER_SAMPLES-$(call FILTERDEMDECENCMUX, HDCD, FLAC, FLAC, PCM_S24LE, PCM_S24LE) += fate-filter-hdcd-analyze
+fate-filter-hdcd-analyze: SRC = $(TARGET_SAMPLES)/filter/hdcd.flac
+fate-filter-hdcd-analyze: CMD = md5 -i $(SRC) -af hdcd=analyze_mode=pe -f s24le
+fate-filter-hdcd-analyze: CMP = oneline
+fate-filter-hdcd-analyze: REF = 6e39dc4629c1e84321c0d8bc069b42f6
 
 FATE_AFILTER_SAMPLES-$(call FILTERDEMDECENCMUX, HDCD, FLAC, FLAC, PCM_S24LE, PCM_S24LE) += fate-filter-hdcd-false-positive
 fate-filter-hdcd-false-positive: SRC = $(TARGET_SAMPLES)/filter/hdcd-false-positive.flac

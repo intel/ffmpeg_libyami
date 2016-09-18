@@ -72,6 +72,7 @@ static int ff_yami_decode_thread_close(YamiDecContext *s)
         pthread_mutex_lock(&s->ctx_mutex);
     }
     pthread_mutex_unlock(&s->ctx_mutex);
+    pthread_mutex_destroy(&s->ctx_mutex);
     pthread_mutex_destroy(&s->in_mutex);
     pthread_cond_destroy(&s->in_cond);
     return 0;
@@ -236,7 +237,7 @@ static const char *get_mime(AVCodecID id)
     }
 }
 
-static int yami_dec_init(AVCodecContext *avctx)
+static av_cold int yami_dec_init(AVCodecContext *avctx)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     Decode_Status status;
@@ -458,7 +459,7 @@ fail:
     return ret;
 }
 
-static int yami_dec_close(AVCodecContext *avctx)
+static av_cold int yami_dec_close(AVCodecContext *avctx)
 {
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
 

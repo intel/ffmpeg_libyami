@@ -14,6 +14,23 @@ version <next>:
 - MediaCodec hwaccel
 - True Audio (TTA) muxer
 - crystalizer audio filter
+- acrusher audio filter
+- bitplanenoise video filter
+- floating point support in als decoder
+- fifo muxer
+- maskedclamp filter
+- hysteresis filter
+- lut2 filter
+- yuvtestsrc filter
+- vaguedenoiser filter
+- added threads option per filter instance
+- weave filter
+- gblur filter
+- avgblur filter
+- sobel and prewitt filter
+- MediaCodec HEVC decoding
+- TrueHD encoder
+- Meridian Lossless Packing (MLP) encoder
 
 
 version 3.1:

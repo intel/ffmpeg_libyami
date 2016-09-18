@@ -276,7 +276,7 @@ value is -1.
 If set to 1 use chunked Transfer-Encoding for posts, default is 1.
 
 @item content_type
-Set a specific content type for the POST messages.
+Set a specific content type for the POST messages or for listen mode.
 
 @item http_proxy
 set HTTP proxy to tunnel through e.g. http://example.com:1234
@@ -291,10 +291,12 @@ Use persistent connections if set to 1, default is 0.
 @item post_data
 Set custom HTTP post data.
 
-@item user-agent
 @item user_agent
 Override the User-Agent header. If not specified the protocol will use a
 string describing the libavformat build. ("Lavf/<version>")
+
+@item user-agent
+This is a deprecated option, you can use user_agent instead it.
 
 @item timeout
 Set timeout in microseconds of socket I/O operations used by the underlying low level

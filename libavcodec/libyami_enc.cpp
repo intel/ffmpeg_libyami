@@ -72,6 +72,7 @@ static int ff_yami_encode_thread_close(YamiEncContext *s)
         pthread_mutex_lock(&s->ctx_mutex);
     }
     pthread_mutex_unlock(&s->ctx_mutex);
+    pthread_mutex_destroy(&s->ctx_mutex);
     pthread_mutex_destroy(&s->in_mutex);
     pthread_mutex_destroy(&s->out_mutex);
     pthread_cond_destroy(&s->in_cond);
@@ -189,7 +190,7 @@ static void ff_out_buffer_destroy(VideoEncOutputBuffer *enc_out_buf)
         free(enc_out_buf->data);
 }
 
-static int yami_enc_init(AVCodecContext *avctx)
+static av_cold int yami_enc_init(AVCodecContext *avctx)
 {
     YamiEncContext *s = (YamiEncContext *) avctx->priv_data;
     Encode_Status status;
@@ -473,7 +474,7 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     return 0;
 }
 
-static int yami_enc_close(AVCodecContext *avctx)
+static av_cold int yami_enc_close(AVCodecContext *avctx)
 {
     YamiEncContext *s = (YamiEncContext *)avctx->priv_data;
     ff_out_buffer_destroy(&s->enc_out_buf);

@@ -622,8 +622,8 @@ static int aac_encode_frame(AVCodecContext *avctx, AVPacket *avpkt,
             }
 
             for (k = 0; k < 1024; k++) {
-                if (!isfinite(cpe->ch[ch].coeffs[k])) {
-                    av_log(avctx, AV_LOG_ERROR, "Input contains NaN/+-Inf\n");
+                if (!(fabs(cpe->ch[ch].coeffs[k]) < 1E16)) { // Ensure headroom for energy calculation
+                    av_log(avctx, AV_LOG_ERROR, "Input contains (near) NaN/+-Inf\n");
                     return AVERROR(EINVAL);
                 }
             }
@@ -999,9 +999,9 @@ static av_cold int aac_encode_init(AVCodecContext *avctx)
 
     /* Coder limitations */
     s->coder = &ff_aac_coders[s->options.coder];
-    if (s->options.coder != AAC_CODER_TWOLOOP) {
+    if (s->options.coder == AAC_CODER_ANMR) {
         ERROR_IF(avctx->strict_std_compliance > FF_COMPLIANCE_EXPERIMENTAL,
-                 "Coders other than twoloop require -strict -2 and some may be removed in the future\n");
+                 "The ANMR coder is considered experimental, add -strict -2 to enable!\n");
         s->options.intensity_stereo = 0;
         s->options.pns = 0;
     }
