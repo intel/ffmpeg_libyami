@@ -357,6 +357,12 @@ segmentation.
 This muxer supports the following options:
 
 @table @option
+@item hls_init_time @var{seconds}
+Set the initial target segment length in seconds. Default value is @var{0}.
+Segment will be cut on the next key frame after this time has passed on the first m3u8 list.
+After the initial playlist is filled @command{ffmpeg} will cut segments
+at duration equal to @code{hls_time}
+
 @item hls_time @var{seconds}
 Set the target segment length in seconds. Default value is 2.
 Segment will be cut on the next key frame after this time has passed.
@@ -515,6 +521,9 @@ Allow segments to start on frames other than keyframes. This improves
 behavior on some players when the time between keyframes is inconsistent,
 but may make things worse on others, and can cause some oddities during
 seeking. This flag should be used with the @code{hls_time} option.
+
+@item hls_flags program_date_time
+Generate @code{EXT-X-PROGRAM-DATE-TIME} tags.
 
 @item hls_playlist_type event
 Emit @code{#EXT-X-PLAYLIST-TYPE:EVENT} in the m3u8 header. Forces
