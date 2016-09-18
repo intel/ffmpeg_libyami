@@ -137,6 +137,12 @@ static int CUDAAPI cuvid_handle_video_sequence(void *opaque, CUVIDEOFORMAT* form
         return 0;
     }
 
+    if (format->chroma_format != cudaVideoChromaFormat_420) {
+        av_log(avctx, AV_LOG_ERROR, "Chroma formats other than 420 are not supported\n");
+        ctx->internal_error = AVERROR(EINVAL);
+        return 0;
+    }
+
     avctx->coded_width = format->coded_width;
     avctx->coded_height = format->coded_height;
 
@@ -258,7 +264,10 @@ static int cuvid_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
 
         if (avpkt->pts != AV_NOPTS_VALUE) {
             cupkt.flags = CUVID_PKT_TIMESTAMP;
-            cupkt.timestamp = av_rescale_q(avpkt->pts, avctx->time_base, (AVRational){1, 10000000});
+            if (avctx->pkt_timebase.num && avctx->pkt_timebase.den)
+                cupkt.timestamp = av_rescale_q(avpkt->pts, avctx->pkt_timebase, (AVRational){1, 10000000});
+            else
+                cupkt.timestamp = avpkt->pts;
         }
     } else {
         cupkt.flags = CUVID_PKT_ENDOFSTREAM;
@@ -269,8 +278,13 @@ static int cuvid_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
     av_packet_unref(&filtered_packet);
 
     if (ret < 0) {
-        if (ctx->internal_error)
-            ret = ctx->internal_error;
+        goto error;
+    }
+
+    // cuvidParseVideoData doesn't return an error just because stuff failed...
+    if (ctx->internal_error) {
+        av_log(avctx, AV_LOG_ERROR, "cuvid decode callback error\n");
+        ret = ctx->internal_error;
         goto error;
     }
 
@@ -363,7 +377,10 @@ static int cuvid_decode_frame(AVCodecContext *avctx, void *data, int *got_frame,
 
         frame->width = avctx->width;
         frame->height = avctx->height;
-        frame->pts = av_rescale_q(dispinfo.timestamp, (AVRational){1, 10000000}, avctx->time_base);
+        if (avctx->pkt_timebase.num && avctx->pkt_timebase.den)
+            frame->pts = av_rescale_q(dispinfo.timestamp, (AVRational){1, 10000000}, avctx->pkt_timebase);
+        else
+            frame->pts = dispinfo.timestamp;
 
         /* CUVIDs opaque reordering breaks the internal pkt logic.
          * So set pkt_pts and clear all the other pkt_ fields.
@@ -679,6 +696,9 @@ static av_cold int cuvid_decode_init(AVCodecContext *avctx)
 
     ctx->ever_flushed = 0;
 
+    if (!avctx->pkt_timebase.num || !avctx->pkt_timebase.den)
+        av_log(avctx, AV_LOG_WARNING, "Invalid pkt_timebase, passing timestamps as-is.\n");
+
     return 0;
 
 error:
@@ -692,6 +712,7 @@ static void cuvid_flush(AVCodecContext *avctx)
     AVHWDeviceContext *device_ctx = (AVHWDeviceContext*)ctx->hwdevice->data;
     AVCUDADeviceContext *device_hwctx = device_ctx->hwctx;
     CUcontext dummy, cuda_ctx = device_hwctx->cuda_ctx;
+    CUVIDSOURCEDATAPACKET seq_pkt = { 0 };
     int ret;
 
     ctx->ever_flushed = 1;
@@ -721,6 +742,15 @@ static void cuvid_flush(AVCodecContext *avctx)
     ret = CHECK_CU(cuvidCreateVideoParser(&ctx->cuparser, &ctx->cuparseinfo));
     if (ret < 0)
         goto error;
+
+    seq_pkt.payload = ctx->cuparse_ext.raw_seqhdr_data;
+    seq_pkt.payload_size = ctx->cuparse_ext.format.seqhdr_data_length;
+
+    if (seq_pkt.payload && seq_pkt.payload_size) {
+        ret = CHECK_CU(cuvidParseVideoData(ctx->cuparser, &seq_pkt));
+        if (ret < 0)
+            goto error;
+    }
 
     ret = CHECK_CU(cuCtxPopCurrent(&dummy));
     if (ret < 0)
