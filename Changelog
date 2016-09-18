@@ -20,6 +20,13 @@ version <next>:
 - fifo muxer
 - maskedclamp filter
 - hysteresis filter
+- lut2 filter
+- yuvtestsrc filter
+- vaguedenoiser filter
+- added threads option per filter instance
+- weave filter
+- gblur filter
+- avgblur filter
 
 
 version 3.1:

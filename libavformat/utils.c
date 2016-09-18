@@ -307,7 +307,7 @@ static int set_codec_from_probe_data(AVFormatContext *s, AVStream *st,
     int score;
     AVInputFormat *fmt = av_probe_input_format3(pd, 1, &score);
 
-    if (fmt && st->request_probe <= score) {
+    if (fmt) {
         int i;
         av_log(s, AV_LOG_DEBUG,
                "Probe with size=%d, packets=%d detected %s with score=%d\n",
@@ -317,6 +317,9 @@ static int set_codec_from_probe_data(AVFormatContext *s, AVStream *st,
             if (!strcmp(fmt->name, fmt_id_type[i].name)) {
                 if (fmt_id_type[i].type != AVMEDIA_TYPE_AUDIO &&
                     st->codecpar->sample_rate)
+                    continue;
+                if (st->request_probe > score &&
+                    st->codecpar->codec_id != fmt_id_type[i].id)
                     continue;
                 st->codecpar->codec_id   = fmt_id_type[i].id;
                 st->codecpar->codec_type = fmt_id_type[i].type;
@@ -614,7 +617,7 @@ static void force_codec_ids(AVFormatContext *s, AVStream *st)
         break;
     case AVMEDIA_TYPE_DATA:
         if (s->data_codec_id)
-            st->codec->codec_id = s->data_codec_id;
+            st->codecpar->codec_id = s->data_codec_id;
         break;
     }
 }
@@ -3822,8 +3825,10 @@ FF_DISABLE_DEPRECATION_WARNINGS
             st->codec->height = st->internal->avctx->height;
         }
 
-        if (st->codec->codec_tag != MKTAG('t','m','c','d'))
+        if (st->codec->codec_tag != MKTAG('t','m','c','d')) {
             st->codec->time_base = st->internal->avctx->time_base;
+            st->codec->ticks_per_frame = st->internal->avctx->ticks_per_frame;
+        }
         st->codec->framerate = st->avg_frame_rate;
 
         if (st->internal->avctx->subtitle_header) {

@@ -308,7 +308,7 @@ External library support:
   --enable-libmfx          enable Intel MediaSDK (AKA Quick Sync Video) code via libmfx [no]
   --enable-libnpp          enable Nvidia Performance Primitives-based code [no]
   --enable-mmal            enable Broadcom Multi-Media Abstraction Layer (Raspberry Pi) via MMAL [no]
-  --enable-nvenc           enable Nvidia video encoding code [no]
+  --disable-nvenc          disable Nvidia video encoding code [autodetect]
   --enable-omx             enable OpenMAX IL code [no]
   --enable-omx-rpi         enable OpenMAX IL code for Raspberry Pi [no]
   --disable-vaapi          disable Video Acceleration API (mainly Unix/Intel) code [autodetect]
@@ -1923,6 +1923,7 @@ SYSTEM_FUNCS="
     isatty
     jack_port_get_latency_range
     kbhit
+    LoadLibrary
     localtime_r
     lstat
     lzo1x_999_compress
@@ -2550,6 +2551,7 @@ videotoolbox_hwaccel_deps="videotoolbox pthreads"
 videotoolbox_hwaccel_extralibs="-framework QuartzCore"
 xvmc_deps="X11_extensions_XvMClib_h"
 
+h263_cuvid_hwaccel_deps="cuda cuvid CUVIDMPEG4PICPARAMS"
 h263_vaapi_hwaccel_deps="vaapi"
 h263_vaapi_hwaccel_select="h263_decoder"
 h263_videotoolbox_hwaccel_deps="videotoolbox"
@@ -2592,10 +2594,12 @@ hevc_vaapi_hwaccel_deps="vaapi VAPictureParameterBufferHEVC"
 hevc_vaapi_hwaccel_select="hevc_decoder"
 hevc_vdpau_hwaccel_deps="vdpau VdpPictureInfoHEVC"
 hevc_vdpau_hwaccel_select="hevc_decoder"
+mjpeg_cuvid_hwaccel_deps="cuda cuvid CUVIDJPEGPICPARAMS"
 mpeg_vdpau_decoder_deps="vdpau"
 mpeg_vdpau_decoder_select="mpeg2video_decoder"
 mpeg_xvmc_hwaccel_deps="xvmc"
 mpeg_xvmc_hwaccel_select="mpeg2video_decoder"
+mpeg1_cuvid_hwaccel_deps="cuda cuvid CUVIDMPEG2PICPARAMS"
 mpeg1_vdpau_decoder_deps="vdpau"
 mpeg1_vdpau_decoder_select="mpeg1video_decoder"
 mpeg1_vdpau_hwaccel_deps="vdpau"
@@ -2605,6 +2609,7 @@ mpeg1_videotoolbox_hwaccel_select="mpeg1video_decoder"
 mpeg1_xvmc_hwaccel_deps="xvmc"
 mpeg1_xvmc_hwaccel_select="mpeg1video_decoder"
 mpeg2_crystalhd_decoder_select="crystalhd"
+mpeg2_cuvid_hwaccel_deps="cuda cuvid CUVIDMPEG2PICPARAMS"
 mpeg2_d3d11va_hwaccel_deps="d3d11va"
 mpeg2_d3d11va_hwaccel_select="mpeg2video_decoder"
 mpeg2_dxva2_hwaccel_deps="dxva2"
@@ -2623,6 +2628,7 @@ mpeg2_videotoolbox_hwaccel_select="mpeg2video_decoder"
 mpeg2_xvmc_hwaccel_deps="xvmc"
 mpeg2_xvmc_hwaccel_select="mpeg2video_decoder"
 mpeg4_crystalhd_decoder_select="crystalhd"
+mpeg4_cuvid_hwaccel_deps="cuda cuvid CUVIDMPEG4PICPARAMS"
 mpeg4_mmal_decoder_deps="mmal"
 mpeg4_mmal_decoder_select="mmal"
 mpeg4_mmal_hwaccel_deps="mmal"
@@ -2678,7 +2684,10 @@ vaapi_encode_deps="vaapi"
 hwupload_cuda_filter_deps="cuda"
 scale_npp_filter_deps="cuda libnpp"
 
+nvenc_deps_any="dlopen LoadLibrary"
 nvenc_encoder_deps="nvenc"
+h263_cuvid_decoder_deps="cuda cuvid CUVIDMPEG4PICPARAMS"
+h263_cuvid_decoder_select="h263_cuvid_hwaccel"
 h264_cuvid_decoder_deps="cuda cuvid CUVIDH264PICPARAMS"
 h264_cuvid_decoder_select="h264_mp4toannexb_bsf h264_cuvid_hwaccel"
 h264_nvenc_encoder_deps="nvenc"
@@ -2698,10 +2707,18 @@ hevc_qsv_encoder_deps="libmfx"
 hevc_qsv_encoder_select="qsvenc"
 hevc_vaapi_encoder_deps="VAEncPictureParameterBufferHEVC"
 hevc_vaapi_encoder_select="vaapi_encode golomb"
+mjpeg_cuvid_decoder_deps="cuda cuvid CUVIDJPEGPICPARAMS"
+mjpeg_cuvid_decoder_select="mjpeg_cuvid_hwaccel"
+mpeg1_cuvid_decoder_deps="cuda cuvid CUVIDMPEG2PICPARAMS"
+mpeg1_cuvid_decoder_select="mpeg1_cuvid_hwaccel"
+mpeg2_cuvid_decoder_deps="cuda cuvid CUVIDMPEG2PICPARAMS"
+mpeg2_cuvid_decoder_select="mpeg2_cuvid_hwaccel"
 mpeg2_qsv_decoder_deps="libmfx"
 mpeg2_qsv_decoder_select="qsvdec mpeg2_qsv_hwaccel"
 mpeg2_qsv_encoder_deps="libmfx"
 mpeg2_qsv_encoder_select="qsvenc"
+mpeg4_cuvid_decoder_deps="cuda cuvid CUVIDMPEG4PICPARAMS"
+mpeg4_cuvid_decoder_select="mpeg4_cuvid_hwaccel"
 nvenc_h264_encoder_deps="nvenc"
 nvenc_hevc_encoder_deps="nvenc"
 
@@ -2856,7 +2873,7 @@ dv_muxer_select="dvprofile"
 dxa_demuxer_select="riffdec"
 eac3_demuxer_select="ac3_parser"
 f4v_muxer_select="mov_muxer"
-fifo_muxer_deps="pthreads"
+fifo_muxer_deps="threads"
 flac_demuxer_select="flac_parser"
 hds_muxer_select="flv_muxer"
 hls_muxer_select="mpegts_muxer"
@@ -3097,6 +3114,7 @@ tinterlace_filter_deps="gpl"
 tinterlace_merge_test_deps="tinterlace_filter"
 tinterlace_pad_test_deps="tinterlace_filter"
 uspp_filter_deps="gpl avcodec"
+vaguedenoiser_filter_deps="gpl"
 vidstabdetect_filter_deps="libvidstab"
 vidstabtransform_filter_deps="libvidstab"
 zmq_filter_deps="libzmq"
@@ -3228,7 +3246,7 @@ enable audiotoolbox
 enable d3d11va dxva2 vaapi vda vdpau videotoolbox_hwaccel xvmc
 enable xlib
 
-enable vda_framework videotoolbox videotoolbox_encoder
+enable nvenc vda_framework videotoolbox videotoolbox_encoder
 
 # build settings
 SHFLAGS='-shared -Wl,-soname,$$(@F)'
@@ -5401,9 +5419,9 @@ check_code cc arm_neon.h "int16x8_t test = vdupq_n_s16(0)" && enable intrinsics_
 check_ldflags -Wl,--as-needed
 check_ldflags -Wl,-z,noexecstack
 
-if check_func dlopen; then
+if check_func dlopen && check_func dlsym; then
     ldl=
-elif check_func dlopen -ldl; then
+elif check_func dlopen -ldl && check_func dlsym -ldl; then
     ldl=-ldl
 fi
 
@@ -5412,7 +5430,7 @@ decklink_indev_extralibs="$decklink_indev_extralibs $ldl"
 frei0r_filter_extralibs='$ldl'
 frei0r_src_filter_extralibs='$ldl'
 ladspa_filter_extralibs='$ldl'
-nvenc_encoder_extralibs='$ldl'
+nvenc_extralibs='$ldl'
 coreimage_filter_extralibs="-framework QuartzCore -framework AppKit -framework OpenGL"
 coreimagesrc_filter_extralibs="-framework QuartzCore -framework AppKit -framework OpenGL"
 
@@ -5516,6 +5534,7 @@ check_func_headers windows.h CoTaskMemFree -lole32
 check_func_headers windows.h GetProcessAffinityMask
 check_func_headers windows.h GetProcessTimes
 check_func_headers windows.h GetSystemTimeAsFileTime
+check_func_headers windows.h LoadLibrary
 check_func_headers windows.h MapViewOfFile
 check_func_headers windows.h PeekNamedPipe
 check_func_headers windows.h SetConsoleTextAttribute
@@ -5583,6 +5602,9 @@ check_type "vdpau/vdpau.h" "VdpPictureInfoHEVC"
 
 check_type "cuviddec.h" "CUVIDH264PICPARAMS"
 check_type "cuviddec.h" "CUVIDHEVCPICPARAMS"
+check_type "cuviddec.h" "CUVIDJPEGPICPARAMS"
+check_type "cuviddec.h" "CUVIDMPEG2PICPARAMS"
+check_type "cuviddec.h" "CUVIDMPEG4PICPARAMS"
 check_type "cuviddec.h" "CUVIDVC1PICPARAMS"
 check_type "cuviddec.h" "CUVIDVP9PICPARAMS"
 
@@ -5802,10 +5824,6 @@ enabled mmal              && { check_lib interface/mmal/mmal.h mmal_port_connect
 enabled mmal && check_func_headers interface/mmal/mmal.h "MMAL_PARAMETER_VIDEO_MAX_NUM_CALLBACKS"
 
 enabled netcdf            && require_pkg_config netcdf netcdf.h nc_inq_libvers
-enabled nvenc             && { check_header nvEncodeAPI.h || die "ERROR: nvEncodeAPI.h not found."; } &&
-                             { check_cpp_condition nvEncodeAPI.h "NVENCAPI_MAJOR_VERSION >= 6" ||
-                               die "ERROR: NVENC API version 5 or older is not supported"; } &&
-                             { [ $target_os != cygwin ] || die "ERROR: NVENC is not supported on Cygwin currently."; }
 enabled openal            && { { for al_libs in "${OPENAL_LIBS}" "-lopenal" "-lOpenAL32"; do
                                check_lib 'AL/al.h' alGetError "${al_libs}" && break; done } ||
                                die "ERROR: openal not found"; } &&
@@ -6020,6 +6038,26 @@ enabled vdpau &&
 enabled vdpau && enabled xlib &&
     check_lib2 "vdpau/vdpau.h vdpau/vdpau_x11.h" vdp_device_create_x11 -lvdpau &&
     enable vdpau_x11
+
+if enabled x86; then
+    case $target_os in
+        mingw32*|mingw64*|win32|win64|linux|cygwin*)
+            ;;
+        *)
+            disable nvenc
+            ;;
+    esac
+else
+    disable nvenc
+fi
+
+enabled nvenc &&
+    check_cc -I$source_path <<EOF || disable nvenc
+#include "compat/nvenc/nvEncodeAPI.h"
+NV_ENCODE_API_FUNCTION_LIST flist;
+void f(void) { struct { const GUID guid; } s[] = { { NV_ENC_PRESET_HQ_GUID } }; }
+int main(void) { return 0; }
+EOF
 
 # Funny iconv installations are not unusual, so check it after all flags have been set
 disabled iconv || check_func_headers iconv.h iconv || check_lib2 iconv.h iconv -liconv || disable iconv
