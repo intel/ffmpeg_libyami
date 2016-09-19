@@ -747,6 +747,10 @@ static void add_input_streams(OptionsContext *o, AVFormatContext *ic)
                     ist->hwaccel_id = HWACCEL_AUTO;
                 else {
                     int i;
+                    //vaapi decoder default output format is nv12, set default values
+                    //to get the fastest speed.
+                    if (!strcmp(hwaccel, "vaapi"))
+                        ist->resample_pix_fmt = AV_PIX_FMT_NV12;
                     for (i = 0; hwaccels[i].name; i++) {
                         if (!strcmp(hwaccels[i].name, hwaccel)) {
                             ist->hwaccel_id = hwaccels[i].id;
