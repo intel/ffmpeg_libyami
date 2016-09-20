@@ -64,7 +64,7 @@ typedef struct {
 
     int deinterlace;     // deinterlace mode : 0=off, 1=bob, 2=advanced
     int denoise;         // enable denoise algo. level is the optional value from the interval [0; 100]
-    int sharpless;       // enable sharpless. level is the optional value from the interval [0; 100]
+    int sharpness;       // enable sharpness. level is the optional value from the interval [0; 100]
 
     int cur_out_idx;     // current surface in index
 
@@ -101,7 +101,7 @@ static const AVOption yamivpp_options[] = {
         { "bob",    "bob deinterlacing(linear deinterlacing)", 0, AV_OPT_TYPE_CONST, {.i64=1}, 0, 0, .flags=FLAGS, .unit="deinterlace"},
         { "advanced","advanced deinterlacing",                 0, AV_OPT_TYPE_CONST, {.i64=2}, 0, 0, .flags=FLAGS, .unit="deinterlace"},
     {"denoise",     "denoise level [-1, 100]",                    OFFSET(denoise),     AV_OPT_TYPE_INT, {.i64=DENOISE_LEVEL_NONE}, -1, 100, .flags = FLAGS},
-    {"sharpless",   "sharpless level [-1, 100]",                  OFFSET(sharpless),   AV_OPT_TYPE_INT, {.i64=SHARPENING_LEVEL_NONE}, -1, 100, .flags = FLAGS},
+    {"sharpness",   "sharpness level [-1, 100]",                  OFFSET(sharpness),   AV_OPT_TYPE_INT, {.i64=SHARPENING_LEVEL_NONE}, -1, 100, .flags = FLAGS},
     {"framerate",   "output frame rate",                          OFFSET(framerate),   AV_OPT_TYPE_RATIONAL, {.dbl=0.0},0, DBL_MAX, .flags = FLAGS},
     {"pipeline",    "yamivpp in hw pipeline: 0=off, 1=on",        OFFSET(pipeline),    AV_OPT_TYPE_INT, {.i64=0}, 0, 1, .flags = FLAGS, .unit = "pipeline"},
         { "off",    "don't put yamivpp in hw pipeline",        0, AV_OPT_TYPE_CONST, {.i64=0}, 0, 0, .flags=FLAGS, .unit="pipeline"},
@@ -135,9 +135,9 @@ static av_cold int yamivpp_init(AVFilterContext *ctx)
     }
 
     av_log(yamivpp, AV_LOG_VERBOSE, "w:%d, h:%d, deinterlace:%d, denoise:%d, "
-           "sharpless:%d, framerate:%d/%d, pipeline:%d\n",
+           "sharpness:%d, framerate:%d/%d, pipeline:%d\n",
            yamivpp->out_width, yamivpp->out_height, yamivpp->deinterlace,
-           yamivpp->denoise, yamivpp->sharpless,yamivpp->framerate.num, yamivpp->framerate.den,
+           yamivpp->denoise, yamivpp->sharpness,yamivpp->framerate.num, yamivpp->framerate.den,
            yamivpp->pipeline);
 
     return 0;
@@ -174,9 +174,9 @@ static int config_props(AVFilterLink *inlink)
         outlink->format = AV_PIX_FMT_NV12;
 
     av_log(yamivpp, AV_LOG_VERBOSE, "out w:%d, h:%d, deinterlace:%d,"
-           "denoise:%d, sharpless %d, framerate:%d/%d, pipeline:%d\n",
+           "denoise:%d, sharpness %d, framerate:%d/%d, pipeline:%d\n",
            yamivpp->out_width, yamivpp->out_height,
-           yamivpp->deinterlace, yamivpp->denoise,yamivpp->sharpless,
+           yamivpp->deinterlace, yamivpp->denoise,yamivpp->sharpness,
            yamivpp->framerate.num, yamivpp->framerate.den, yamivpp->pipeline);
 
 
@@ -268,7 +268,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
         && in->height == outlink->h
         && in->format == outlink->format
         && yamivpp->denoise != -1
-        && yamivpp->sharpless != -1)
+        && yamivpp->sharpness != -1)
          return ff_filter_frame(outlink, in);
 
     if (in->format != AV_PIX_FMT_YAMI && yamivpp->pipeline == 0) {
@@ -303,7 +303,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             VPPSharpeningParameters sharpening;
             memset(&sharpening, 0, sizeof(sharpening));
             sharpening.size = sizeof(sharpening);
-            sharpening.level = yamivpp->sharpless;
+            sharpening.level = yamivpp->sharpness;
             if (yamivpp->scaler->setParameters(VppParamTypeSharpening,
                                                &sharpening) != YAMI_SUCCESS) {
                 av_log(ctx, AV_LOG_ERROR, "sharpening level should in range "
@@ -402,7 +402,7 @@ static int filter_frame(AVFilterLink *inlink, AVFrame *in)
             VPPSharpeningParameters sharpening;
             memset(&sharpening, 0, sizeof(sharpening));
             sharpening.size = sizeof(sharpening);
-            sharpening.level = yamivpp->sharpless;
+            sharpening.level = yamivpp->sharpness;
             if (yamivpp->scaler->setParameters(VppParamTypeSharpening,
                                                &sharpening) != YAMI_SUCCESS) {
                 av_log(ctx, AV_LOG_ERROR, "sharpening level should in range "
