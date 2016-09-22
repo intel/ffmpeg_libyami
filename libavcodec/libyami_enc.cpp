@@ -110,12 +110,20 @@ static void *ff_yami_encode_thread(void *arg)
         if (s->in_queue->empty()) {
             if (s->encode_status == ENCODE_THREAD_GOT_EOS) {
                 pthread_mutex_unlock(&s->in_mutex);
-                break;
+                //break;
+
+		pthread_mutex_lock(&s->ctx_mutex);
+		s->encode_status = ENCODE_THREAD_FLUSH_OUT;
+		pthread_mutex_unlock(&s->ctx_mutex);
             }
 
             av_log(avctx, AV_LOG_VERBOSE, "encode thread wait because in queue is empty\n");
             pthread_cond_wait(&s->in_cond, &s->in_mutex);
             pthread_mutex_unlock(&s->in_mutex);
+
+            if (s->encode_status == ENCODE_THREAD_EXIT)
+	        break;
+	    av_usleep(10000);
             continue;
         }
 
@@ -409,11 +417,16 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
         if (s->in_queue->empty())
             s->encode_status = ENCODE_THREAD_NOT_INIT;
         break;
+    case ENCODE_THREAD_FLUSH_OUT:
+        if (frame) {
+            s->encode_status = ENCODE_THREAD_RUNING;
+        }
+        break;
     default:
         break;
     }
-
     pthread_mutex_unlock(&s->ctx_mutex);
+
     do {
         status = s->encoder->getOutput(&s->enc_out_buf, true);
     } while (!frame && status != ENCODE_SUCCESS && s->in_queue->size() > 0);
