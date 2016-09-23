@@ -64,8 +64,7 @@ static int ff_yami_decode_thread_close(YamiDecContext *s)
     pthread_mutex_lock(&s->ctx_mutex);
     /* if decode thread do not create do not loop */
     while (s->decode_status != DECODE_THREAD_EXIT
-           && s->decode_status != DECODE_THREAD_NOT_INIT
-	   && s->decode_status != DECODE_THREAD_FLUSH_OUT) {
+           && s->decode_status != DECODE_THREAD_NOT_INIT) {
         s->decode_status = DECODE_THREAD_GOT_EOS;
         pthread_mutex_unlock(&s->ctx_mutex);
         pthread_cond_signal(&s->in_cond);
@@ -98,19 +97,12 @@ static void *ff_yami_decode_thread(void *arg)
                 flush_buffer.size = 0;
                 s->decoder->decode(&flush_buffer);
                 pthread_mutex_unlock(&s->in_mutex);
-
-	         pthread_mutex_lock(&s->ctx_mutex);
-	         s->decode_status = DECODE_THREAD_FLUSH_OUT;
-	         pthread_mutex_unlock(&s->ctx_mutex);
+                break;
             }
 
             av_log(avctx, AV_LOG_VERBOSE, "decode thread waiting with empty queue.\n");
             pthread_cond_wait(&s->in_cond, &s->in_mutex); /* wait the packet to decode */
             pthread_mutex_unlock(&s->in_mutex);
-
-            if (s->decode_status == DECODE_THREAD_EXIT)
-	        break;
-	     av_usleep(10000);
             continue;
         }
 
@@ -403,11 +395,6 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
     case DECODE_THREAD_GOT_EOS:
         pthread_cond_signal(&s->in_cond);
         break;
-    case DECODE_THREAD_FLUSH_OUT:
-        if (avpkt->data && avpkt->size) {
-	    s->decode_status = DECODE_THREAD_RUNING;
-        }
-        break;
     default:
         break;
     }
@@ -430,7 +417,7 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
             yami_image->output_frame = s->decoder->getOutput();
             av_log(avctx, AV_LOG_DEBUG, "getoutput() status=%d\n", status);
             pthread_mutex_lock(&s->ctx_mutex);
-            if (avpkt->data || yami_image->output_frame || s->decode_status == DECODE_THREAD_FLUSH_OUT) {
+            if (avpkt->data || yami_image->output_frame || s->decode_status == DECODE_THREAD_EXIT) {
                 pthread_mutex_unlock(&s->ctx_mutex);
                 break;
             }
@@ -477,7 +464,6 @@ static av_cold int yami_dec_close(AVCodecContext *avctx)
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
 
     ff_yami_decode_thread_close(s);
-
     if (s->decoder) {
         s->decoder->stop();
         releaseVideoDecoder(s->decoder);
