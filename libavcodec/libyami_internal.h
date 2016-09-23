@@ -23,8 +23,8 @@
  */
 
 
-#ifndef LIBYAMI_THR_H_
-#define LIBYAMI_THR_H_
+#ifndef LIBYAMI_INTERNAL_H_
+#define LIBYAMI_INTERNAL_H_
 
 #include <pthread.h>
 #include <unistd.h>
@@ -240,7 +240,7 @@ int ff_yami_set_stream_eof (YamiThreadContext<T> *ctx)
 {
     if (!ctx)
         return -1;
-    YamiThreadStatus status;
+
     pthread_mutex_lock (&ctx->priv_lock);
     ctx->status = YAMI_THREAD_GOT_EOS;
     pthread_mutex_unlock (&ctx->priv_lock);
@@ -256,7 +256,7 @@ int ff_yami_set_stream_run (YamiThreadContext<T> *ctx)
 {
     if (!ctx)
         return -1;
-    YamiThreadStatus status;
+
     pthread_mutex_lock (&ctx->priv_lock);
     ctx->status = YAMI_THREAD_RUNING;
     pthread_mutex_unlock (&ctx->priv_lock);
@@ -298,5 +298,4 @@ int ff_yami_thread_close (YamiThreadContext<T> *ctx)
     return 0;
 }
 
-
-#endif /* LIBYAMI_THR_H_ */
+#endif /* LIBYAMI_INTERNAL_H_ */
