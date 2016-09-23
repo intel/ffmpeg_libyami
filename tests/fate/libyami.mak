@@ -570,109 +570,102 @@ FATE_SAMPLES_AVCONV-$(CONFIG_LIBYAMI_VP8_DECODER) += $(FATE_LIBYAMI_VP8-yes)
 fate-libyami-vp8: $(FATE_LIBYAMI_VP8-yes)
 
 
-FATE_LIBYAMI_MICROSOFT-$(call DEMDEC, AVI, LIBYAMI_VC1) += fate-libyami-msmpeg4v1
-fate-libyami-msmpeg4v1: CMD = framecrc -c:v libyami_vc1 -flags +bitexact -idct simple -i $(TARGET_SAMPLES)/msmpeg4v1/mpg4.avi -an
-fate-libyami-msmpeg4v1: REF = $(SRC_PATH)/tests/ref/fate/msmpeg4v1
+define FATE_LIBYAMI_VP9_SUITE
+FATE_LIBYAMI_VP9-$(CONFIG_MATROSKA_DEMUXER) += fate-libyami-vp9$(2)-$(1)
+fate-libyami-vp9$(2)-$(1): CMD = framemd5 $(3) -i $(TARGET_SAMPLES)/vp9-test-vectors/vp90-2-$(1).webm
+fate-libyami-vp9$(2)-$(1): REF = $(SRC_PATH)/tests/ref/fate/vp9-$(1)
+endef
 
-FATE_SAMPLES_AVCONV-$(call DEMDEC, ASF, LIBYAMI_VC1) += fate-libyami-mss1-pal
-fate-libyami-mss1-pal: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/mss1/screen_codec.wmv -an
-fate-libyami-mss1-pal: REF = $(SRC_PATH)/tests/ref/fate/mss1-pal
+define FATE_LIBYAMI_VP9_PROFILE_SUITE
+FATE_LIBYAMI_VP9-$(CONFIG_MATROSKA_DEMUXER) += fate-vp9p$(2)-$(1)
+fate-libyami-vp9p$(2)-$(1): CMD = framemd5 -i $(TARGET_SAMPLES)/vp9-test-vectors/vp9$(2)-2-$(1).webm $(3)
+fate-libyami-vp9p$(2)-$(1): REF = $(SRC_PATH)/tests/ref/fate/vp9p$(2)-$(1)
+endef
 
-FATE_LIBYAMI_MSS2 += fate-libyami-mss2-pal
-fate-libyami-mss2-pal: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/mss2/rlepal.wmv
-fate-libyami-mss2-pal: REF = $(SRC_PATH)/tests/ref/fate/mss2-pal
+VP9_LIBYAMI_Q = 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 \
+        16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 \
+        32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47 \
+        48 49 50 51 52 53 54 55 56 57 58 59 60 61 62 63
+VP9_LIBYAMI_SHARP = 1 2 3 4 5 6 7
+VP9_LIBYAMI_SIZE_A = 08 10 16 18 32 34 64 66
+VP9_LIBYAMI_SIZE_B = 196 198 200 202 208 210 224 226
+VP9_LIBYAMI_CHROMA_SUBSAMPLE = 
+VP9_LIBYAMI_HIGH_BITDEPTH = 
 
-FATE_LIBYAMI_MSS2 += fate-libyami-mss2-pals
-fate-libyami-mss2-pals: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/mss2/rlepals.wmv
-fate-libyami-mss2-pals: REF = $(SRC_PATH)/tests/ref/fate/mss2-pals
+define FATE_LIBYAMI_VP9_FULL
+$(foreach Q,$(VP9_LIBYAMI_Q),$(eval $(call FATE_LIBYAMI_VP9_SUITE,00-quantizer-$(Q))))
+$(foreach SHARP,$(VP9_LIBYAMI_SHARP),$(eval $(call FATE_LIBYAMI_VP9_SUITE,01-sharpness-$(SHARP))))
+$(foreach W,$(VP9_LIBYAMI_SIZE_A),$(eval $(foreach H,$(VP9_LIBYAMI_SIZE_A),$(eval $(call FATE_LIBYAMI_VP9_SUITE,02-size-$(W)x$(H))))))
+$(foreach W,$(VP9_LIBYAMI_SIZE_B),$(eval $(foreach H,$(VP9_LIBYAMI_SIZE_B),$(eval $(call FATE_LIBYAMI_VP9_SUITE,03-size-$(W)x$(H))))))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,03-deltaq))
+$(foreach SS,$(VP9_LIBYAMI_CHROMA_SUBSAMPLE),$(eval $(call FATE_LIBYAMI_VP9_PROFILE_SUITE,04-yuv$(SS),1,)))
+$(foreach BD,$(VP9_LIBYAMI_HIGH_BITDEPTH),$(eval $(call FATE_LIBYAMI_VP9_PROFILE_SUITE,20-$(BD)bit-yuv420,2,-pix_fmt yuv420p$(BD)le)))
+$(foreach BD,$(VP9_LIBYAMI_HIGH_BITDEPTH),$(eval $(foreach SS,$(VP9_LIBYAMI_CHROMA_SUBSAMPLE),$(eval $(call FATE_LIBYAMI_VP9_PROFILE_SUITE,20-$(BD)bit-yuv$(SS),3,-pix_fmt yuv$(SS)p$(BD)le)))))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,06-bilinear))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,09-lf_deltas))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,10-show-existing-frame))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,10-show-existing-frame2))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,15-segkey_adpq))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,16-intra-only))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,2pass-akiyo))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,parallelmode-akiyo))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,segmentation-aq-akiyo))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,segmentation-sf-akiyo))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,tiling-pedestrian))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,trac3849))
+$(eval $(call FATE_LIBYAMI_VP9_SUITE,trac4359))
+endef
 
-FATE_LIBYAMI_MSS2 += fate-libyami-mss2-rgb555
-fate-libyami-mss2-rgb555: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/mss2/rle555.wmv -pix_fmt rgb555le
-fate-libyami-mss2-rgb555: REF = $(SRC_PATH)/tests/ref/fate/mss2-rgb555
+$(eval $(call FATE_LIBYAMI_VP9_FULL))
+FATE_VP9-$(CONFIG_IVF_DEMUXER) += fate-libyami-vp9-05-resize
+fate-libyami-vp9-05-resize: CMD = framemd5 -i $(TARGET_SAMPLES)/vp9-test-vectors/vp90-2-05-resize.ivf -s 352x288 -sws_flags bitexact+bilinear
+fate-libyami-vp9-05-resize: REF = $(SRC_PATH)/tests/ref/fate/vp9-05-resize
 
-FATE_LIBYAMI_MSS2 += fate-libyami-mss2-rgb555s
-fate-libyami-mss2-rgb555s: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/mss2/rle555s.wmv -pix_fmt rgb555le
-fate-libyami-mss2-rgb555s: REF = $(SRC_PATH)/tests/ref/fate/mss2-rgb555s
-
-FATE_LIBYAMI_MSS2 += fate-libyami-mss2-wmv
-fate-libyami-mss2-wmv: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/mss2/msscreencodec.wmv -an -frames 100
-fate-libyami-mss2-wmv: REF = $(SRC_PATH)/tests/ref/fate/mss2-wmv
-
-FATE_SAMPLES_AVCONV-$(call DEMDEC, ASF, LIBYAMI_VC1) += $(FATE_LIBYAMI_MSS2)
-fate-libyami-mss2: $(FATE_LIBYAMI_MSS2)
-
-FATE_LIBYAMI_MTS2 += fate-libyami-mts2-xesc
-fate-libyami-mts2-xesc: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/mts2/sample.xesc -pix_fmt yuv444p
-fate-libyami-mts2-xesc: REF = $(SRC_PATH)/tests/ref/fate/mts2-xesc
-
-FATE_SAMPLES_AVCONV-$(call DEMDEC, ASF, LIBYAMI_VC1) += $(FATE_LIBYAMI_MTS2)
-fate-libyami-mts2: $(FATE_LIBYAMI_MTS2)
-
-FATE_LIBYAMI_MSVIDEO1 += fate-libyami-msvideo1-8bit
-fate-libyami-msvideo1-8bit: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/cram/skating.avi -t 1 -pix_fmt rgb24
-fate-libyami-msvideo1-8bit: REF = $(SRC_PATH)/tests/ref/fate/msvideo1-8bit
-
-FATE_LIBYAMI_MSVIDEO1 += fate-libyami-msvideo1-16bit
-fate-libyami-msvideo1-16bit: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/cram/clock-cram16.avi -pix_fmt rgb24
-fate-libyami-msvideo1-16bit: REF = $(SRC_PATH)/tests/ref/fate/msvideo1-16bit
-
-FATE_LIBYAMI_MICROSOFT-$(call DEMDEC, AVI, LIBYAMI_VC1) += $(FATE_LIBYAMI_MSVIDEO1)
-fate-libyami-msvideo1: $(FATE_LIBYAMI_MSVIDEO1)
-
-FATE_SAMPLES_AVCONV-$(call DEMDEC, ASF, LIBYAMI_VC1) += fate-libyami-mts2
-fate-libyami-mts2: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/mts2/ScreenCapture.xesc
-fate-libyami-mts2: REF = $(SRC_PATH)/tests/ref/fate/mts2
+FATE_SAMPLES_AVCONV-$(CONFIG_LIBYAMI_VP9_DECODER) += $(FATE_LIBYAMI_VP9-yes)
+fate-libyami-vp9: $(FATE_LIBYAMI_VP9-yes)
 
 FATE_LIBYAMI_WMV8_DRM += fate-libyami-wmv8-drm
 # discard last packet to avoid fails due to overread of VC-1 decoder
-fate-libyami-wmv8-drm: CMD = framecrc -c:v libyami_vc1 -cryptokey 137381538c84c068111902a59c5cf6c340247c39 -i $(TARGET_SAMPLES)/wmv8/wmv_drm.wmv -an -frames:v 129
+fate-libyami-wmv8-drm: CMD = framecrc -cryptokey 137381538c84c068111902a59c5cf6c340247c39 -c:v libyami_vc1 -i $(TARGET_SAMPLES)/wmv8/wmv_drm.wmv -pix_fmt yuv420p -an -frames:v 129
 fate-libyami-wmv8-drm: REF = $(SRC_PATH)/tests/ref/fate/wmv8-drm
 
 FATE_LIBYAMI_WMV8_DRM += fate-libyami-wmv8-drm-nodec
-fate-libyami-wmv8-drm-nodec: CMD = framecrc -c:v libyami_vc1 -cryptokey 137381538c84c068111902a59c5cf6c340247c39 -i $(TARGET_SAMPLES)/wmv8/wmv_drm.wmv -acodec copy -vcodec copy
+fate-libyami-wmv8-drm-nodec: CMD = framecrc -cryptokey 137381538c84c068111902a59c5cf6c340247c39 -i $(TARGET_SAMPLES)/wmv8/wmv_drm.wmv -acodec copy -vcodec copy
 fate-libyami-wmv8-drm-nodec: REF = $(SRC_PATH)/tests/ref/fate/wmv8-drm-nodec
 
 FATE_LIBYAMI_MICROSOFT-$(call DEMDEC, ASF, LIBYAMI_VC1) += $(FATE_LIBYAMI_WMV8_DRM)
 fate-libyami-wmv8_drm: $(FATE_WMV8_DRM)
 fate-libyami-wmv8_drm: REF = $(SRC_PATH)/tests/ref/fate/wmv8_drm
 
-FATE_LIBYAMI_MICROSOFT-$(call DEMDEC, ASF, LIBYAMI_VC1) += fate-libyami-wmv8-x8intra
-fate-libyami-wmv8-x8intra: CMD = framecrc -c:v libyami_vc1 -flags +bitexact -i $(TARGET_SAMPLES)/wmv8/wmv8_x8intra.wmv -an
-fate-libyami-wmv8-x8intra: REF = $(SRC_PATH)/tests/ref/fate/wmv8-x8intra
-
 FATE_LIBYAMI_VC1-$(CONFIG_VC1_DEMUXER) += fate-libyami-vc1_sa00040
-fate-libyami-vc1_sa00040: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/vc1/SA00040.vc1
+fate-libyami-vc1_sa00040: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/vc1/SA00040.vc1 -pix_fmt yuv420p
 fate-libyami-vc1_sa00040: REF = $(SRC_PATH)/tests/ref/fate/vc1_sa00040
 
 FATE_LIBYAMI_VC1-$(CONFIG_VC1_DEMUXER) += fate-libyami-vc1_sa00050
-fate-libyami-vc1_sa00050: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/vc1/SA00050.vc1
+fate-libyami-vc1_sa00050: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/vc1/SA00050.vc1 -pix_fmt yuv420p
 fate-libyami-vc1_sa00050: REF = $(SRC_PATH)/tests/ref/fate/vc1_sa00050
 
 FATE_LIBYAMI_VC1-$(CONFIG_VC1_DEMUXER) += fate-libyami_vc1_sa10091
-fate-libyami-vc1_sa10091: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/vc1/SA10091.vc1
+fate-libyami-vc1_sa10091: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/vc1/SA10091.vc1 -pix_fmt yuv420p
 fate-libyami-vc1_sa10091: REF = $(SRC_PATH)/tests/ref/fate/vc1_sa10091
 
 FATE_LIBYAMI_VC1-$(CONFIG_VC1_DEMUXER) += fate-libyami-vc1_sa10143
-fate-libyami-vc1_sa10143: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/vc1/SA10143.vc1
+fate-libyami-vc1_sa10143: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/vc1/SA10143.vc1 -pix_fmt yuv420p
 fate-libyami-vc1_sa10143: REF = $(SRC_PATH)/tests/ref/fate/vc1_sa10143
 
 FATE_LIBYAMI_VC1-$(CONFIG_VC1_DEMUXER) += fate-libyami-vc1_sa20021
-fate-libyami-vc1_sa20021: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/vc1/SA20021.vc1
+fate-libyami-vc1_sa20021: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/vc1/SA20021.vc1 -pix_fmt yuv420p
 fate-libyami-vc1_sa20021: REF = $(SRC_PATH)/tests/ref/fate/vc1_sa20021
 
-FATE_LIBYAMI_VC1-$(CONFIG_VC1_DEMUXER) += fate-libyami-vc1_ilaced_twomv
-fate-libyami-vc1_ilaced_twomv: CMD = framecrc -c:v libyami_vc1 -flags +bitexact -i $(TARGET_SAMPLES)/vc1/ilaced_twomv.vc1
-fate-libyami-msmpeg4v1: REF = $(SRC_PATH)/tests/ref/fate/msmpeg4v1
-
 FATE_LIBYAMI_VC1-$(CONFIG_MOV_DEMUXER) += fate-libyami-vc1-ism
-fate-libyami-vc1-ism: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/isom/vc1-wmapro.ism -an
+fate-libyami-vc1-ism: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/isom/vc1-wmapro.ism -an -pix_fmt yuv420p
 fate-libyami-vc1-ism: REF = $(SRC_PATH)/tests/ref/fate/vc1-ism
 
 FATE_LIBYAMI_MICROSOFT-$(CONFIG_VC1_DECODER) += $(FATE_LIBYAMI_VC1-yes)
 fate-libyami-vc1: $(FATE_LIBYAMI_VC1-yes)
 
 FATE_LIBYAMI_MICROSOFT-$(CONFIG_ASF_DEMUXER) += fate-libyami-asf-repldata
-fate-libyami-asf-repldata: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/asf/bug821-2.asf -c copy
+fate-libyami-asf-repldata: CMD = framecrc -c:v libyami_vc1 -i $(TARGET_SAMPLES)/asf/bug821-2.asf -c copy  -pix_fmt yuv420p
 fate-libyami-asf-repldata: REF = $(SRC_PATH)/tests/ref/fate/asf-repldata
 
 FATE_LIBYAMI_MICROSOFT += $(FATE_LIBYAMI_MICROSOFT-yes)
