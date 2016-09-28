@@ -89,5 +89,21 @@ fate-adtstoasc_ticket3715: $(TARGET_SAMPLES)/aac/foo.aac
 fate-adtstoasc_ticket3715: CMD = transcode "aac" $(TARGET_SAMPLES)/aac/foo.aac\
                       mov "-c copy -bsf:a aac_adtstoasc" "-codec copy"
 
+FATE_SAMPLES_FFMPEG-$(call ALLYES, MOV_DEMUXER H264_MUXER H264_MP4TOANNEXB_BSF) += fate-h264_mp4toannexb_ticket2991
+fate-h264_mp4toannexb_ticket2991: $(TARGET_SAMPLES)/h264/wwwq_cut.mp4
+fate-h264_mp4toannexb_ticket2991: CMD = transcode "mp4" $(TARGET_SAMPLES)/h264/wwwq_cut.mp4\
+                                  h264 "-c:v copy -bsf:v h264_mp4toannexb" "-codec copy"
+
+FATE_SAMPLES_FFMPEG-$(call ALLYES, MPEGPS_DEMUXER AVI_MUXER REMOVE_EXTRADATA_BSF) += fate-ffmpeg-bsf-remove-k fate-ffmpeg-bsf-remove-r fate-ffmpeg-bsf-remove-e
+fate-ffmpeg-bsf-remove-k: $(TARGET_SAMPLES)/mpeg2/matrixbench_mpeg2.lq1.mpg
+fate-ffmpeg-bsf-remove-k: CMD = transcode "mpeg" $(TARGET_SAMPLES)/mpeg2/matrixbench_mpeg2.lq1.mpg\
+                          avi "-vbsf remove_extra=k" "-codec copy"
+fate-ffmpeg-bsf-remove-r: $(TARGET_SAMPLES)/mpeg2/matrixbench_mpeg2.lq1.mpg
+fate-ffmpeg-bsf-remove-r: CMD = transcode "mpeg" $(TARGET_SAMPLES)/mpeg2/matrixbench_mpeg2.lq1.mpg\
+                          avi "-vbsf remove_extra=keyframe" "-codec copy"
+fate-ffmpeg-bsf-remove-e: $(TARGET_SAMPLES)/mpeg2/matrixbench_mpeg2.lq1.mpg
+fate-ffmpeg-bsf-remove-e: CMD = transcode "mpeg" $(TARGET_SAMPLES)/mpeg2/matrixbench_mpeg2.lq1.mpg\
+                          avi "-vbsf remove_extra=e" "-codec copy"
+
 
 FATE_SAMPLES_FFMPEG-yes += $(FATE_STREAMCOPY-yes)

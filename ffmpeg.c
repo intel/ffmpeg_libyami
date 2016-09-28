@@ -502,22 +502,21 @@ static void ffmpeg_cleanup(int ret)
     }
     for (i = 0; i < nb_output_streams; i++) {
         OutputStream *ost = output_streams[i];
-        AVBitStreamFilterContext *bsfc;
 
         if (!ost)
             continue;
 
-        bsfc = ost->bitstream_filters;
-        while (bsfc) {
-            AVBitStreamFilterContext *next = bsfc->next;
-            av_bitstream_filter_close(bsfc);
-            bsfc = next;
-        }
-        ost->bitstream_filters = NULL;
+        for (j = 0; j < ost->nb_bitstream_filters; j++)
+            av_bsf_free(&ost->bsf_ctx[j]);
+        av_freep(&ost->bsf_ctx);
+        av_freep(&ost->bsf_extradata_updated);
+
         av_frame_free(&ost->filtered_frame);
         av_frame_free(&ost->last_frame);
+        av_dict_free(&ost->encoder_opts);
 
         av_parser_close(ost->parser);
+        avcodec_free_context(&ost->parser_avctx);
 
         av_freep(&ost->forced_keyframes);
         av_expr_free(ost->forced_keyframes_pexpr);
@@ -633,11 +632,9 @@ static void close_all_output_streams(OutputStream *ost, OSTFinished this_stream,
     }
 }
 
-static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
+static void write_packet(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
 {
     AVStream *st = ost->st;
-    AVBitStreamFilterContext *bsfc = ost->bitstream_filters;
-    AVCodecContext          *avctx = ost->encoding_needed ? ost->enc_ctx : ost->st->codec;
     int ret;
 
     if ((st->codecpar->codec_type == AVMEDIA_TYPE_VIDEO && video_sync_method == VSYNC_DROP) ||
@@ -678,26 +675,6 @@ static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
             pkt->duration = av_rescale_q(1, av_inv_q(ost->frame_rate),
                                          ost->st->time_base);
         }
-    }
-
-    if (bsfc)
-        av_packet_split_side_data(pkt);
-
-    if ((ret = av_apply_bitstream_filters(avctx, pkt, bsfc)) < 0) {
-        print_error("", ret);
-        if (exit_on_error)
-            exit_program(1);
-    }
-    if (pkt->size == 0 && pkt->side_data_elems == 0)
-        return;
-    if (!st->codecpar->extradata_size && avctx->extradata_size) {
-        st->codecpar->extradata = av_mallocz(avctx->extradata_size + AV_INPUT_BUFFER_PADDING_SIZE);
-        if (!st->codecpar->extradata) {
-            av_log(NULL, AV_LOG_ERROR, "Could not allocate extradata buffer to copy parser data.\n");
-            exit_program(1);
-        }
-        st->codecpar->extradata_size = avctx->extradata_size;
-        memcpy(st->codecpar->extradata, avctx->extradata, avctx->extradata_size);
     }
 
     if (!(s->oformat->flags & AVFMT_NOTIMESTAMPS)) {
@@ -772,6 +749,68 @@ static void close_output_stream(OutputStream *ost)
     }
 }
 
+static void output_packet(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
+{
+    int ret = 0;
+
+    /* apply the output bitstream filters, if any */
+    if (ost->nb_bitstream_filters) {
+        int idx;
+
+        ret = av_bsf_send_packet(ost->bsf_ctx[0], pkt);
+        if (ret < 0)
+            goto finish;
+
+        idx = 1;
+        while (idx) {
+            /* get a packet from the previous filter up the chain */
+            ret = av_bsf_receive_packet(ost->bsf_ctx[idx - 1], pkt);
+            /* HACK! - aac_adtstoasc updates extradata after filtering the first frame when
+             * the api states this shouldn't happen after init(). Propagate it here to the
+             * muxer and to the next filters in the chain to workaround this.
+             * TODO/FIXME - Make aac_adtstoasc use new packet side data instead of changing
+             * par_out->extradata and adapt muxers accordingly to get rid of this. */
+            if (!(ost->bsf_extradata_updated[idx - 1] & 1)) {
+                ret = avcodec_parameters_copy(ost->st->codecpar, ost->bsf_ctx[idx - 1]->par_out);
+                if (ret < 0)
+                    goto finish;
+                ost->bsf_extradata_updated[idx - 1] |= 1;
+            }
+            if (ret == AVERROR(EAGAIN)) {
+                ret = 0;
+                idx--;
+                continue;
+            } else if (ret < 0)
+                goto finish;
+
+            /* send it to the next filter down the chain or to the muxer */
+            if (idx < ost->nb_bitstream_filters) {
+                /* HACK/FIXME! - See above */
+                if (!(ost->bsf_extradata_updated[idx] & 2)) {
+                    ret = avcodec_parameters_copy(ost->bsf_ctx[idx]->par_out, ost->bsf_ctx[idx - 1]->par_out);
+                    if (ret < 0)
+                        goto finish;
+                    ost->bsf_extradata_updated[idx] |= 2;
+                }
+                ret = av_bsf_send_packet(ost->bsf_ctx[idx], pkt);
+                if (ret < 0)
+                    goto finish;
+                idx++;
+            } else
+                write_packet(s, pkt, ost);
+        }
+    } else
+        write_packet(s, pkt, ost);
+
+finish:
+    if (ret < 0 && ret != AVERROR_EOF) {
+        av_log(NULL, AV_LOG_ERROR, "Error applying bitstream filters to an output "
+               "packet for stream #%d:%d.\n", ost->file_index, ost->index);
+        if(exit_on_error)
+            exit_program(1);
+    }
+}
+
 static int check_recording_time(OutputStream *ost)
 {
     OutputFile *of = output_files[ost->file_index];
@@ -830,7 +869,7 @@ static void do_audio_out(AVFormatContext *s, OutputStream *ost,
                    av_ts2str(pkt.dts), av_ts2timestr(pkt.dts, &ost->st->time_base));
         }
 
-        write_frame(s, &pkt, ost);
+        output_packet(s, &pkt, ost);
     }
 }
 
@@ -914,7 +953,7 @@ static void do_subtitle_out(AVFormatContext *s,
                 pkt.pts += 90 * sub->end_display_time;
         }
         pkt.dts = pkt.pts;
-        write_frame(s, &pkt, ost);
+        output_packet(s, &pkt, ost);
     }
 }
 
@@ -1095,7 +1134,7 @@ static void do_video_out(AVFormatContext *s,
         pkt.pts    = av_rescale_q(in_picture->pts, enc->time_base, ost->st->time_base);
         pkt.flags |= AV_PKT_FLAG_KEY;
 
-        write_frame(s, &pkt, ost);
+        output_packet(s, &pkt, ost);
     } else
 #endif
     {
@@ -1194,7 +1233,7 @@ static void do_video_out(AVFormatContext *s,
             }
 
             frame_size = pkt.size;
-            write_frame(s, &pkt, ost);
+            output_packet(s, &pkt, ost);
 
             /* if two pass, output log */
             if (ost->logfile && enc->stats_out) {
@@ -1756,7 +1795,7 @@ static void flush_encoders(void)
                 }
                 av_packet_rescale_ts(&pkt, enc->time_base, ost->st->time_base);
                 pkt_size = pkt.size;
-                write_frame(os, &pkt, ost);
+                output_packet(os, &pkt, ost);
                 if (ost->enc_ctx->codec_type == AVMEDIA_TYPE_VIDEO && vstats_filename) {
                     do_video_stats(ost, pkt_size);
                 }
@@ -1861,7 +1900,7 @@ static void do_streamcopy(InputStream *ist, OutputStream *ost, const AVPacket *p
        && ost->st->codecpar->codec_id != AV_CODEC_ID_MPEG2VIDEO
        && ost->st->codecpar->codec_id != AV_CODEC_ID_VC1
        ) {
-        int ret = av_parser_change(ost->parser, ost->st->codec,
+        int ret = av_parser_change(ost->parser, ost->parser_avctx,
                              &opkt.data, &opkt.size,
                              pkt->data, pkt->size,
                              pkt->flags & AV_PKT_FLAG_KEY);
@@ -1898,7 +1937,7 @@ static void do_streamcopy(InputStream *ist, OutputStream *ost, const AVPacket *p
     }
 #endif
 
-    write_frame(of->ctx, &opkt, ost);
+    output_packet(of->ctx, &opkt, ost);
 }
 
 int guess_input_channel_layout(InputStream *ist)
@@ -2591,6 +2630,42 @@ static int compare_int64(const void *a, const void *b)
     return FFDIFFSIGN(*(const int64_t *)a, *(const int64_t *)b);
 }
 
+static int init_output_bsfs(OutputStream *ost)
+{
+    AVBSFContext *ctx;
+    int i, ret;
+
+    if (!ost->nb_bitstream_filters)
+        return 0;
+
+    for (i = 0; i < ost->nb_bitstream_filters; i++) {
+        ctx = ost->bsf_ctx[i];
+
+        ret = avcodec_parameters_copy(ctx->par_in,
+                                      i ? ost->bsf_ctx[i - 1]->par_out : ost->st->codecpar);
+        if (ret < 0)
+            return ret;
+
+        ctx->time_base_in = i ? ost->bsf_ctx[i - 1]->time_base_out : ost->st->time_base;
+
+        ret = av_bsf_init(ctx);
+        if (ret < 0) {
+            av_log(NULL, AV_LOG_ERROR, "Error initializing bitstream filter: %s\n",
+                   ost->bsf_ctx[i]->filter->name);
+            return ret;
+        }
+    }
+
+    ctx = ost->bsf_ctx[ost->nb_bitstream_filters - 1];
+    ret = avcodec_parameters_copy(ost->st->codecpar, ctx->par_out);
+    if (ret < 0)
+        return ret;
+
+    ost->st->time_base = ctx->time_base_out;
+
+    return 0;
+}
+
 static int init_output_stream(OutputStream *ost, char *error, int error_len)
 {
     int ret = 0;
@@ -2649,9 +2724,7 @@ static int init_output_stream(OutputStream *ost, char *error, int error_len)
             exit_program(1);
         }
         /*
-         * FIXME: this is only so that the bitstream filters and parsers (that still
-         * work with a codec context) get the parameter values.
-         * This should go away with the new BSF/parser API.
+         * FIXME: ost->st->codec should't be needed here anymore.
          */
         ret = avcodec_copy_context(ost->st->codec, ost->enc_ctx);
         if (ret < 0)
@@ -2683,18 +2756,21 @@ static int init_output_stream(OutputStream *ost, char *error, int error_len)
         ost->st->time_base = av_add_q(ost->enc_ctx->time_base, (AVRational){0, 1});
         ost->st->codec->codec= ost->enc_ctx->codec;
     } else if (ost->stream_copy) {
-        // copy timebase while removing common factors
-        ost->st->time_base = av_add_q(ost->st->codec->time_base, (AVRational){0, 1});
-
         /*
-         * FIXME: this is only so that the bitstream filters and parsers (that still
-         * work with a codec context) get the parameter values.
-         * This should go away with the new BSF/parser API.
+         * FIXME: will the codec context used by the parser during streamcopy
+         * This should go away with the new parser API.
          */
-        ret = avcodec_parameters_to_context(ost->st->codec, ost->st->codecpar);
+        ret = avcodec_parameters_to_context(ost->parser_avctx, ost->st->codecpar);
         if (ret < 0)
             return ret;
     }
+
+    /* initialize bitstream filters for the output stream
+     * needs to be done here, because the codec id for streamcopy is not
+     * known until now */
+    ret = init_output_bsfs(ost);
+    if (ret < 0)
+        return ret;
 
     return ret;
 }
@@ -2926,11 +3002,12 @@ static int transcode_init(void)
                 ost->frame_rate = ist->framerate;
             ost->st->avg_frame_rate = ost->frame_rate;
 
-            ost->st->time_base = ist->st->time_base;
-
             ret = avformat_transfer_internal_stream_timing_info(oc->oformat, ost->st, ist->st, copy_tb);
             if (ret < 0)
                 return ret;
+
+            // copy timebase while removing common factors
+            ost->st->time_base = av_add_q(av_stream_get_codec_timebase(ost->st), (AVRational){0, 1});
 
             if (ist->st->nb_side_data) {
                 ost->st->side_data = av_realloc_array(NULL, ist->st->nb_side_data,
@@ -2957,6 +3034,9 @@ static int transcode_init(void)
             }
 
             ost->parser = av_parser_init(par_dst->codec_id);
+            ost->parser_avctx = avcodec_alloc_context3(NULL);
+            if (!ost->parser_avctx)
+                return AVERROR(ENOMEM);
 
             switch (par_dst->codec_type) {
             case AVMEDIA_TYPE_AUDIO:

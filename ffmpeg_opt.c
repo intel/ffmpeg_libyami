@@ -1229,8 +1229,8 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
     OutputStream *ost;
     AVStream *st = avformat_new_stream(oc, NULL);
     int idx      = oc->nb_streams - 1, ret = 0;
-    char *bsf = NULL, *next, *codec_tag = NULL;
-    AVBitStreamFilterContext *bsfc, *bsfc_prev = NULL;
+    const char *bsfs = NULL;
+    char *next, *codec_tag = NULL;
     double qscale = -1;
     int i;
 
@@ -1319,29 +1319,62 @@ static OutputStream *new_output_stream(OptionsContext *o, AVFormatContext *oc, e
     ost->copy_prior_start = -1;
     MATCH_PER_STREAM_OPT(copy_prior_start, i, ost->copy_prior_start, oc ,st);
 
-    MATCH_PER_STREAM_OPT(bitstream_filters, str, bsf, oc, st);
-    while (bsf) {
-        char *arg = NULL;
-        if (next = strchr(bsf, ','))
-            *next++ = 0;
-        if (arg = strchr(bsf, '='))
-            *arg++ = 0;
-        if (!(bsfc = av_bitstream_filter_init(bsf))) {
-            av_log(NULL, AV_LOG_FATAL, "Unknown bitstream filter %s\n", bsf);
+    MATCH_PER_STREAM_OPT(bitstream_filters, str, bsfs, oc, st);
+    while (bsfs && *bsfs) {
+        const AVBitStreamFilter *filter;
+        char *bsf, *bsf_options_str, *bsf_name;
+
+        bsf = av_get_token(&bsfs, ",");
+        if (!bsf)
+            exit_program(1);
+        bsf_name = av_strtok(bsf, "=", &bsf_options_str);
+        if (!bsf_name)
+            exit_program(1);
+
+        filter = av_bsf_get_by_name(bsf_name);
+        if (!filter) {
+            av_log(NULL, AV_LOG_FATAL, "Unknown bitstream filter %s\n", bsf_name);
             exit_program(1);
         }
-        if (bsfc_prev)
-            bsfc_prev->next = bsfc;
-        else
-            ost->bitstream_filters = bsfc;
-        if (arg)
-            if (!(bsfc->args = av_strdup(arg))) {
-                av_log(NULL, AV_LOG_FATAL, "Bitstream filter memory allocation failed\n");
+
+        ost->bsf_ctx = av_realloc_array(ost->bsf_ctx,
+                                        ost->nb_bitstream_filters + 1,
+                                        sizeof(*ost->bsf_ctx));
+        if (!ost->bsf_ctx)
+            exit_program(1);
+
+        ret = av_bsf_alloc(filter, &ost->bsf_ctx[ost->nb_bitstream_filters]);
+        if (ret < 0) {
+            av_log(NULL, AV_LOG_ERROR, "Error allocating a bitstream filter context\n");
+            exit_program(1);
+        }
+
+        ost->nb_bitstream_filters++;
+
+        if (bsf_options_str && filter->priv_class) {
+            const AVOption *opt = av_opt_next(ost->bsf_ctx[ost->nb_bitstream_filters-1]->priv_data, NULL);
+            const char * shorthand[2] = {NULL};
+
+            if (opt)
+                shorthand[0] = opt->name;
+
+            ret = av_opt_set_from_string(ost->bsf_ctx[ost->nb_bitstream_filters-1]->priv_data, bsf_options_str, shorthand, "=", ":");
+            if (ret < 0) {
+                av_log(NULL, AV_LOG_ERROR, "Error parsing options for bitstream filter %s\n", bsf_name);
                 exit_program(1);
             }
+        }
+        av_freep(&bsf);
 
-        bsfc_prev = bsfc;
-        bsf       = next;
+        if (*bsfs)
+            bsfs++;
+    }
+    if (ost->nb_bitstream_filters) {
+        ost->bsf_extradata_updated = av_mallocz_array(ost->nb_bitstream_filters, sizeof(*ost->bsf_extradata_updated));
+        if (!ost->bsf_extradata_updated) {
+            av_log(NULL, AV_LOG_FATAL, "Bitstream filter memory allocation failed\n");
+            exit_program(1);
+        }
     }
 
     MATCH_PER_STREAM_OPT(codec_tags, str, codec_tag, oc, st);
@@ -2267,6 +2300,7 @@ loop_end:
         avio_read(pb, attachment, len);
 
         ost = new_attachment_stream(o, oc, -1);
+        ost->stream_copy               = 0;
         ost->attachment_filename       = o->attachments[i];
         ost->st->codecpar->extradata      = attachment;
         ost->st->codecpar->extradata_size = len;
@@ -2276,6 +2310,7 @@ loop_end:
         avio_closep(&pb);
     }
 
+#if FF_API_LAVF_AVCTX
     for (i = nb_output_streams - oc->nb_streams; i < nb_output_streams; i++) { //for all streams of this output file
         AVDictionaryEntry *e;
         ost = output_streams[i];
@@ -2286,6 +2321,7 @@ loop_end:
             if (av_opt_set(ost->st->codec, "flags", e->value, 0) < 0)
                 exit_program(1);
     }
+#endif
 
     if (!oc->nb_streams && !(oc->oformat->flags & AVFMT_NOSTREAMS)) {
         av_dump_format(oc, nb_output_files - 1, oc->filename, 1);

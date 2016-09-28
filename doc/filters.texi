@@ -4534,7 +4534,7 @@ Blend two video frames into each other.
 
 The @code{blend} filter takes two input streams and outputs one
 stream, the first input is the "top" layer and second input is
-"bottom" layer.  Output terminates when shortest input terminates.
+"bottom" layer.  By default, the output terminates when the longest input terminates.
 
 The @code{tblend} (time blend) filter takes two consecutive frames
 from one single stream, and outputs the result obtained by blending
@@ -9694,6 +9694,41 @@ Negate input video.
 
 It accepts an integer in input; if non-zero it negates the
 alpha component (if available). The default value in input is 0.
+
+@section nlmeans
+
+Denoise frames using Non-Local Means algorithm.
+
+Each pixel is adjusted by looking for other pixels with similar contexts. This
+context similarity is defined by comparing their surrounding patches of size
+@option{p}x@option{p}. Patches are searched in an area of @option{r}x@option{r}
+around the pixel.
+
+Note that the research area defines centers for patches, which means some
+patches will be made of pixels outside that research area.
+
+The filter accepts the following options.
+
+@table @option
+@item s
+Set denoising strength.
+
+@item p
+Set patch size.
+
+@item pc
+Same as @option{p} but for chroma planes.
+
+The default value is @var{0} and means automatic.
+
+@item r
+Set research size.
+
+@item rc
+Same as @option{r} but for chroma planes.
+
+The default value is @var{0} and means automatic.
+@end table
 
 @section nnedi
 
