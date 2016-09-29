@@ -118,6 +118,7 @@ int print_stats       = -1;
 int qp_hist           = 0;
 int stdin_interaction = 1;
 int frame_bits_per_raw_sample = 0;
+int do_multi_thread_encode    = 0;
 float max_error_rate  = 2.0/3;
 
 
@@ -3423,6 +3424,8 @@ const OptionDef options[] = {
     { "hwaccel_output_format", OPT_VIDEO | OPT_STRING | HAS_ARG | OPT_EXPERT |
                           OPT_SPEC | OPT_INPUT,                                  { .off = OFFSET(hwaccel_output_formats) },
         "select output format used with HW accelerated decoding", "format" },
+    { "multi_thread_encode",   OPT_VIDEO | OPT_BOOL,                             {    &do_multi_thread_encode},
+        "launch multi_thread encode except for vcodec copy" },
 #if CONFIG_VDA || CONFIG_VIDEOTOOLBOX
     { "videotoolbox_pixfmt", HAS_ARG | OPT_STRING | OPT_EXPERT, { &videotoolbox_pixfmt}, "" },
 #endif

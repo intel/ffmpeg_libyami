@@ -106,6 +106,8 @@
 
 #include "libavutil/avassert.h"
 
+#define ENCODE_QUEUE_SIZE 8
+
 const char program_name[] = "ffmpeg";
 const int program_birth_year = 2000;
 
@@ -128,6 +130,8 @@ static int run_as_daemon  = 0;
 static int nb_frames_dup = 0;
 static int nb_frames_drop = 0;
 static int64_t decode_error_stat[2];
+
+static EncodeThreadContext *enc_ctx_t = NULL;
 
 static int current_time;
 AVIOContext *progress_avio = NULL;
@@ -579,6 +583,21 @@ static void ffmpeg_cleanup(int ret)
     } else if (ret && transcode_init_done) {
         av_log(NULL, AV_LOG_INFO, "Conversion failed!\n");
     }
+
+    if (do_multi_thread_encode) {
+        if (enc_ctx_t) {
+            pthread_mutex_destroy(&enc_ctx_t->in_queue_lock);
+            pthread_cond_destroy(&enc_ctx_t->in_cond);
+            pthread_mutex_destroy(&enc_ctx_t->priv_lock);
+        }
+
+        if (enc_ctx_t && enc_ctx_t->params)
+            av_freep(&enc_ctx_t->params);
+
+        if (enc_ctx_t)
+            av_freep(&enc_ctx_t);
+    }
+
     term_exit();
     ffmpeg_exited = 1;
 }
@@ -765,6 +784,218 @@ static void write_frame(AVFormatContext *s, AVPacket *pkt, OutputStream *ost)
         close_all_output_streams(ost, MUXER_FINISHED | ENCODER_FINISHED, ENCODER_FINISHED);
     }
     av_packet_unref(pkt);
+}
+
+static void *ff_encode_video_thread(void *args)
+{
+    EncodeThreadContext *ctx = (EncodeThreadContext *)args;
+    if (!ctx)
+        return NULL;
+    while (1) {
+        if (!ctx->process_data_cb)
+            break;
+        pthread_mutex_lock(&ctx->in_queue_lock);
+        if (ctx->in_queue.available == 0) {
+            if (ctx->status == ENCODE_THREAD_GOT_EOS) {
+                pthread_mutex_unlock(&ctx->in_queue_lock);
+                ctx->status = ENCODE_THREAD_FLUSH_OUT;
+            }
+            pthread_cond_wait(&ctx->in_cond, &ctx->in_queue_lock); // wait the packet to decode
+            if (ctx->status == ENCODE_THREAD_EXIT)
+                break;
+            pthread_mutex_unlock(&ctx->in_queue_lock);
+            usleep(100);
+            continue;
+        }
+        AVFrame *frame = ff_bufqueue_get(&ctx->in_queue);
+        pthread_mutex_unlock(&ctx->in_queue_lock);
+        ctx->process_data_cb (ctx->params, frame);
+        if (ctx->status == ENCODE_THREAD_EXIT)
+            break;
+    }
+    pthread_mutex_lock(&ctx->priv_lock);
+    ctx->status = ENCODE_THREAD_NOT_INIT;
+    pthread_mutex_unlock(&ctx->priv_lock);
+    return NULL;
+}
+
+static int ff_encode_video_push_data(EncodeThreadContext *ctx, AVFrame *frame)
+{
+    while (ctx->status < ENCODE_THREAD_GOT_EOS) {
+        /* need enque eos buffer more than once */
+        pthread_mutex_lock(&ctx->in_queue_lock);
+        if (ctx->in_queue.available < ENCODE_QUEUE_SIZE) {
+            ff_bufqueue_add(NULL, &ctx->in_queue, frame);
+            pthread_cond_signal(&ctx->in_cond);
+            pthread_mutex_unlock(&ctx->in_queue_lock);
+            break;
+        }
+        pthread_mutex_unlock(&ctx->in_queue_lock);
+        usleep(100);
+    };
+    return 0;
+}
+
+static int ff_encode_video_thread_create(EncodeThreadContext *ctx, AVFormatContext *s, OutputStream *ost)
+{
+    pthread_mutex_lock(&ctx->priv_lock);
+    switch (ctx->status) {
+        case ENCODE_THREAD_EXIT:
+        case ENCODE_THREAD_NOT_INIT:
+            ctx->status = ENCODE_THREAD_RUNING;
+            ctx->params->s = s;
+            ctx->params->ost = ost;
+            pthread_create(&ctx->thread_id, NULL, ff_encode_video_thread, ctx);
+            break;
+        case ENCODE_THREAD_RUNING:
+            break;
+        case ENCODE_THREAD_GOT_EOS:
+            pthread_cond_signal(&ctx->in_cond);
+            break;
+        default:
+            break;
+    }
+    pthread_mutex_unlock(&ctx->priv_lock);
+    return 0;
+}
+
+static EncodeThreadStatus ff_encode_video_read_status(EncodeThreadContext *ctx)
+{
+    if (!ctx)
+        return ENCODE_THREAD_NOT_INIT;
+    EncodeThreadStatus status;
+    pthread_mutex_lock(&ctx->priv_lock);
+    status = ctx->status;
+    pthread_mutex_unlock(&ctx->priv_lock);
+    return status;
+}
+
+static int ff_encode_video_set_stream_eof(EncodeThreadContext *ctx)
+{
+    pthread_mutex_lock(&ctx->priv_lock);
+    ctx->status = ENCODE_THREAD_GOT_EOS;
+    pthread_mutex_unlock(&ctx->priv_lock);
+    return 0;
+}
+
+static int ff_encode_video_set_stream_run(EncodeThreadContext *ctx)
+{
+    pthread_mutex_lock(&ctx->priv_lock);
+    ctx->status = ENCODE_THREAD_RUNING;
+    pthread_mutex_unlock(&ctx->priv_lock);
+    return 0;
+}
+
+static int ff_encode_video_thread_close(EncodeThreadContext *ctx)
+{
+    pthread_mutex_lock(&ctx->priv_lock);
+    while (ctx->status != ENCODE_THREAD_EXIT
+           && ctx->status != ENCODE_THREAD_NOT_INIT
+           && ctx->status != ENCODE_THREAD_FLUSH_OUT) {
+        ctx->status = ENCODE_THREAD_GOT_EOS;
+        pthread_mutex_unlock(&ctx->priv_lock);
+        pthread_cond_signal(&ctx->in_cond);
+        usleep(1000);
+        pthread_mutex_lock(&ctx->priv_lock);
+    }
+    ctx->status = ENCODE_THREAD_EXIT;
+    pthread_cond_signal(&ctx->in_cond);
+    pthread_mutex_unlock(&ctx->priv_lock);
+
+    pthread_join(ctx->thread_id, NULL);
+
+    pthread_mutex_destroy(&ctx->in_queue_lock);
+    pthread_cond_destroy(&ctx->in_cond);
+    pthread_mutex_destroy(&ctx->priv_lock);
+
+    av_freep(&ctx->params);
+    av_freep(&ctx);
+
+    return 0;
+}
+
+static void process_encode_frame(void *arg1, void *arg2)
+{
+    int ret = 0;
+
+    EncodeThreadParams *p = (EncodeThreadParams *)arg1;
+    AVFrame *in_picture = (AVFrame *)arg2;
+
+    av_init_packet(&(p->pkt));
+    p->pkt.data = NULL;
+    p->pkt.size = 0;
+
+    ret = avcodec_encode_video2(p->ost->enc_ctx, &(p->pkt), in_picture, &(p->got_packet));
+    if (ret < 0) {
+        av_log(NULL, AV_LOG_FATAL, "Video encoding failed\n");
+        exit_program(1);
+    }
+
+    if (in_picture)
+        av_frame_free(&in_picture);
+
+    if (p->got_packet) {
+        av_packet_rescale_ts(&(p->pkt), p->ost->enc_ctx->time_base, p->ost->st->time_base);
+        write_frame(p->s, &(p->pkt), p->ost);
+    }
+
+}
+
+static int ff_encode_video_thread_init()
+{
+    int ret = 0;
+
+    enc_ctx_t = (EncodeThreadContext *)av_mallocz(sizeof(EncodeThreadContext));
+    if (!enc_ctx_t) {
+        av_log(NULL, AV_LOG_FATAL, "Malloc encode thread context failed\n");
+        exit_program(1);
+    }
+
+    enc_ctx_t->process_data_cb = process_encode_frame;
+    enc_ctx_t->params = (EncodeThreadParams *)av_mallocz(sizeof(EncodeThreadParams));
+
+    if ((ret = pthread_mutex_init(&enc_ctx_t->priv_lock, NULL)) < 0) {
+        av_log(NULL, AV_LOG_FATAL, "Init pthread mutex failed\n");
+        exit_program(1);
+    }
+
+    if ((ret = pthread_mutex_init(&enc_ctx_t->in_queue_lock, NULL)) < 0) {
+        av_log(NULL, AV_LOG_FATAL, "Init pthread mutex failed\n");
+        exit_program(1);
+    }
+
+    if ((ret = pthread_cond_init(&enc_ctx_t->in_cond, NULL)) < 0) {
+        av_log(NULL, AV_LOG_FATAL, "Init pthread cond failed\n");
+        exit_program(1);
+    }
+
+    enc_ctx_t->status = ENCODE_THREAD_NOT_INIT;
+
+    return 0;
+}
+
+static int ff_encode_video2(AVFormatContext *s, OutputStream *ost, const AVFrame *frame)
+{
+    int ret;
+
+    if (frame) {
+        AVFrame *qframe = av_frame_alloc();
+        if (!qframe) {
+            return AVERROR(ENOMEM);
+        }
+        /* av_frame_ref the src frame and av_frame_unref in encode thread */
+        ret = av_frame_ref(qframe, frame);
+        if (ret < 0)
+            return ret;
+        ff_encode_video_push_data(enc_ctx_t, qframe);
+    }
+
+    if (frame && ff_encode_video_read_status(enc_ctx_t) >= ENCODE_THREAD_GOT_EOS)
+        ff_encode_video_set_stream_run(enc_ctx_t);
+
+    ff_encode_video_thread_create(enc_ctx_t, s, ost);
+
+    return 0;
 }
 
 static void close_output_stream(OutputStream *ost)
@@ -1171,40 +1402,43 @@ static void do_video_out(AVFormatContext *s,
         }
 
         ost->frames_encoded++;
-
-        ret = avcodec_encode_video2(enc, &pkt, in_picture, &got_packet);
-        update_benchmark("encode_video %d.%d", ost->file_index, ost->index);
-        if (ret < 0) {
-            av_log(NULL, AV_LOG_FATAL, "Video encoding failed\n");
-            exit_program(1);
-        }
-
-        if (got_packet) {
-            if (debug_ts) {
-                av_log(NULL, AV_LOG_INFO, "encoder -> type:video "
-                       "pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s\n",
-                       av_ts2str(pkt.pts), av_ts2timestr(pkt.pts, &enc->time_base),
-                       av_ts2str(pkt.dts), av_ts2timestr(pkt.dts, &enc->time_base));
+        if (do_multi_thread_encode) {
+            ff_encode_video2(s, ost, in_picture);
+        } else {
+            ret = avcodec_encode_video2(enc, &pkt, in_picture, &got_packet);
+            update_benchmark("encode_video %d.%d", ost->file_index, ost->index);
+            if (ret < 0) {
+                av_log(NULL, AV_LOG_FATAL, "Video encoding failed\n");
+                exit_program(1);
             }
 
-            if (pkt.pts == AV_NOPTS_VALUE && !(enc->codec->capabilities & AV_CODEC_CAP_DELAY))
-                pkt.pts = ost->sync_opts;
+            if (got_packet) {
+                if (debug_ts) {
+                    av_log(NULL, AV_LOG_INFO, "encoder -> type:video "
+                           "pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s\n",
+                           av_ts2str(pkt.pts), av_ts2timestr(pkt.pts, &enc->time_base),
+                           av_ts2str(pkt.dts), av_ts2timestr(pkt.dts, &enc->time_base));
+                }
 
-            av_packet_rescale_ts(&pkt, enc->time_base, ost->st->time_base);
+                if (pkt.pts == AV_NOPTS_VALUE && !(enc->codec->capabilities & AV_CODEC_CAP_DELAY))
+                    pkt.pts = ost->sync_opts;
 
-            if (debug_ts) {
-                av_log(NULL, AV_LOG_INFO, "encoder -> type:video "
-                    "pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s\n",
-                    av_ts2str(pkt.pts), av_ts2timestr(pkt.pts, &ost->st->time_base),
-                    av_ts2str(pkt.dts), av_ts2timestr(pkt.dts, &ost->st->time_base));
-            }
+                av_packet_rescale_ts(&pkt, enc->time_base, ost->st->time_base);
 
-            frame_size = pkt.size;
-            write_frame(s, &pkt, ost);
+                if (debug_ts) {
+                    av_log(NULL, AV_LOG_INFO, "encoder -> type:video "
+                           "pkt_pts:%s pkt_pts_time:%s pkt_dts:%s pkt_dts_time:%s\n",
+                            av_ts2str(pkt.pts), av_ts2timestr(pkt.pts, &ost->st->time_base),
+                           av_ts2str(pkt.dts), av_ts2timestr(pkt.dts, &ost->st->time_base));
+                }
 
-            /* if two pass, output log */
-            if (ost->logfile && enc->stats_out) {
-                fprintf(ost->logfile, "%s", enc->stats_out);
+                frame_size = pkt.size;
+                write_frame(s, &pkt, ost);
+
+                /* if two pass, output log */
+                if (ost->logfile && enc->stats_out) {
+                    fprintf(ost->logfile, "%s", enc->stats_out);
+                }
             }
         }
     }
@@ -3334,6 +3568,10 @@ static int transcode_init(void)
         print_sdp();
     }
 
+    if (do_multi_thread_encode) {
+        ff_encode_video_thread_init();
+    }
+
     transcode_init_done = 1;
 
     return 0;
@@ -4142,8 +4380,16 @@ static int transcode(void)
             process_input_packet(ist, NULL, 0);
         }
     }
-    flush_encoders();
 
+    if (do_multi_thread_encode) {
+        ff_encode_video_set_stream_eof(enc_ctx_t);
+
+        while (ff_encode_video_read_status(enc_ctx_t) != ENCODE_THREAD_FLUSH_OUT){
+            usleep(100);
+        }
+    }
+
+    flush_encoders();
     term_exit();
 
     /* write the trailer if needed and close file */
@@ -4214,6 +4460,12 @@ static int transcode(void)
             }
         }
     }
+
+    if (do_multi_thread_encode) {
+        ff_encode_video_thread_close(enc_ctx_t);
+        enc_ctx_t = NULL;
+    }
+
     return ret;
 }
 
