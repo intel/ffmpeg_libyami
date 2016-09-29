@@ -47,6 +47,7 @@
 #include "libavutil/threadmessage.h"
 
 #include "libswresample/swresample.h"
+#include "libavfilter/bufferqueue.h"
 
 #define VSYNC_AUTO       -1
 #define VSYNC_PASSTHROUGH 0
@@ -503,6 +504,34 @@ typedef struct OutputFile {
     int shortest;
 } OutputFile;
 
+typedef enum {
+    ENCODE_THREAD_NOT_INIT = 0,
+    ENCODE_THREAD_RUNING,
+    ENCODE_THREAD_GOT_EOS,
+    ENCODE_THREAD_FLUSH_OUT,
+    ENCODE_THREAD_EXIT,
+} EncodeThreadStatus;
+
+typedef void (*encode_process_data_func)(void *handle, void *data);
+
+typedef struct EncodeThreadParams {
+        int got_packet;
+        AVPacket pkt;
+        AVFormatContext *s;
+        OutputStream *ost;
+} EncodeThreadParams;
+
+typedef struct EncodeThreadContext {
+    pthread_t thread_id;
+    encode_process_data_func process_data_cb;
+    EncodeThreadStatus status;
+    pthread_mutex_t priv_lock;
+    pthread_mutex_t in_queue_lock;
+    pthread_cond_t in_cond;
+    struct FFBufQueue in_queue;
+    EncodeThreadParams *params;
+} EncodeThreadContext;
+
 extern InputStream **input_streams;
 extern int        nb_input_streams;
 extern InputFile   **input_files;
@@ -542,6 +571,7 @@ extern int print_stats;
 extern int qp_hist;
 extern int stdin_interaction;
 extern int frame_bits_per_raw_sample;
+extern int do_multi_thread_encode;
 extern AVIOContext *progress_avio;
 extern float max_error_rate;
 extern char *videotoolbox_pixfmt;
