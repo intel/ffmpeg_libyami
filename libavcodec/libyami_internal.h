@@ -277,7 +277,7 @@ int ff_yami_thread_close (YamiThreadContext<T> *ctx)
            && ctx->status != YAMI_THREAD_NOT_INIT
            && ctx->status != YAMI_THREAD_FLUSH_OUT) { // if decode thread do not create do not loop
         // potential race condition on ctx->status
-        ctx->status = YAMI_THREAD_GOT_EOS;
+        ctx->status = YAMI_THREAD_EXIT;
         pthread_mutex_unlock(&ctx->priv_lock);
         pthread_cond_signal(&ctx->in_cond);
         usleep(10000);

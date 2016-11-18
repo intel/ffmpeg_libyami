@@ -305,7 +305,7 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
 
     VADisplay m_vaDisplay = ff_vaapi_create_display();
 
-    if (out->format == AV_PIX_FMT_NV12) {
+    if (out->format == AV_PIX_FMT_NV12 || out->format == AV_PIX_FMT_P010LE) {
         status = vaDeriveImage(m_vaDisplay, surface, &image);
         if (!ff_check_vaapi_status(status, "vaDeriveImage"))
             return false;
@@ -354,7 +354,7 @@ bool ff_vaapi_get_image(SharedPtr<VideoFrame>& frame, AVFrame *out)
         src_linesize[0] = image.pitches[0];
         src_linesize[1] = image.pitches[1];
         src_linesize[2] = image.pitches[2];
-    } else if (out->format == AV_PIX_FMT_NV12) {
+    } else if (out->format == AV_PIX_FMT_NV12 || out->format == AV_PIX_FMT_P010LE) {
         dest_linesize[0] = out->linesize[0];
         dest_linesize[1] = out->linesize[1];
         dest_linesize[2] = out->linesize[2];

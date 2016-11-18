@@ -48,40 +48,41 @@ static void ff_yami_decode_frame(void *handle, void *args)
     YamiDecContext *s = (YamiDecContext *)ytc->priv;
     AVCodecContext *avctx = s->avctx;
     VideoDecodeBuffer *in_buffer = (VideoDecodeBuffer *)args;
-    Decode_Status status = s->decoder->decode(in_buffer);
-    av_log(avctx, AV_LOG_VERBOSE, "decode status %d, decoded count %d render count %d\n",
-           status, s->decode_count_yami, s->render_count);
-    /* get the format info when the first decode success */
-    if (DECODE_SUCCESS == status && !s->format_info) {
-        s->format_info = s->decoder->getFormatInfo();
-        av_log(avctx, AV_LOG_VERBOSE, "decode format %dx%d\n",
-               s->format_info->width,s->format_info->height);
-        if (s->format_info) {
-            avctx->width  = s->format_info->width;
-            avctx->height = s->format_info->height;
+    if (in_buffer->size != 0 && in_buffer->data != NULL) {
+        Decode_Status status = s->decoder->decode(in_buffer);
+        av_log(avctx, AV_LOG_VERBOSE, "decode status %d, decoded count %d render count %d\n",
+               status, s->decode_count_yami, s->render_count);
+        /* get the format info when the first decode success */
+        if (DECODE_SUCCESS == status && !s->format_info) {
+            s->format_info = s->decoder->getFormatInfo();
+            av_log(avctx, AV_LOG_VERBOSE, "decode format %dx%d\n",
+                   s->format_info->width,s->format_info->height);
+            if (s->format_info) {
+                avctx->width  = s->format_info->width;
+                avctx->height = s->format_info->height;
+            }
         }
-    }
 
-    /* when format change, update format info and re-send the
-       packet to decoder */
-    if (DECODE_FORMAT_CHANGE == status) {
-        s->format_info = s->decoder->getFormatInfo();
-        if (s->format_info) {
-            avctx->width  = s->format_info->width;
-            avctx->height = s->format_info->height;
-            av_log(avctx, AV_LOG_VERBOSE, "decode format change %dx%d\n",
-               s->format_info->width,s->format_info->height);
+        /* when format change, update format info and re-send the
+           packet to decoder */
+        if (DECODE_FORMAT_CHANGE == status) {
+            s->format_info = s->decoder->getFormatInfo();
+            if (s->format_info) {
+                avctx->width  = s->format_info->width;
+                avctx->height = s->format_info->height;
+                av_log(avctx, AV_LOG_VERBOSE, "decode format change %dx%d\n",
+                   s->format_info->width,s->format_info->height);
+            }
+            status = s->decoder->decode(in_buffer);
+            if (status < 0) {
+                av_log(avctx, AV_LOG_ERROR, "decode error %d\n", status);
+            }
         }
-        status = s->decoder->decode(in_buffer);
-        if (status < 0) {
+
+        if (status < 0 || !s->format_info) {
             av_log(avctx, AV_LOG_ERROR, "decode error %d\n", status);
         }
     }
-
-    if (status < 0 || !s->format_info) {
-        av_log(avctx, AV_LOG_ERROR, "decode error %d\n", status);
-    }
-
     s->decode_count_yami++;
     av_free(in_buffer->data);
     av_free(in_buffer);
@@ -179,11 +180,11 @@ static int yami_dec_init(AVCodecContext *avctx)
     YamiDecContext *s = (YamiDecContext *)avctx->priv_data;
     Decode_Status status;
     s->decoder = NULL;
-    enum AVPixelFormat pix_fmts[4] =
+    enum AVPixelFormat pix_fmts[5] =
         {
             AV_PIX_FMT_NV12,
             AV_PIX_FMT_YUV420P,
-            AV_PIX_FMT_YAMI,
+            AV_PIX_FMT_P010LE,            AV_PIX_FMT_YAMI,
             AV_PIX_FMT_NONE
         };
 
