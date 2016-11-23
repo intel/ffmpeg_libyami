@@ -129,6 +129,8 @@ static const char *get_mime(AVCodecID id)
         return YAMI_MIME_H264;
     case AV_CODEC_ID_VP8:
         return YAMI_MIME_VP8;
+    case AV_CODEC_ID_HEVC:
+        return YAMI_MIME_H265;
     default:
         av_assert0(!"Invalid codec ID!");
         return 0;
@@ -145,9 +147,10 @@ static int yami_enc_init(AVCodecContext *avctx)
 {
     YamiEncContext *s = (YamiEncContext *) avctx->priv_data;
     Encode_Status status;
-    enum AVPixelFormat pix_fmts[4] =
+    enum AVPixelFormat pix_fmts[5] =
         {
             AV_PIX_FMT_NV12,
+            AV_PIX_FMT_P010,
             AV_PIX_FMT_YUV420P,
             AV_PIX_FMT_YAMI,
             AV_PIX_FMT_NONE
@@ -448,4 +451,5 @@ AVCodec ff_libyami_##NAME##_encoder = { \
 };
 
 YAMI_ENC(h264, AV_CODEC_ID_H264)
+YAMI_ENC(hevc, AV_CODEC_ID_HEVC)
 YAMI_ENC(vp8, AV_CODEC_ID_VP8)
