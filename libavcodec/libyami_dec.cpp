@@ -42,6 +42,18 @@ extern "C" {
 
 using namespace YamiMediaCodec;
 
+static void ff_yami_decode_flush(void *handle)
+{
+    YamiThreadContext<VideoDecodeBuffer *> *ytc = (YamiThreadContext<VideoDecodeBuffer *> *)handle;
+    YamiDecContext *s = (YamiDecContext *)ytc->priv;
+    AVCodecContext *avctx = s->avctx;
+    VideoDecodeBuffer *in_buffer = (VideoDecodeBuffer *)av_mallocz(sizeof(VideoDecodeBuffer));
+    Decode_Status status = s->decoder->decode(in_buffer);
+    av_log(avctx, AV_LOG_VERBOSE, "decode status %d, decoded count %d render count %d\n",
+           status, s->decode_count_yami, s->render_count);
+    av_free(in_buffer);
+}
+
 static void ff_yami_decode_frame(void *handle, void *args)
 {
     YamiThreadContext<VideoDecodeBuffer *> *ytc = (YamiThreadContext<VideoDecodeBuffer *> *)handle;
@@ -97,6 +109,7 @@ static int ff_yami_decode_thread_init(YamiDecContext *s)
     if (!s->ctx)
         return -1;
     s->ctx->process_data_cb = ff_yami_decode_frame;
+    s->ctx->flush_cb = ff_yami_decode_flush;
     s->ctx->priv = s;
     s->ctx->max_queue_size = DECODE_QUEUE_SIZE;
     if (ff_yami_thread_init(s->ctx) != 0)

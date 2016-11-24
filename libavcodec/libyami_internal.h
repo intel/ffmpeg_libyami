@@ -77,13 +77,12 @@ void * ff_yami_thread(void *args)
                 /* flush the decode buffer with NULL when get EOS */
                 if (ctx->flush_cb)
                     ctx->flush_cb(ctx);
-                pthread_mutex_unlock(&ctx->in_queue_lock);
                 ctx->status = YAMI_THREAD_FLUSH_OUT;
             }
             pthread_cond_wait(&ctx->in_cond, &ctx->in_queue_lock); // wait the packet to decode
+            pthread_mutex_unlock(&ctx->in_queue_lock);
             if (ctx->status == YAMI_THREAD_EXIT)
                 break;
-            pthread_mutex_unlock(&ctx->in_queue_lock);
             usleep(100);
             continue;
         }
