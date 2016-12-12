@@ -82,6 +82,8 @@ static void ff_yami_decode_frame(void *handle, void *args)
             if (s->format_info) {
                 avctx->width  = s->format_info->width;
                 avctx->height = s->format_info->height;
+                if (s->format_info->fourcc == VA_FOURCC_P010 && avctx->pix_fmt != AV_PIX_FMT_YAMI)
+                    avctx->pix_fmt = AV_PIX_FMT_P010;
                 av_log(avctx, AV_LOG_VERBOSE, "decode format change %dx%d\n",
                    s->format_info->width,s->format_info->height);
             }
@@ -197,7 +199,8 @@ static int yami_dec_init(AVCodecContext *avctx)
         {
             AV_PIX_FMT_NV12,
             AV_PIX_FMT_YUV420P,
-            AV_PIX_FMT_P010LE,            AV_PIX_FMT_YAMI,
+            AV_PIX_FMT_P010,
+            AV_PIX_FMT_YAMI,
             AV_PIX_FMT_NONE
         };
 

@@ -273,7 +273,7 @@ bool ff_vaapi_load_image(SharedPtr<VideoFrame>& frame, AVFrame *in)
         dest_linesize[0] = image.pitches[0];
         dest_linesize[1] = image.pitches[1];
         dest_linesize[2] = image.pitches[2];
-    } else if (in->format == AV_PIX_FMT_NV12) {
+    } else if (in->format == AV_PIX_FMT_NV12 || in->format == AV_PIX_FMT_P010) {
         dest_linesize[0] = image.pitches[0];
         dest_linesize[1] = image.pitches[1];
         dest_linesize[2] = image.pitches[2];

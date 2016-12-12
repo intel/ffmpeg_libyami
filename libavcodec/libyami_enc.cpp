@@ -45,6 +45,8 @@ static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *t
         pix_fmt =  VA_FOURCC_I420;
     } else if (avctx->pix_fmt == AV_PIX_FMT_NV12) {
         pix_fmt =  VA_FOURCC_NV12;
+    } else if (avctx->pix_fmt == AV_PIX_FMT_P010) {
+        pix_fmt = VA_FOURCC_P010;
     } else {
         av_log(avctx, AV_LOG_VERBOSE, "used the un-support format ... \n");
     }
@@ -266,6 +268,17 @@ static int yami_enc_init(AVCodecContext *avctx)
         } else {
             av_log(avctx, AV_LOG_WARNING, "Using the main profile as default.\n");
         }
+    } else if (avctx->codec_id == AV_CODEC_ID_HEVC) {
+        if (s->profile) {
+            if(!strcmp(s->profile , "main")) {
+                encVideoParams.profile = VAProfileHEVCMain;
+            } else if (!strcmp(s->profile , "main10")) {
+                encVideoParams.profile = VAProfileHEVCMain10;
+                encVideoParams.bitDepth = 10;
+            }
+        } else {
+            av_log(avctx, AV_LOG_WARNING, "Using the main profile as default.\n");
+        }
     }
     encVideoParams.size = sizeof(VideoParamsCommon);
     s->encoder->setParameters(VideoParamsTypeCommon, &encVideoParams);
@@ -428,8 +441,9 @@ AVCodec ff_libyami_##NAME##_encoder = { \
     /* capabilities */          CODEC_CAP_DELAY, \
     /* supported_framerates */  NULL, \
     /* pix_fmts */              (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI, \
-                                                            AV_PIX_FMT_NV12, \
-                                                            AV_PIX_FMT_YUV420P, \
+                                                            AV_PIX_FMT_NV12,\
+                                                            AV_PIX_FMT_P010,\
+                                                            AV_PIX_FMT_YUV420P,\
                                                             AV_PIX_FMT_NONE}, \
     /* supported_samplerates */ NULL, \
     /* sample_fmts */           NULL, \
