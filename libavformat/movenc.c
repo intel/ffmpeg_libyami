@@ -89,6 +89,8 @@ static const AVOption options[] = {
     { "encryption_scheme",    "Configures the encryption scheme, allowed values are none, cenc-aes-ctr", offsetof(MOVMuxContext, encryption_scheme_str),   AV_OPT_TYPE_STRING, {.str = NULL}, .flags = AV_OPT_FLAG_ENCODING_PARAM },
     { "encryption_key", "The media encryption key (hex)", offsetof(MOVMuxContext, encryption_key), AV_OPT_TYPE_BINARY, .flags = AV_OPT_FLAG_ENCODING_PARAM },
     { "encryption_kid", "The media encryption key identifier (hex)", offsetof(MOVMuxContext, encryption_kid), AV_OPT_TYPE_BINARY, .flags = AV_OPT_FLAG_ENCODING_PARAM },
+    { "use_stream_ids_as_track_ids", "use stream ids as track ids", offsetof(MOVMuxContext, use_stream_ids_as_track_ids), AV_OPT_TYPE_BOOL, {.i64 = 0}, 0, 1, AV_OPT_FLAG_ENCODING_PARAM},
+    { "write_tmcd", "force or disable writing tmcd", offsetof(MOVMuxContext, write_tmcd), AV_OPT_TYPE_BOOL, {.i64 = -1}, -1, 1, AV_OPT_FLAG_ENCODING_PARAM},
     { NULL },
 };
 
@@ -1836,8 +1838,7 @@ static int mov_write_video_tag(AVIOContext *pb, MOVMuxContext *mov, MOVTrack *tr
             av_log(mov->fc, AV_LOG_WARNING, "Not writing 'colr' atom. Format is not MOV or MP4.\n");
     }
 
-    if (track->par->sample_aspect_ratio.den && track->par->sample_aspect_ratio.num &&
-        track->par->sample_aspect_ratio.den != track->par->sample_aspect_ratio.num) {
+    if (track->par->sample_aspect_ratio.den && track->par->sample_aspect_ratio.num) {
         mov_write_pasp_tag(pb, track);
     }
 
@@ -2312,7 +2313,7 @@ static int mov_write_minf_tag(AVFormatContext *s, AVIOContext *pb, MOVMuxContext
     } else if (track->tag == MKTAG('r','t','p',' ')) {
         mov_write_hmhd_tag(pb);
     } else if (track->tag == MKTAG('t','m','c','d')) {
-        if (track->mode == MODE_MP4)
+        if (track->mode != MODE_MOV)
             mov_write_nmhd_tag(pb);
         else
             mov_write_gmhd_tag(pb, track);
@@ -3435,6 +3436,52 @@ static void build_chunks(MOVTrack *trk)
     }
 }
 
+/**
+ * Assign track ids. If option "use_stream_ids_as_track_ids" is set,
+ * the stream ids are used as track ids.
+ *
+ * This assumes mov->tracks and s->streams are in the same order and
+ * there are no gaps in either of them (so mov->tracks[n] refers to
+ * s->streams[n]).
+ *
+ * As an exception, there can be more entries in
+ * s->streams than in mov->tracks, in which case new track ids are
+ * generated (starting after the largest found stream id).
+ */
+static int mov_setup_track_ids(MOVMuxContext *mov, AVFormatContext *s)
+{
+    int i;
+
+    if (mov->track_ids_ok)
+        return 0;
+
+    if (mov->use_stream_ids_as_track_ids) {
+        int next_generated_track_id = 0;
+        for (i = 0; i < s->nb_streams; i++) {
+            if (s->streams[i]->id > next_generated_track_id)
+                next_generated_track_id = s->streams[i]->id;
+        }
+
+        for (i = 0; i < mov->nb_streams; i++) {
+            if (mov->tracks[i].entry <= 0 && !(mov->flags & FF_MOV_FLAG_FRAGMENT))
+                continue;
+
+            mov->tracks[i].track_id = i >= s->nb_streams ? ++next_generated_track_id : s->streams[i]->id;
+        }
+    } else {
+        for (i = 0; i < mov->nb_streams; i++) {
+            if (mov->tracks[i].entry <= 0 && !(mov->flags & FF_MOV_FLAG_FRAGMENT))
+                continue;
+
+            mov->tracks[i].track_id = i + 1;
+        }
+    }
+
+    mov->track_ids_ok = 1;
+
+    return 0;
+}
+
 static int mov_write_moov_tag(AVIOContext *pb, MOVMuxContext *mov,
                               AVFormatContext *s)
 {
@@ -3443,12 +3490,13 @@ static int mov_write_moov_tag(AVIOContext *pb, MOVMuxContext *mov,
     avio_wb32(pb, 0); /* size placeholder*/
     ffio_wfourcc(pb, "moov");
 
+    mov_setup_track_ids(mov, s);
+
     for (i = 0; i < mov->nb_streams; i++) {
         if (mov->tracks[i].entry <= 0 && !(mov->flags & FF_MOV_FLAG_FRAGMENT))
             continue;
 
         mov->tracks[i].time     = mov->time;
-        mov->tracks[i].track_id = i + 1;
 
         if (mov->tracks[i].entry)
             build_chunks(&mov->tracks[i]);
@@ -3529,7 +3577,7 @@ static void param_write_hex(AVIOContext *pb, const char *name, const uint8_t *va
     avio_printf(pb, "<param name=\"%s\" value=\"%s\" valuetype=\"data\"/>\n", name, buf);
 }
 
-static int mov_write_isml_manifest(AVIOContext *pb, MOVMuxContext *mov)
+static int mov_write_isml_manifest(AVIOContext *pb, MOVMuxContext *mov, AVFormatContext *s)
 {
     int64_t pos = avio_tell(pb);
     int i;
@@ -3552,12 +3600,13 @@ static int mov_write_isml_manifest(AVIOContext *pb, MOVMuxContext *mov)
     avio_printf(pb, "</head>\n");
     avio_printf(pb, "<body>\n");
     avio_printf(pb, "<switch>\n");
+
+    mov_setup_track_ids(mov, s);
+
     for (i = 0; i < mov->nb_streams; i++) {
         MOVTrack *track = &mov->tracks[i];
         const char *type;
-        /* track->track_id is initialized in write_moov, and thus isn't known
-         * here yet */
-        int track_id = i + 1;
+        int track_id = track->track_id;
 
         if (track->par->codec_type == AVMEDIA_TYPE_VIDEO) {
             type = "video";
@@ -4613,6 +4662,37 @@ static int mov_auto_flush_fragment(AVFormatContext *s, int force)
     return ret;
 }
 
+static int check_pkt(AVFormatContext *s, AVPacket *pkt)
+{
+    MOVMuxContext *mov = s->priv_data;
+    MOVTrack *trk = &mov->tracks[pkt->stream_index];
+    int64_t ref;
+    uint64_t duration;
+
+    if (trk->entry) {
+        ref = trk->cluster[trk->entry - 1].dts;
+    } else if (trk->start_dts != AV_NOPTS_VALUE) {
+        ref = trk->start_dts + trk->track_duration;
+    } else
+        ref = pkt->dts; // Skip tests for the first packet
+
+    duration = pkt->dts - ref;
+    if (pkt->dts < ref || duration >= INT_MAX) {
+        av_log(s, AV_LOG_ERROR, "Application provided duration: %"PRId64" / timestamp: %"PRId64" is out of range for mov/mp4 format\n",
+            duration, pkt->dts
+        );
+
+        pkt->dts = ref + 1;
+        pkt->pts = AV_NOPTS_VALUE;
+    }
+
+    if (pkt->duration < 0 || pkt->duration > INT_MAX) {
+        av_log(s, AV_LOG_ERROR, "Application provided duration: %"PRId64" is invalid\n", pkt->duration);
+        return AVERROR(EINVAL);
+    }
+    return 0;
+}
+
 int ff_mov_write_packet(AVFormatContext *s, AVPacket *pkt)
 {
     MOVMuxContext *mov = s->priv_data;
@@ -4623,21 +4703,10 @@ int ff_mov_write_packet(AVFormatContext *s, AVPacket *pkt)
     int size = pkt->size, ret = 0;
     uint8_t *reformatted_data = NULL;
 
-    if (trk->entry) {
-        int64_t duration = pkt->dts - trk->cluster[trk->entry - 1].dts;
-        if (duration < 0 || duration > INT_MAX) {
-            av_log(s, AV_LOG_ERROR, "Application provided duration: %"PRId64" / timestamp: %"PRId64" is out of range for mov/mp4 format\n",
-                duration, pkt->dts
-            );
+    ret = check_pkt(s, pkt);
+    if (ret < 0)
+        return ret;
 
-            pkt->dts = trk->cluster[trk->entry - 1].dts + 1;
-            pkt->pts = AV_NOPTS_VALUE;
-        }
-    }
-    if (pkt->duration < 0 || pkt->duration > INT_MAX) {
-        av_log(s, AV_LOG_ERROR, "Application provided duration: %"PRId64" is invalid\n", pkt->duration);
-        return AVERROR(EINVAL);
-    }
     if (mov->flags & FF_MOV_FLAG_FRAGMENT) {
         int ret;
         if (mov->moov_written || mov->flags & FF_MOV_FLAG_EMPTY_MOOV) {
@@ -4902,6 +4971,10 @@ static int mov_write_single_packet(AVFormatContext *s, AVPacket *pkt)
         AVCodecParameters *par = trk->par;
         int64_t frag_duration = 0;
         int size = pkt->size;
+
+        int ret = check_pkt(s, pkt);
+        if (ret < 0)
+            return ret;
 
         if (mov->flags & FF_MOV_FLAG_FRAG_DISCONT) {
             int i;
@@ -5467,7 +5540,8 @@ static int mov_write_header(AVFormatContext *s)
         }
     }
 
-    if (mov->mode == MODE_MOV || mov->mode == MODE_MP4) {
+    if (   mov->write_tmcd == -1 && (mov->mode == MODE_MOV || mov->mode == MODE_MP4)
+        || mov->write_tmcd == 1) {
         tmcd_track = mov->nb_streams;
 
         /* +1 tmcd track for each video stream with a timecode */
@@ -5773,7 +5847,7 @@ static int mov_write_header(AVFormatContext *s)
     avio_flush(pb);
 
     if (mov->flags & FF_MOV_FLAG_ISML)
-        mov_write_isml_manifest(pb, mov);
+        mov_write_isml_manifest(pb, mov, s);
 
     if (mov->flags & FF_MOV_FLAG_EMPTY_MOOV &&
         !(mov->flags & FF_MOV_FLAG_DELAY_MOOV)) {

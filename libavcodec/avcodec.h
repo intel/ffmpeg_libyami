@@ -1036,6 +1036,16 @@ typedef struct RcOverride{
  */
 #define AV_CODEC_CAP_VARIABLE_FRAME_SIZE (1 << 16)
 /**
+ * Decoder is not a preferred choice for probing.
+ * This indicates that the decoder is not a good choice for probing.
+ * It could for example be an expensive to spin up hardware decoder,
+ * or it could simply not provide a lot of useful information about
+ * the stream.
+ * A decoder marked with this flag should only be used as last resort
+ * choice for probing.
+ */
+#define AV_CODEC_CAP_AVOID_PROBING       (1 << 17)
+/**
  * Codec is intra only.
  */
 #define AV_CODEC_CAP_INTRA_ONLY       0x40000000
@@ -1621,6 +1631,12 @@ typedef struct AVPacket {
 } AVPacket;
 #define AV_PKT_FLAG_KEY     0x0001 ///< The packet contains a keyframe
 #define AV_PKT_FLAG_CORRUPT 0x0002 ///< The packet content is corrupted
+/**
+ * Flag is used to discard packets which are required to maintain valid
+ * decoder state but are not required for output and should be dropped
+ * after decoding.
+ **/
+#define AV_PKT_FLAG_DISCARD   0x0004
 
 enum AVSideDataParamChangeFlags {
     AV_SIDE_DATA_PARAM_CHANGE_CHANNEL_COUNT  = 0x0001,
@@ -5146,7 +5162,10 @@ AVCodecParserContext *av_parser_init(int codec_id);
  * @param poutbuf       set to pointer to parsed buffer or NULL if not yet finished.
  * @param poutbuf_size  set to size of parsed buffer or zero if not yet finished.
  * @param buf           input buffer.
- * @param buf_size      input length, to signal EOF, this should be 0 (so that the last frame can be output).
+ * @param buf_size      buffer size in bytes without the padding. I.e. the full buffer
+                        size is assumed to be buf_size + AV_INPUT_BUFFER_PADDING_SIZE.
+                        To signal EOF, this should be 0 (so that the last frame
+                        can be output).
  * @param pts           input presentation timestamp.
  * @param dts           input decoding timestamp.
  * @param pos           input byte position in stream.
@@ -6012,7 +6031,7 @@ int av_bsf_list_append2(AVBSFList *lst, const char * bsf_name, AVDictionary **op
  * This function will transform @ref AVBSFList to single @ref AVBSFContext,
  * so the whole chain of bitstream filters can be treated as single filter
  * freshly allocated by av_bsf_alloc().
- * If the call is successfull, @ref AVBSFList structure is freed and lst
+ * If the call is successful, @ref AVBSFList structure is freed and lst
  * will be set to NULL. In case of failure, caller is responsible for
  * freeing the structure by av_bsf_list_free()
  *

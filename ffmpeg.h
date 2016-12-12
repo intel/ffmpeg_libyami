@@ -416,8 +416,13 @@ typedef struct OutputStream {
     int64_t first_pts;
     /* dts of the last packet sent to the muxer */
     int64_t last_mux_dts;
-    AVBitStreamFilterContext *bitstream_filters;
+
+    int                    nb_bitstream_filters;
+    uint8_t                  *bsf_extradata_updated;
+    AVBSFContext            **bsf_ctx;
+
     AVCodecContext *enc_ctx;
+    AVCodecParameters *ref_par; /* associated input codec parameters with encoders options applied */
     AVCodec *enc;
     int64_t max_frames;
     AVFrame *filtered_frame;
@@ -472,6 +477,7 @@ typedef struct OutputStream {
     int keep_pix_fmt;
 
     AVCodecParserContext *parser;
+    AVCodecContext       *parser_avctx;
 
     /* stats */
     // combined size of all the packets written

@@ -4402,6 +4402,24 @@ number in range [5, 129].
 Set what planes of frame filter will use for averaging. Default is all.
 @end table
 
+@section avgblur
+
+Apply average blur filter.
+
+The filter accepts the following options:
+
+@table @option
+@item sizeX
+Set horizontal kernel size.
+
+@item planes
+Set which planes to filter. By default all planes are filtered.
+
+@item sizeY
+Set vertical kernel size, if zero it will be same as @code{sizeX}.
+Default is @code{0}.
+@end table
+
 @section bbox
 
 Compute the bounding box for the non-black pixels in the input frame
@@ -4516,7 +4534,7 @@ Blend two video frames into each other.
 
 The @code{blend} filter takes two input streams and outputs one
 stream, the first input is the "top" layer and second input is
-"bottom" layer.  Output terminates when shortest input terminates.
+"bottom" layer.  By default, the output terminates when the longest input terminates.
 
 The @code{tblend} (time blend) filter takes two consecutive frames
 from one single stream, and outputs the result obtained by blending
@@ -5235,6 +5253,7 @@ Convert colorspace, transfer characteristics or color primaries.
 The filter accepts the following options:
 
 @table @option
+@anchor{all}
 @item all
 Specify all color properties at once.
 
@@ -5266,6 +5285,7 @@ BT.2020
 
 @end table
 
+@anchor{space}
 @item space
 Specify output colorspace.
 
@@ -5291,6 +5311,7 @@ BT.2020 with non-constant luminance
 
 @end table
 
+@anchor{trc}
 @item trc
 Specify output transfer characteristics.
 
@@ -5319,6 +5340,7 @@ BT.2020 for 12-bits content
 
 @end table
 
+@anchor{primaries}
 @item primaries
 Specify output color primaries.
 
@@ -5344,6 +5366,7 @@ BT.2020
 
 @end table
 
+@anchor{range}
 @item range
 Specify output color range.
 
@@ -5422,6 +5445,21 @@ von Kries whitepoint adaptation
 @item identity
 identity whitepoint adaptation (i.e. no whitepoint adaptation)
 @end table
+
+@item iall
+Override all input properties at once. Same accepted values as @ref{all}.
+
+@item ispace
+Override input colorspace. Same accepted values as @ref{space}.
+
+@item iprimaries
+Override input color primaries. Same accepted values as @ref{primaries}.
+
+@item itrc
+Override input transfer characteristics. Same accepted values as @ref{trc}.
+
+@item irange
+Override input color range. Same accepted values as @ref{range}.
 
 @end table
 
@@ -5997,6 +6035,9 @@ the text color is picked in such way so its always visible.
 
 @item axis
 Draw rows and columns numbers on left and top of video.
+
+@item opacity
+Set background opacity.
 @end table
 
 @section dctdnoiz
@@ -8231,6 +8272,27 @@ option may cause flicker since the B-Frames have often larger QP. Default is
 
 @end table
 
+@section gblur
+
+Apply Gaussian blur filter.
+
+The filter accepts the following options:
+
+@table @option
+@item sigma
+Set horizontal sigma, standard deviation of Gaussian blur. Default is @code{0.5}.
+
+@item steps
+Set number of steps for Gaussian approximation. Defauls is @code{1}.
+
+@item planes
+Set which planes to filter. By default all planes are filtered.
+
+@item sigmaV
+Set vertical sigma, if negative it will be same as @code{sigma}.
+Default is @code{-1}.
+@end table
+
 @section geq
 
 The filter accepts the following options:
@@ -9290,9 +9352,31 @@ The first input value for the pixel component.
 
 @item y
 The second input value for the pixel component.
+
+@item bdx
+The first input video bit depth.
+
+@item bdy
+The second input video bit depth.
 @end table
 
 All expressions default to "x".
+
+@subsection Examples
+
+@itemize
+@item
+Highlight differences between two RGB video streams:
+@example
+lut2='ifnot(x-y,0,pow(2,bdx)-1):ifnot(x-y,0,pow(2,bdx)-1):ifnot(x-y,0,pow(2,bdx)-1)'
+@end example
+
+@item
+Highlight differences between two YUV video streams:
+@example
+lut2='ifnot(x-y,0,pow(2,bdx)-1):ifnot(x-y,pow(2,bdx-1),pow(2,bdx)-1):ifnot(x-y,pow(2,bdx-1),pow(2,bdx)-1)'
+@end example
+@end itemize
 
 @section maskedclamp
 
@@ -9610,6 +9694,41 @@ Negate input video.
 
 It accepts an integer in input; if non-zero it negates the
 alpha component (if available). The default value in input is 0.
+
+@section nlmeans
+
+Denoise frames using Non-Local Means algorithm.
+
+Each pixel is adjusted by looking for other pixels with similar contexts. This
+context similarity is defined by comparing their surrounding patches of size
+@option{p}x@option{p}. Patches are searched in an area of @option{r}x@option{r}
+around the pixel.
+
+Note that the research area defines centers for patches, which means some
+patches will be made of pixels outside that research area.
+
+The filter accepts the following options.
+
+@table @option
+@item s
+Set denoising strength.
+
+@item p
+Set patch size.
+
+@item pc
+Same as @option{p} but for chroma planes.
+
+The default value is @var{0} and means automatic.
+
+@item r
+Set research size.
+
+@item rc
+Same as @option{r} but for chroma planes.
+
+The default value is @var{0} and means automatic.
+@end table
 
 @section nnedi
 
@@ -10357,6 +10476,8 @@ Compute full frame histograms.
 Compute histograms only for the part that differs from previous frame. This
 might be relevant to give more importance to the moving part of your input if
 the background is static.
+@item single
+Compute new histogram for each frame.
 @end table
 
 Default value is @var{full}.
@@ -10428,6 +10549,9 @@ much, and as a result less moving noise and better GIF compression).
 @end table
 
 Default is @var{none}.
+
+@item new
+Take new palette for each output frame.
 @end table
 
 @subsection Examples
@@ -10793,6 +10917,23 @@ Set medium thresholding (good results, default).
 @end table
 @end table
 
+@section prewitt
+Apply prewitt operator to input video stream.
+
+The filter accepts the following option:
+
+@table @option
+@item planes
+Set which planes will be processed, unprocessed planes will be copied.
+By default value 0xf, all planes will be processed.
+
+@item scale
+Set value which will be multiplied with filtered result.
+
+@item delta
+Set value which will be added to filtered result.
+@end table
+
 @section psnr
 
 Obtain the average, maximum and minimum PSNR (Peak Signal to Noise
@@ -10832,6 +10973,12 @@ standard output.
 Specifies which version of the stats file format to use. Details of
 each format are written below.
 Default value is 1.
+
+@item stats_add_max
+Determines whether the max value is output to the stats log.
+Default value is 0.
+Requires stats_version >= 2. If this is set and stats_version < 2,
+the filter will return an error.
 @end table
 
 The file printed if @var{stats_file} is selected, contains a sequence of
@@ -10868,6 +11015,10 @@ frames for the component specified by the suffix.
 @item psnr_y, psnr_u, psnr_v, psnr_r, psnr_g, psnr_b, psnr_a
 Peak Signal to Noise ratio of the compared frames for the component
 specified by the suffix.
+
+@item max_avg, max_y, max_u, max_v
+Maximum allowed value for each channel, and average over all
+channels.
 @end table
 
 For example:
@@ -11814,6 +11965,7 @@ selectivecolor=psfile=MySelectiveColorPresets/Misty.asv
 @end example
 @end itemize
 
+@anchor{separatefields}
 @section separatefields
 
 The @code{separatefields} takes a frame-based video input and splits
@@ -12043,10 +12195,21 @@ frames. Number of indexes also sets maximal value that each index may have.
 
 The first frame has the index 0. The default is to keep the input unchanged.
 
+@subsection Examples
+
+@itemize
+@item
 Swap second and third frame of every three frames of the input:
 @example
 ffmpeg -i INPUT -vf "shuffleframes=0 2 1" OUTPUT
 @end example
+
+@item
+Swap 10th and 1st frame of every ten frames of the input:
+@example
+ffmpeg -i INPUT -vf "shuffleframes=9 1 2 3 4 5 6 7 8 0" OUTPUT
+@end example
+@end itemize
 
 @section shuffleplanes
 
@@ -12072,10 +12235,15 @@ The index of the input plane to be used as the fourth output plane.
 
 The first plane has the index 0. The default is to keep the input unchanged.
 
+@subsection Examples
+
+@itemize
+@item
 Swap the second and third planes of the input:
 @example
 ffmpeg -i INPUT -vf shuffleplanes=0:2:1:3 OUTPUT
 @end example
+@end itemize
 
 @anchor{signalstats}
 @section signalstats
@@ -12619,6 +12787,23 @@ Same as above, but for audio:
 asendcmd='5.0 astreamselect map 1',astreamselect=inputs=2:map=0
 @end example
 @end itemize
+
+@section sobel
+Apply sobel operator to input video stream.
+
+The filter accepts the following option:
+
+@table @option
+@item planes
+Set which planes will be processed, unprocessed planes will be copied.
+By default value 0xf, all planes will be processed.
+
+@item scale
+Set value which will be multiplied with filtered result.
+
+@item delta
+Set value which will be added to filtered result.
+@end table
 
 @anchor{spp}
 @section spp
@@ -13300,11 +13485,11 @@ It accepts the following parameters:
 @table @option
 @item luma_msize_x, lx
 Set the luma matrix horizontal size. It must be an odd integer between
-3 and 63. The default value is 5.
+3 and 23. The default value is 5.
 
 @item luma_msize_y, ly
 Set the luma matrix vertical size. It must be an odd integer between 3
-and 63. The default value is 5.
+and 23. The default value is 5.
 
 @item luma_amount, la
 Set the luma effect strength. It must be a floating point number, reasonable
@@ -13317,11 +13502,11 @@ Default value is 1.0.
 
 @item chroma_msize_x, cx
 Set the chroma matrix horizontal size. It must be an odd integer
-between 3 and 63. The default value is 5.
+between 3 and 23. The default value is 5.
 
 @item chroma_msize_y, cy
 Set the chroma matrix vertical size. It must be an odd integer
-between 3 and 63. The default value is 5.
+between 3 and 23. The default value is 5.
 
 @item chroma_amount, ca
 Set the chroma effect strength. It must be a floating point number, reasonable
@@ -14092,7 +14277,41 @@ Set scale used for displaying graticule.
 @item ire
 @end table
 Default is digital.
+
+@item bgopacity, b
+Set background opacity.
 @end table
+
+@section weave
+
+The @code{weave} takes a field-based video input and join
+each two sequential fields into single frame, producing a new double
+height clip with half the frame rate and half the frame count.
+
+It accepts the following option:
+
+@table @option
+@item first_field
+Set first field. Available values are:
+
+@table @samp
+@item top, t
+Set the frame as top-field-first.
+
+@item bottom, b
+Set the frame as bottom-field-first.
+@end table
+@end table
+
+@subsection Examples
+
+@itemize
+@item
+Interlace video using @ref{select} and @ref{separatefields} filter:
+@example
+separatefields,select=eq(mod(n,4),0)+eq(mod(n,4),3),weave
+@end example
+@end itemize
 
 @section xbr
 Apply the xBR high-quality magnification filter which is designed for pixel
@@ -14451,6 +14670,34 @@ Possible value are:
 @item 170m
 @item 2020_ncl
 @item 2020_cl
+@end table
+
+@item chromal, c
+Set the output chroma location.
+
+Possible values are:
+@table @var
+@item input
+@item left
+@item center
+@item topleft
+@item top
+@item bottomleft
+@item bottom
+@end table
+
+@item chromalin, cin
+Set the input chroma location.
+
+Possible values are:
+@table @var
+@item input
+@item left
+@item center
+@item topleft
+@item top
+@item bottomleft
+@item bottom
 @end table
 @end table
 
@@ -15950,6 +16197,7 @@ Time limit for the pauses. Any pause longer than that will be considered
 a timestamp discontinuity and reset the timer. Default is 2 seconds.
 @end table
 
+@anchor{select}
 @section select, aselect
 
 Select frames to pass in output.
@@ -16868,10 +17116,10 @@ It accepts the following values:
 the samples start again on the left when they reach the right
 @item scroll
 the samples scroll from right to left
-@item rscroll
-the samples scroll from left to right
 @item fullframe
 frames are only produced when the samples reach the right
+@item rscroll
+the samples scroll from left to right
 @end table
 
 Default value is @code{replace}.
@@ -16927,12 +17175,12 @@ linear
 square root, default
 @item cbrt
 cubic root
+@item log
+logarithmic
 @item 4thrt
 4th root
 @item 5thrt
 5th root
-@item log
-logarithmic
 @end table
 
 Default value is @samp{sqrt}.
@@ -17075,12 +17323,12 @@ linear
 square root, default
 @item cbrt
 cubic root
+@item log
+logarithmic
 @item 4thrt
 4th root
 @item 5thrt
 5th root
-@item log
-logarithmic
 @end table
 Default value is @samp{log}.
 

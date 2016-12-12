@@ -104,7 +104,6 @@ static void ff_yami_decode_frame(void *handle, void *args)
 
 static int ff_yami_decode_thread_init(YamiDecContext *s)
 {
-    int ret = 0;
     if (!s)
         return -1;
     s->ctx = (YamiThreadContext<VideoDecodeBuffer *> *)av_mallocz(sizeof(YamiThreadContext<VideoDecodeBuffer *>));
@@ -321,9 +320,11 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
 
     /* thread status update */
 
-    if ((!avpkt->data || !avpkt->size) && ff_yami_read_thread_status(s->ctx) <= YAMI_THREAD_GOT_EOS)
+    if ((!avpkt->data || !avpkt->size)
+	&& ff_yami_read_thread_status(s->ctx) <= YAMI_THREAD_GOT_EOS)
         ff_yami_set_stream_eof(s->ctx);
-    if ((avpkt->data && avpkt->size) && ff_yami_read_thread_status(s->ctx) >= YAMI_THREAD_GOT_EOS)
+    if ((avpkt->data && avpkt->size)
+	&& ff_yami_read_thread_status(s->ctx) >= YAMI_THREAD_GOT_EOS)
         ff_yami_set_stream_run(s->ctx);
     if (ff_yami_thread_create(s->ctx) != 0) {
         av_log(avctx, AV_LOG_ERROR, "ff_yami_thread_create failed\n");
@@ -346,7 +347,8 @@ static int yami_dec_frame(AVCodecContext *avctx, void *data,
         do {
             yami_image->output_frame = s->decoder->getOutput();
             av_log(avctx, AV_LOG_DEBUG, "getoutput() status=%d\n", status);
-            if (avpkt->data || yami_image->output_frame || ff_yami_read_thread_status(s->ctx) == YAMI_THREAD_FLUSH_OUT) {
+            if (avpkt->data || yami_image->output_frame
+		|| ff_yami_read_thread_status(s->ctx) == YAMI_THREAD_FLUSH_OUT) {
                 break;
             }
             av_usleep(100);

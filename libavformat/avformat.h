@@ -814,6 +814,9 @@ typedef struct AVIndexEntry {
                                * is known
                                */
 #define AVINDEX_KEYFRAME 0x0001
+#define AVINDEX_DISCARD_FRAME  0x0002    /**
+                                          * Flag is used to indicate which frame should be discarded after decoding.
+                                          */
     int flags:2;
     int size:30; //Yeah, trying to keep the size of this small to reduce memory requirements (it is 24 vs. 32 bytes due to possible 8-byte alignment).
     int min_distance;         /**< Minimum distance between this and the previous keyframe, used to avoid unneeded searching. */
@@ -1448,6 +1451,8 @@ typedef struct AVFormatContext {
 #define AVFMT_FLAG_PRIV_OPT    0x20000 ///< Enable use of private options by delaying codec open (this could be made default once all code is converted)
 #define AVFMT_FLAG_KEEP_SIDE_DATA 0x40000 ///< Don't merge side data but keep it separate.
 #define AVFMT_FLAG_FAST_SEEK   0x80000 ///< Enable fast, but inaccurate seeks for some formats
+#define AVFMT_FLAG_SHORTEST   0x100000 ///< Stop muxing when the shortest stream stops.
+#define AVFMT_FLAG_AUTO_BSF   0x200000 ///< Wait for packet data before writing a header, and add bitstream filters as requested by the muxer
 
     /**
      * Maximum size of the data read from input for determining
@@ -2892,6 +2897,36 @@ attribute_deprecated
 int av_apply_bitstream_filters(AVCodecContext *codec, AVPacket *pkt,
                                AVBitStreamFilterContext *bsfc);
 #endif
+
+enum AVTimebaseSource {
+    AVFMT_TBCF_AUTO = -1,
+    AVFMT_TBCF_DECODER,
+    AVFMT_TBCF_DEMUXER,
+#if FF_API_R_FRAME_RATE
+    AVFMT_TBCF_R_FRAMERATE,
+#endif
+};
+
+/**
+ * Transfer internal timing information from one stream to another.
+ *
+ * This function is useful when doing stream copy.
+ *
+ * @param ofmt     target output format for ost
+ * @param ost      output stream which needs timings copy and adjustments
+ * @param ist      reference input stream to copy timings from
+ * @param copy_tb  define from where the stream codec timebase needs to be imported
+ */
+int avformat_transfer_internal_stream_timing_info(const AVOutputFormat *ofmt,
+                                                  AVStream *ost, const AVStream *ist,
+                                                  enum AVTimebaseSource copy_tb);
+
+/**
+ * Get the internal codec timebase from a stream.
+ *
+ * @param st  input stream to extract the timebase from
+ */
+AVRational av_stream_get_codec_timebase(const AVStream *st);
 
 /**
  * @}
