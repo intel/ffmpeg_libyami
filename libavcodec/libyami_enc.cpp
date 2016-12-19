@@ -133,6 +133,8 @@ static const char *get_mime(AVCodecID id)
         return YAMI_MIME_VP8;
     case AV_CODEC_ID_HEVC:
         return YAMI_MIME_H265;
+    case AV_CODEC_ID_VP9:
+        return YAMI_MIME_VP9;
     default:
         av_assert0(!"Invalid codec ID!");
         return 0;
@@ -467,3 +469,4 @@ AVCodec ff_libyami_##NAME##_encoder = { \
 YAMI_ENC(h264, AV_CODEC_ID_H264)
 YAMI_ENC(hevc, AV_CODEC_ID_HEVC)
 YAMI_ENC(vp8, AV_CODEC_ID_VP8)
+YAMI_ENC(vp9, AV_CODEC_ID_VP9)
