@@ -660,7 +660,7 @@ void avcodec_register_all(void)
     REGISTER_ENCDEC(LIBYAMI_VP8,        libyami_vp8);
     REGISTER_DECODER(LIBYAMI_MPEG2,     libyami_mpeg2);
     REGISTER_DECODER(LIBYAMI_VC1,       libyami_vc1);
-    REGISTER_DECODER(LIBYAMI_VP9,       libyami_vp9);
+    REGISTER_ENCDEC(LIBYAMI_VP9,       libyami_vp9);
     REGISTER_DECODER(MPEG4_CUVID,       mpeg4_cuvid);
     REGISTER_DECODER(VC1_CUVID,         vc1_cuvid);
     REGISTER_DECODER(VP8_CUVID,         vp8_cuvid);
