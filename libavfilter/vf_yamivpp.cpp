@@ -148,6 +148,7 @@ static int yamivpp_query_formats(AVFilterContext *ctx)
     static const int pix_fmts[] = {
         AV_PIX_FMT_YAMI,
         AV_PIX_FMT_YUV420P,
+        AV_PIX_FMT_P010,
         AV_PIX_FMT_NV12,
         AV_PIX_FMT_NONE
     };
@@ -170,6 +171,8 @@ static int config_props(AVFilterLink *inlink)
 
     if (yamivpp->pipeline)
         outlink->format = AV_PIX_FMT_YAMI;
+    else if (inlink->format == AV_PIX_FMT_P010)
+        outlink->format = AV_PIX_FMT_P010;
     else
         outlink->format = AV_PIX_FMT_NV12;
 
@@ -194,6 +197,9 @@ static int map_fmt_to_fourcc(int fmt)
     case AV_PIX_FMT_NV12:
     case AV_PIX_FMT_YAMI:
         fourcc =  VA_FOURCC_NV12;
+        break;
+    case AV_PIX_FMT_P010:
+        fourcc = VA_FOURCC_P010;
         break;
 
     case AV_PIX_FMT_YUYV422:
@@ -234,7 +240,8 @@ static SharedPtr<VideoFrame>
 ff_vaapi_create_pipeline_dest_surface(int fmt, uint32_t w, uint32_t h, AVFrame *frame)
 {
     SharedPtr<VideoFrame> dest;
-    int fourcc = map_fmt_to_fourcc(fmt);
+    YamiImage *yami_image = (YamiImage *)frame->data[3];
+    int fourcc = yami_image->output_frame->fourcc;
 
     dest =  ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, fourcc, w, h);
 

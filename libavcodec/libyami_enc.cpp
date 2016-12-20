@@ -45,6 +45,8 @@ static int ff_convert_to_yami(AVCodecContext *avctx, AVFrame *from, YamiImage *t
         pix_fmt =  VA_FOURCC_I420;
     } else if (avctx->pix_fmt == AV_PIX_FMT_NV12) {
         pix_fmt =  VA_FOURCC_NV12;
+    } else if (avctx->pix_fmt == AV_PIX_FMT_P010) {
+        pix_fmt = VA_FOURCC_P010;
     } else {
         av_log(avctx, AV_LOG_VERBOSE, "used the un-support format ... \n");
     }
@@ -129,6 +131,8 @@ static const char *get_mime(AVCodecID id)
         return YAMI_MIME_H264;
     case AV_CODEC_ID_VP8:
         return YAMI_MIME_VP8;
+    case AV_CODEC_ID_HEVC:
+        return YAMI_MIME_H265;
     default:
         av_assert0(!"Invalid codec ID!");
         return 0;
@@ -145,9 +149,10 @@ static int yami_enc_init(AVCodecContext *avctx)
 {
     YamiEncContext *s = (YamiEncContext *) avctx->priv_data;
     Encode_Status status;
-    enum AVPixelFormat pix_fmts[4] =
+    enum AVPixelFormat pix_fmts[5] =
         {
             AV_PIX_FMT_NV12,
+            AV_PIX_FMT_P010,
             AV_PIX_FMT_YUV420P,
             AV_PIX_FMT_YAMI,
             AV_PIX_FMT_NONE
@@ -259,6 +264,17 @@ static int yami_enc_init(AVCodecContext *avctx)
                 encVideoParams.profile = VAProfileH264Main;
             } else if(!strcmp(s->profile , "baseline")) {
                 encVideoParams.profile = VAProfileH264Baseline;
+            }
+        } else {
+            av_log(avctx, AV_LOG_WARNING, "Using the main profile as default.\n");
+        }
+    } else if (avctx->codec_id == AV_CODEC_ID_HEVC) {
+        if (s->profile) {
+            if(!strcmp(s->profile , "main")) {
+                encVideoParams.profile = VAProfileHEVCMain;
+            } else if (!strcmp(s->profile , "main10")) {
+                encVideoParams.profile = VAProfileHEVCMain10;
+                encVideoParams.bitDepth = 10;
             }
         } else {
             av_log(avctx, AV_LOG_WARNING, "Using the main profile as default.\n");
@@ -425,8 +441,9 @@ AVCodec ff_libyami_##NAME##_encoder = { \
     /* capabilities */          CODEC_CAP_DELAY, \
     /* supported_framerates */  NULL, \
     /* pix_fmts */              (const enum AVPixelFormat[]) { AV_PIX_FMT_YAMI, \
-                                                            AV_PIX_FMT_NV12, \
-                                                            AV_PIX_FMT_YUV420P, \
+                                                            AV_PIX_FMT_NV12,\
+                                                            AV_PIX_FMT_P010,\
+                                                            AV_PIX_FMT_YUV420P,\
                                                             AV_PIX_FMT_NONE}, \
     /* supported_samplerates */ NULL, \
     /* sample_fmts */           NULL, \
@@ -448,4 +465,5 @@ AVCodec ff_libyami_##NAME##_encoder = { \
 };
 
 YAMI_ENC(h264, AV_CODEC_ID_H264)
+YAMI_ENC(hevc, AV_CODEC_ID_HEVC)
 YAMI_ENC(vp8, AV_CODEC_ID_VP8)
