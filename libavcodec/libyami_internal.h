@@ -112,7 +112,7 @@ int ff_yami_push_data (YamiThreadContext<T> *ctx, T t)
 {
     if (!ctx || !ctx->in_queue)
         return -1;
-    while (ctx->status < YAMI_THREAD_GOT_EOS) {
+    while (ctx->status < YAMI_THREAD_EXIT) {
         /* need enque eos buffer more than once */
         pthread_mutex_lock(&ctx->in_queue_lock);
         if (ctx->in_queue->size() < ctx->max_queue_size) {
