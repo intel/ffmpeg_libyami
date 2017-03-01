@@ -314,6 +314,21 @@ static int yami_enc_init(AVCodecContext *avctx)
     s->enc_frame_size = FFALIGN(avctx->width, 32) * FFALIGN(avctx->height, 32) * 3;
     s->enc_frame_buf = static_cast<uint8_t *>(av_mallocz(s->enc_frame_size));
 
+    /*avcc format copy sps and pps to extradata*/
+    if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER) {
+        s->enc_out_buf.format = OUTPUT_CODEC_DATA;
+        SharedPtr<VideoFrame> tmp_video_frame = ff_vaapi_create_surface(VA_RT_FORMAT_YUV420, VA_FOURCC_NV12, avctx->width, avctx->height);
+        s->encoder->encode(tmp_video_frame);
+        /*get the avcc head info*/
+        s->encoder->getOutput(&s->enc_out_buf, true);
+        ff_vaapi_destory_surface(tmp_video_frame);
+        /*reset format*/
+        s->enc_out_buf.format = OUTPUT_EVERYTHING;
+        avctx->extradata = (uint8_t *) av_mallocz(s->enc_out_buf.dataSize + AV_INPUT_BUFFER_PADDING_SIZE);
+        memcpy(avctx->extradata, s->enc_out_buf.data, s->enc_out_buf.dataSize);
+        avctx->extradata_size = s->enc_out_buf.dataSize;
+    }
+
     s->encode_count = 0;
     s->encode_count_yami = 0;
     s->render_count = 0;
@@ -372,24 +387,6 @@ static int yami_enc_frame(AVCodecContext *avctx, AVPacket *pkt,
     s->render_count++;
     /* get extradata when build the first frame */
     int offset = 0;
-    if (avctx->codec_id == AV_CODEC_ID_H264) {
-        if (avctx->flags & AV_CODEC_FLAG_GLOBAL_HEADER && !avctx->extradata) {
-            /* find start code */
-            uint8_t *ptr = s->enc_out_buf.data;
-            for (uint32_t i = 0; i < s->enc_out_buf.dataSize; i++) {
-                if (*(ptr + i) == 0x0 && *(ptr + i + 1) == 0x0
-                    && *(ptr + i + 2) == 0x0 && *(ptr + i + 3) == 0x1
-                    && (*(ptr + i + 4) & 0x1f) == 5) {
-                    offset = i;
-                    break;
-                }
-            }
-            avctx->extradata = (uint8_t *) av_mallocz(
-                offset + AV_INPUT_BUFFER_PADDING_SIZE);
-            memcpy(avctx->extradata, s->enc_out_buf.data, offset);
-            avctx->extradata_size = offset;
-        }
-    }
     void *p = pkt->data;
     memcpy(p, s->enc_out_buf.data + offset,
            s->enc_out_buf.dataSize - offset);
