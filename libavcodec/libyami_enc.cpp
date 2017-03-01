@@ -231,7 +231,6 @@ static int yami_enc_init(AVCodecContext *avctx)
         encVideoParams.rcMode = RATE_CONTROL_VBR;
         encVideoParams.rcParams.bitRate = avctx->rc_max_rate;
 
-        encVideoParams.rcParams.targetPercentage = (100 * avctx->bit_rate)/avctx->rc_max_rate;
         rc_desc = "variable bitrate (VBR)";
 
         av_log(avctx, AV_LOG_WARNING,
@@ -239,7 +238,6 @@ static int yami_enc_init(AVCodecContext *avctx)
     } else if (avctx->rc_max_rate == avctx->bit_rate) {
         encVideoParams.rcMode = RATE_CONTROL_CBR;
         encVideoParams.rcParams.bitRate = avctx->bit_rate;
-        encVideoParams.rcParams.targetPercentage = 100;
 
         rc_desc = "constant bitrate (CBR)";
     } else {
